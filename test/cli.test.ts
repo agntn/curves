@@ -15,6 +15,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { describe, expect, it } from "vite-plus/test";
+import pkg from "../package.json" with { type: "json" };
 
 const switches = new Set([
   "CI",
@@ -113,7 +114,7 @@ describe("curves CLI", () => {
       code: 1,
       stderr: `Unknown option "-hh" for compute. ${hint}`,
     });
-    expect(run("--version")).toMatchObject({ code: 0, stdout: "0.0.0\n" });
+    expect(run("--version")).toMatchObject({ code: 0, stdout: `${pkg.version}\n` });
   });
 });
 
