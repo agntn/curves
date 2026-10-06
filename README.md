@@ -14,6 +14,8 @@
 
 A CTF gives you a curve over a 40-bit prime and two points. Find k. A model will happily do the modular inverse in its head. It will also get it wrong, around step three. This package does the counting, the orders and the logs, so the model only has to pick the attack.
 
+The guide and a playground that runs in your tab: [curves.agntn.dev](https://curves.agntn.dev).
+
 ## ✨ Features
 
 - 🧮 **Any short Weierstrass curve.** y² = x³ + ax + b over a prime you pass. `a = -3` works too.
@@ -89,7 +91,7 @@ multiplyGenerator("03"); // 02f9308a…36f9
 liftX("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798").odd; // 0379be66…1798
 ```
 
-That's most of it, really. Generic curves take bigints and give `null` for the point at infinity. secp256k1 takes and gives hex. A point off the curve throws, never a silent wrong answer. The limits are in [`src/core/limits.ts`](./src/core/limits.ts), the secp256k1 side in [`src/core/secp256k1.ts`](./src/core/secp256k1.ts).
+That's most of it, really. Generic curves take bigints and give `null` for the point at infinity. secp256k1 takes and gives hex. A point off the curve throws, never a silent wrong answer. More in [curves and points](https://curves.agntn.dev/math/curves), [orders and logs](https://curves.agntn.dev/math/groups) and [secp256k1](https://curves.agntn.dev/math/secp256k1).
 
 ## 🤖 Agents
 
@@ -116,6 +118,7 @@ Keys, addresses and signatures. That's [@agntn/keys](https://github.com/agntn/ke
 
 ```bash
 pnpm install
+pnpm --dir docs install   # the /mcp test borrows Zod, the toolkit and the SDK from here
 pnpm build       # dist/, the CLI and the secp256k1 subpath
 pnpm test        # textbook curves, brute force oracles, frozen secp256k1 vectors
 pnpm lint        # vp lint and vp fmt --check

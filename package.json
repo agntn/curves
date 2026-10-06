@@ -13,7 +13,7 @@
     "secp256k1",
     "weierstrass"
   ],
-  "homepage": "https://github.com/agntn/curves#readme",
+  "homepage": "https://curves.agntn.dev",
   "bugs": "https://github.com/agntn/curves/issues",
   "license": "MIT",
   "author": "oritwoen (https://github.com/oritwoen)",

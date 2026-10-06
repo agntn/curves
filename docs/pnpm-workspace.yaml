@@ -1,0 +1,14 @@
+packages:
+  - .
+
+shamefullyHoist: true
+
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  workerd: true
+  vue-demi: true
+  core-js-pure: false
+
+minimumReleaseAgeExclude:
+  - "@agntn/*"

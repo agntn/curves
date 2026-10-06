@@ -2,7 +2,7 @@
 
 Keep AGENTS.md updated with project status.
 
-`@agntn/curves` does arithmetic on elliptic curves: short Weierstrass curves over a prime field the caller defines (points, orders, counts, discrete logs), and secp256k1 with SEC1 points and scalars mod n. A library, the `curves` CLI, an MCP server, Pi and OMP extensions and AI SDK tools. No docs site yet.
+`@agntn/curves` does arithmetic on elliptic curves: short Weierstrass curves over a prime field the caller defines (points, orders, counts, discrete logs), and secp256k1 with SEC1 points and scalars mod n. A library, the `curves` CLI, an MCP server, Pi and OMP extensions and AI SDK tools. Docs at curves.agntn.dev, from `docs/` (see `docs/AGENTS.md`).
 
 ## Domain
 
@@ -34,6 +34,7 @@ Keep AGENTS.md updated with project status.
 - Linting and formatting consume the shared `@agntn/ox` policy.
 - `renovate.json` extends the shared `local>agntn/_renovate` preset. Renovate runs on the org install without it, just on Mend's defaults, so a package scaffolded from here would skip the pins, the three-day wait and the Monday batch until somebody noticed.
 - `vp fmt` skips the root `CHANGELOG.md`. changelogen writes two spaces after the ⚠️ of a breaking entry and oxfmt wants one, so the check failed after every breaking release. The pattern is anchored, so a nested `CHANGELOG.md` is still formatted.
+- `src/mcp.ts` exports `toolListings` and `callTool` over `listTools` and `callTool` from `@agntn/tools/mcp` (0.2.0); the docs site serves both tools at `/mcp` through them, and `test/docs-mcp.test.ts` holds the site's answers to the stdio server's. That test imports from `docs/node_modules`, so every workflow installs `docs/` too, and `vite.config.ts` aliases `@agntn/curves/mcp` to `src/mcp.ts` for it.
 - `pnpm-workspace.yaml` exempts `@agntn/*` from `minimumReleaseAge`. A clean frozen install rejects a lockfile entry younger than a day, so CI failed for a day after every sibling release. The scope pattern also covers the next package and version, which an exact entry does not.
 - The toolchain runs on Vite+ 1.0 for lint, fmt and test, and CI installs through `voidzero-dev/setup-vp`. The build went back to obuild, like `@agntn/puzzles`, `@agntn/keys` and `@agntn/hashes`: the same `dist/` files and exports as `vp pack`, with less JS.
 
