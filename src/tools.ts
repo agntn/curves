@@ -141,6 +141,11 @@ export const computeTool = defineTool({
     "log takes point as the base and other as the target, and answers scalar null when there is no k",
   ],
   effect: "read",
+  cli: {
+    description:
+      "Arithmetic on y^2 = x^3 + ax + b over a prime field: points, orders, counts and discrete logs",
+    positional: ["operation"],
+  },
   input: computeSchema,
   execute: async (params) => (await loadOperations()).computeCurve(params),
 });
@@ -194,6 +199,11 @@ export const secp256k1ComputeTool = defineTool({
     "check takes point and answers onCurve true or false",
   ],
   effect: "read",
+  cli: {
+    command: "secp256k1",
+    description: "Point math on secp256k1 with SEC1 hex points",
+    positional: ["operation"],
+  },
   input: secp256k1ComputeSchema,
   execute: async (params) => (await loadOperations()).computeSecp256k1(params),
 });

@@ -39,14 +39,18 @@ function run(...args: readonly string[]) {
 }
 
 describe("curves CLI", () => {
-  it("prints the usage and citty's errors without colors into a pipe", () => {
+  it("prints the usage and its errors without colors into a pipe", () => {
     const help = run("--help");
     const usage = run("compute", "--help");
     const unknown = run("nope");
 
-    expect(help.stdout).toContain("USAGE curves compute|secp256k1|mcp");
-    expect(usage.stdout).toContain("OPERATION");
-    expect(unknown).toMatchObject({ code: 1, stderr: "Unknown command nope\n" });
+    expect(help.stdout).toContain("USAGE curves <command> [OPTIONS]");
+    expect(help.stdout).toMatch(/^ {2}secp256k1 {2}Point math/m);
+    expect(usage.stdout).toContain("USAGE curves compute [OPTIONS] <OPERATION>");
+    expect(unknown).toMatchObject({
+      code: 1,
+      stderr: 'Unknown command "nope"\nRun curves --help for the commands\n',
+    });
     for (const output of [help, usage, unknown]) {
       expect(output.stdout + output.stderr).not.toContain("\u001B");
     }
@@ -54,22 +58,22 @@ describe("curves CLI", () => {
 
   it("computes with the executors the tools use", () => {
     const paar = ["--a", "2", "--b", "2", "--p", "17"];
-    const multiple = run("compute", "multiply", ...paar, "--point", "5,1", "--scalar", "2");
-    expect(multiple).toMatchObject({ code: 0, stderr: "" });
-    expect(JSON.parse(multiple.stdout)).toEqual({
-      operation: "multiply",
-      point: { x: "6", y: "3" },
+    const point = ["--point", '{"x":"5","y":"1"}'];
+    expect(run("compute", "multiply", ...paar, ...point, "--scalar", "2")).toMatchObject({
+      code: 0,
+      stderr: "",
+      stdout: '{"operation":"multiply","point":{"x":"6","y":"3"}}\n',
     });
     const count = '{\n  "operation": "count",\n  "count": "106"\n}\n';
     for (const a of [["--a", "-3"], ["--a=-3"], ["--a", "98"]]) {
-      expect(run("compute", "count", ...a, "--b", "5", "--p", "101")).toMatchObject({
+      expect(run("compute", "count", ...a, "--b", "5", "--p", "101", "--json")).toMatchObject({
         code: 0,
         stdout: count,
       });
     }
 
     const g = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
-    const negated = run("secp256k1", "negate", "--point", g, "--uncompressed");
+    const negated = run("secp256k1", "negate", "--point", g, "--no-compressed", "--json");
     expect(negated).toMatchObject({ code: 0, stderr: "" });
     expect(JSON.parse(negated.stdout)).toEqual({
       operation: "negate",
@@ -86,33 +90,38 @@ describe("curves CLI", () => {
       stderr: "The curve is singular: 4a^3 + 27b^2 is 0 mod p\n",
     });
     const paar = ["--a", "2", "--b", "2", "--p", "17"];
-    expect(run("compute", "double", ...paar, "--point", "5")).toMatchObject({
+    expect(run("compute", "double", ...paar, "--point", "5,1")).toMatchObject({
       code: 1,
-      stderr: "--point takes x,y\n",
+      stderr: "Invalid arguments at /point: must be JSON\n",
     });
   });
 
-  it("refuses an unknown dashed argument in one line instead of a citty stack trace", () => {
-    const hint = "Text that starts with - goes after --, which ends the options.\n";
+  it("refuses an option the command doesn't take in one line", () => {
+    const takes = "takes --a, --b, --p, --point, --other, --scalar, --order, --limit, --json";
 
     expect(run("-_8")).toMatchObject({
       code: 1,
       stdout: "",
-      stderr: `Unknown option "-_8". ${hint}`,
+      stderr: 'Unknown command "-_8"\nRun curves --help for the commands\n',
     });
     expect(run("compute", "--nmae", "x")).toMatchObject({
       code: 1,
       stdout: "",
-      stderr: `Unknown option "--nmae" for compute. ${hint}`,
+      stderr: `Invalid arguments: unknown option "--nmae"; ${takes}\n`,
     });
     expect(run("compute", "--version")).toMatchObject({
       code: 1,
       stdout: "",
-      stderr: `Unknown option "--version" for compute. ${hint}`,
+      stderr: `Invalid arguments: unknown option "--version"; ${takes}\n`,
     });
     expect(run("compute", "-hh")).toMatchObject({
       code: 1,
-      stderr: `Unknown option "-hh" for compute. ${hint}`,
+      stderr: `Invalid arguments: unknown option "-hh"; ${takes}\n`,
+    });
+    expect(run("mcp", "--stdio")).toMatchObject({
+      code: 1,
+      stdout: "",
+      stderr: 'Invalid arguments: unknown option "--stdio"; takes no options\n',
     });
     expect(run("--version")).toMatchObject({ code: 0, stdout: `${pkg.version}\n` });
   });
@@ -173,10 +182,10 @@ function serve(base: string, extraEnv: Readonly<Record<string, string>> = {}) {
   const { status, stderr, stdout } = child;
   const urls = Array.isArray(loaded) ? loaded.filter((url) => typeof url === "string") : [];
   const source = urls.includes(pathToFileURL(join(base, "src/mcp.ts")).href);
-  const bundle = urls.includes(pathToFileURL(join(base, "dist/_chunks/mcp.mjs")).href);
+  const bundle = urls.some((url) => url.endsWith("/node_modules/@agntn/tools/dist/mcp.mjs"));
   let from: "bundle" | "source" | "unknown" = "unknown";
-  if (source && !bundle) from = "source";
-  if (bundle && !source) from = "bundle";
+  if (source) from = "source";
+  else if (bundle) from = "bundle";
   const name = /"serverInfo":\{"name":"([^"]+)"/.exec(stdout)?.[1];
   return { code: status, from, name, stderr };
 }

@@ -38,15 +38,11 @@ Node.js 26 or newer.
 ## 🚀 First call
 
 ```bash
-npx @agntn/curves compute log --a 2 --b 2 --p 17 --point 5,1 --other 16,4
+npx @agntn/curves compute log --a 2 --b 2 --p 17 --point '{"x":"5","y":"1"}' --other '{"x":"16","y":"4"}'
 ```
 
 ```
-{
-  "operation": "log",
-  "order": "19",
-  "scalar": "13"
-}
+{"operation":"log","order":"19","scalar":"13"}
 ```
 
 That's the textbook curve from Paar and Pelzl. (16, 4) is 13 times (5, 1). Below it's plain `curves`. In a project that means `pnpm exec curves`. Or run `pnpm add -g @agntn/curves` once and forget about it.
@@ -54,7 +50,7 @@ That's the textbook curve from Paar and Pelzl. (16, 4) is 13 times (5, 1). Below
 Now something bigger. What's half of G on secp256k1?
 
 ```bash
-curves secp256k1 multiply --point 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798 --scalar 7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a1
+curves secp256k1 multiply --point 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798 --scalar 7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a1 --json
 ```
 
 ```
@@ -74,7 +70,7 @@ The scalar is the inverse of 2 mod n. Look at all those zeros in x. Funny, right
 | `curves secp256k1 <operation>` | add, subtract, negate, multiply, lift, check                    |
 | `curves mcp`                   | MCP server over stdio                                           |
 
-Points go in as `x,y` for `compute` and as SEC1 hex for `secp256k1`. `--a -3` works, it's reduced mod p. `curves <command> --help` lists the rest.
+Points go in as JSON for `compute`, the same `{"x":…,"y":…}` the tool takes, and as SEC1 hex for `secp256k1`. `--a -3` works, it's reduced mod p. The output is the line a model reads, `--json` makes it pretty. Every flag comes from the tool schema through `runCli` of [`@agntn/tools`](https://tools.agntn.dev/guide/cli), so `curves <command> --help` never lies about what a command takes.
 
 ## 🧠 Library
 

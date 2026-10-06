@@ -152,8 +152,8 @@ const cliLine = computed(() => {
   const flags = Object.entries(args)
     .filter(([name]) => name !== "operation")
     .map(([name, value]) => {
-      if (name === "compressed") return " --uncompressed";
-      const text = typeof value === "object" && value !== null ? `${(value as { x: string }).x},${(value as { y: string }).y}` : String(value);
+      if (name === "compressed") return " --no-compressed";
+      const text = typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
       return ` --${name} ${shellArg(text)}`;
     })
     .join("");
