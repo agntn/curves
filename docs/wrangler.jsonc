@@ -12,7 +12,7 @@
     {
       "binding": "DB",
       "database_name": "agntn-curves",
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_id": "8f69127c-e0e4-4b81-accd-55492ff2a2d7"
     }
   ],
   "routes": [{ "pattern": "curves.agntn.dev", "custom_domain": true }],
@@ -29,7 +29,7 @@
     "d1_databases": [
       {
         "binding": "DB",
-        "database_id": "00000000-0000-0000-0000-000000000000"
+        "database_id": "1e329db6-3e09-4001-86c6-bb45981de62a"
       }
     ]
   }
