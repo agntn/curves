@@ -72,7 +72,7 @@ The scalar is the inverse of 2 mod n. Look at all those zeros in x. Funny, right
 | `curves secp256k1 <operation>` | add, subtract, negate, multiply, lift, check                    |
 | `curves mcp`                   | MCP server over stdio                                           |
 
-Points go in as `x,y` for `compute` and as SEC1 hex for `secp256k1`. A negative a needs `--a=-3`. `curves <command> --help` lists the rest.
+Points go in as `x,y` for `compute` and as SEC1 hex for `secp256k1`. `--a -3` works, it's reduced mod p. `curves <command> --help` lists the rest.
 
 ## 🧠 Library
 

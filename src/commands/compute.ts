@@ -15,7 +15,11 @@ export default defineCommand({
       required: true,
       description: CURVE_OPERATIONS.join(", "),
     },
-    a: { type: "string", required: true, description: "a, decimal or 0x hex; --a=-3 for a sign" },
+    a: {
+      type: "string",
+      required: true,
+      description: "a, decimal or 0x hex, reduced mod p, so -3 works",
+    },
     b: { type: "string", required: true, description: "b, decimal or 0x hex" },
     p: { type: "string", required: true, description: "The field prime, above 3" },
     point: { type: "string", description: "x,y: the point, or the base for log" },

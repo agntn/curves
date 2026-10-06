@@ -59,7 +59,13 @@ describe("curves CLI", () => {
       operation: "multiply",
       point: { x: "6", y: "3" },
     });
-    expect(run("compute", "count", "--a=-3", "--b", "5", "--p", "101")).toMatchObject({ code: 0 });
+    const count = '{\n  "operation": "count",\n  "count": "106"\n}\n';
+    for (const a of [["--a", "-3"], ["--a=-3"], ["--a", "98"]]) {
+      expect(run("compute", "count", ...a, "--b", "5", "--p", "101")).toMatchObject({
+        code: 0,
+        stdout: count,
+      });
+    }
 
     const g = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
     const negated = run("secp256k1", "negate", "--point", g, "--uncompressed");
