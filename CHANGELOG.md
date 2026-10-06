@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.1.1
+
+[compare changes](https://github.com/agntn/curves/compare/v0.1.0...v0.1.1)
+
+### ✅ Tests
+
+- **cli:** Expect the version package.json carries ([3311725](https://github.com/agntn/curves/commit/3311725))
+
+### ❤️ Contributors
+
+- Oritwoen ([@oritwoen](https://github.com/oritwoen))
+
 ## v0.1.0
 
 
