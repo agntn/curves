@@ -148,7 +148,7 @@ export function multiply(
   let addend = point;
   for (let rest = scalar; rest > 0n; rest >>= 1n) {
     if ((rest & 1n) === 1n) result = add(curve, result, addend);
-    addend = double(curve, addend);
+    if (rest > 1n) addend = double(curve, addend);
   }
   return result;
 }

@@ -34,12 +34,20 @@ function describeAnswer(result: OmpResultView): string[] {
   const { details } = result;
   if (typeof details !== "object" || details === null) return [];
   return Object.entries(details)
-    .filter(([key]) => key !== "operation" && key !== "points")
-    .map(
-      ([key, value]) =>
-        `${key} ${typeof value === "object" && value !== null ? JSON.stringify(value) : String(value)}`,
+    .filter(([key]) => key !== "operation")
+    .map(([key, value]) =>
+      `${key} ${typeof value === "object" && value !== null ? JSON.stringify(value) : String(value)}`.slice(
+        0,
+        PREVIEW_LENGTH,
+      ),
     );
 }
+
+const answerRenderer = {
+  describeCall: (args: Readonly<Record<string, unknown>>) =>
+    String(args["operation"]).slice(0, PREVIEW_LENGTH),
+  describeResult: describeAnswer,
+};
 
 /**
  * Registers the curve tools; the executors load on the first call.
@@ -52,14 +60,8 @@ export default async function curvesExtension(pi: ExtensionAPI): Promise<void> {
   registerOmpTools(pi, curvesTools, {
     Text: pi.pi.Text,
     renderers: {
-      curves_compute: {
-        describeCall: (args) => String(args["operation"]).slice(0, PREVIEW_LENGTH),
-        describeResult: describeAnswer,
-      },
-      curves_secp256k1_compute: {
-        describeCall: (args) => String(args["operation"]).slice(0, PREVIEW_LENGTH),
-        describeResult: describeAnswer,
-      },
+      curves_compute: answerRenderer,
+      curves_secp256k1_compute: answerRenderer,
     },
   });
 }

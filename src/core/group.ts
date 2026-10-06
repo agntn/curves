@@ -11,8 +11,6 @@ import {
 import { primeFactors, squareRoot } from "./field.ts";
 import { MAX_COUNTED_PRIME, MAX_FILTERED_PRIME, MAX_LOG_ORDER, MAX_ORDER_PRIME } from "./limits.ts";
 
-export { MAX_COUNTED_PRIME, MAX_FILTERED_PRIME, MAX_LOG_ORDER, MAX_ORDER_PRIME };
-
 /** Which points `listPoints` returns. */
 export interface ListPointsOptions {
   /** Only the points of exactly this order. */
@@ -141,13 +139,41 @@ export function listPoints(
   return points;
 }
 
+/** The first points of a listing and how many the curve has in all, from one walk. */
+export interface PointSample {
+  readonly points: AffinePoint[];
+  /** Every point but the one at infinity. */
+  readonly total: bigint;
+}
+
 /**
- * Key a point for the baby step table.
- * @param point - A point or null for infinity
- * @returns {string} A key two points share only when they are equal
+ * List the first points of the curve and count them all in the same walk.
+ * @param curve - From `defineCurve`, or parameters it accepts
+ * @param limit - Most points to list, 1 or more
+ * @returns {PointSample} Up to limit points by x, then y, and the total without infinity
+ * @throws {RangeError} When p passes `MAX_COUNTED_PRIME`, or the limit is below 1
  */
-function key(point: Readonly<CurvePoint>): string {
-  return point === null ? "infinity" : `${point.x},${point.y}`;
+export function samplePoints(curve: Readonly<WeierstrassCurve>, limit: number): PointSample {
+  const most = pointLimit(limit);
+  const points: AffinePoint[] = [];
+  let total = 0;
+  walkPoints(checkedCurve(curve), (x, y, p) => {
+    total += y === 0 ? 1 : 2;
+    if (points.length < most) points.push({ x: BigInt(x), y: BigInt(y) });
+    if (y !== 0 && points.length < most) points.push({ x: BigInt(x), y: BigInt(p - y) });
+    return false;
+  });
+  return { points, total: BigInt(total) };
+}
+
+/**
+ * Key a point for the baby step table: x times p plus y, which no two points share.
+ * @param point - A point or null for infinity
+ * @param p - The field prime
+ * @returns {bigint} The key, -1 for infinity
+ */
+function key(point: Readonly<CurvePoint>, p: bigint): bigint {
+  return point === null ? -1n : point.x * p + point.y;
 }
 
 /**
@@ -155,17 +181,17 @@ function key(point: Readonly<CurvePoint>): string {
  * @param curve - A checked curve
  * @param point - A point of the curve
  * @param steps - How many baby steps
- * @returns {Map<string, bigint>} i by point
+ * @returns {Map<bigint, bigint>} i by the key of the point
  */
 function babySteps(
   curve: Readonly<WeierstrassCurve>,
   point: Readonly<CurvePoint>,
   steps: bigint,
-): Map<string, bigint> {
-  const table = new Map<string, bigint>();
+): Map<bigint, bigint> {
+  const table = new Map<bigint, bigint>();
   let current: CurvePoint = null;
   for (let index = 0n; index < steps; index += 1n) {
-    const name = key(current);
+    const name = key(current, curve.p);
     if (!table.has(name)) table.set(name, index);
     current = add(curve, current, point);
   }
@@ -190,7 +216,7 @@ function stepSearch(
   const giant = negate(curve, multiply(curve, point, steps));
   let current = target;
   for (let round = 0n; round < steps; round += 1n) {
-    const index = table.get(key(current));
+    const index = table.get(key(current, curve.p));
     if (index !== undefined) return round * steps + index;
     current = add(curve, current, giant);
   }
@@ -230,6 +256,35 @@ export function pointOrder(curve: Readonly<WeierstrassCurve>, point: Readonly<Cu
   return order;
 }
 
+/** A discrete log and the order of the base it was searched in. */
+export interface FoundLog {
+  readonly order: bigint;
+  /** The smallest k below the order, undefined when the target is no multiple of the base. */
+  readonly scalar: bigint | undefined;
+}
+
+/**
+ * Find k with k times the base equal to the target, and the order of the base on the way.
+ * @param curve - From `defineCurve`, or parameters it accepts
+ * @param base - A point of the curve
+ * @param target - A point of the curve
+ * @returns {FoundLog} The order of the base and k
+ * @throws {RangeError} When a point is off the curve, or the base has order above `MAX_LOG_ORDER`
+ */
+export function findLog(
+  curve: Readonly<WeierstrassCurve>,
+  base: Readonly<CurvePoint>,
+  target: Readonly<CurvePoint>,
+): FoundLog {
+  const checkedOne = checkedCurve(curve);
+  onCurve(checkedOne, target, "The target");
+  const order = pointOrder(checkedOne, onCurve(checkedOne, base, "The base"));
+  if (order > MAX_LOG_ORDER) {
+    throw new RangeError(`The base has order ${order}, above the ${MAX_LOG_ORDER} a search takes`);
+  }
+  return { order, scalar: stepSearch(checkedOne, base, target, squareRoot(order - 1n) + 1n) };
+}
+
 /**
  * Find k with k times the base equal to the target, by baby step giant step.
  * @param curve - From `defineCurve`, or parameters it accepts
@@ -243,11 +298,5 @@ export function discreteLog(
   base: Readonly<CurvePoint>,
   target: Readonly<CurvePoint>,
 ): bigint | undefined {
-  const checkedOne = checkedCurve(curve);
-  onCurve(checkedOne, target, "The target");
-  const order = pointOrder(checkedOne, onCurve(checkedOne, base, "The base"));
-  if (order > MAX_LOG_ORDER) {
-    throw new RangeError(`The base has order ${order}, above the ${MAX_LOG_ORDER} a search takes`);
-  }
-  return stepSearch(checkedOne, base, target, squareRoot(order - 1n) + 1n);
+  return findLog(curve, base, target).scalar;
 }

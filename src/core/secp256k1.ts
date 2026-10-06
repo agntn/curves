@@ -5,6 +5,7 @@
  * constant time.
  */
 
+import type { AffinePoint } from "./arithmetic.ts";
 import { invert, mod, power } from "./field.ts";
 
 /** The domain parameters: the curve, its generator and the order of the generator. */
@@ -50,10 +51,7 @@ export interface LiftedPoints {
 }
 
 /** A finite point with both coordinates from 0 to p minus 1. */
-interface Affine {
-  readonly x: bigint;
-  readonly y: bigint;
-}
+type Affine = AffinePoint;
 
 /** (X, Y, Z) stands for (X / Z^2, Y / Z^3); Z = 0 is the point at infinity. */
 interface Jacobian {

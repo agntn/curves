@@ -17,9 +17,17 @@ import {
   type WeierstrassCurve,
   defineCurve,
 } from "./core/arithmetic.ts";
-import { countPoints, discreteLog, listPoints, pointOrder } from "./core/group.ts";
+import {
+  countPoints,
+  findLog,
+  listPoints,
+  pointOrder,
+  samplePoints,
+  type PointSample,
+} from "./core/group.ts";
 import * as secp256k1 from "./core/secp256k1.ts";
 import {
+  CURVE_INTEGER_PATTERN,
   CURVE_OPERATIONS,
   DEFAULT_CURVE_POINTS_SHOWN,
   MAX_CURVE_INTEGER_LENGTH,
@@ -120,7 +128,10 @@ const CURVE_ARGUMENTS: Readonly<Record<CurveOperation, readonly string[]>> = {
   log: ["point", "other"],
 };
 
-const CURVE_INTEGER = /^-?(?:0x[0-9a-f]+|[0-9]+)$/iu;
+/** Every optional argument of the curve tool, so the refusal covers each one a table names. */
+const CURVE_OPTIONAL = [...new Set(Object.values(CURVE_ARGUMENTS).flat())];
+
+const CURVE_INTEGER = new RegExp(`^${CURVE_INTEGER_PATTERN}$`, "u");
 
 /**
  * Read an integer the curve tool takes as decimal or 0x hex, with an optional minus sign.
@@ -193,6 +204,17 @@ function pointLimit(value: unknown): number {
 }
 
 /**
+ * List every point of one order, which is also how many there are.
+ * @param curve - A checked curve
+ * @param order - The order asked for
+ * @returns {PointSample} The points and their count
+ */
+function sampleOfOrder(curve: Readonly<WeierstrassCurve>, order: bigint): PointSample {
+  const points = listPoints(curve, { order });
+  return { points, total: BigInt(points.length) };
+}
+
+/**
  * List points, at most the limit of them, and say how many there are.
  * @param curve - A checked curve
  * @param args - Tool arguments
@@ -204,12 +226,12 @@ function listCurvePoints(
 ): CurveDetails {
   const order = isUnset(args["order"]) ? undefined : curveInteger(args["order"], "order");
   const limit = pointLimit(args["limit"]);
-  const listed = listPoints(curve, order === undefined ? { limit } : { order });
-  const total = order === undefined ? countPoints(curve) - 1n : BigInt(listed.length);
+  const { points, total } =
+    order === undefined ? samplePoints(curve, limit) : sampleOfOrder(curve, order);
   return {
     operation: "points",
     total: total.toString(),
-    points: listed.slice(0, limit).map(curvePointText),
+    points: points.slice(0, limit).map(curvePointText),
     truncated: total > BigInt(limit),
   };
 }
@@ -226,10 +248,10 @@ function findCurveLog(
 ): CurveDetails {
   const base = curvePointArgument(args, "log", "point");
   const target = curvePointArgument(args, "log", "other");
-  const scalar = discreteLog(curve, base, target);
+  const { order, scalar } = findLog(curve, base, target);
   return {
     operation: "log",
-    order: pointOrder(curve, base).toString(),
+    order: order.toString(),
     scalar: scalar === undefined ? null : scalar.toString(),
   };
 }
@@ -285,12 +307,7 @@ const CURVE_COMPUTATIONS: Readonly<
  */
 export function computeCurve(args: Readonly<Record<string, unknown>>): ToolResult<CurveDetails> {
   const operation = oneOf(args["operation"], "operation", CURVE_OPERATIONS);
-  refuseForeign(
-    args,
-    operation,
-    ["point", "other", "scalar", "order", "limit"],
-    CURVE_ARGUMENTS[operation],
-  );
+  refuseForeign(args, operation, CURVE_OPTIONAL, CURVE_ARGUMENTS[operation]);
   const curve = defineCurve({
     a: curveInteger(args["a"], "a"),
     b: curveInteger(args["b"], "b"),
@@ -309,6 +326,9 @@ const SECP256K1_ARGUMENTS: Readonly<Record<Secp256k1Operation, readonly string[]
   check: ["point"],
 };
 
+/** Every optional argument of the secp256k1 tool. */
+const SECP256K1_OPTIONAL = [...new Set(Object.values(SECP256K1_ARGUMENTS).flat())];
+
 /**
  * Add, subtract, negate or multiply public secp256k1 points, lift an x or check a point.
  * @param args - Tool arguments, the operation and the ones it takes
@@ -318,12 +338,7 @@ export function computeSecp256k1(
   args: Readonly<Record<string, unknown>>,
 ): ToolResult<Secp256k1Details> {
   const operation = oneOf(args["operation"], "operation", SECP256K1_OPERATIONS);
-  refuseForeign(
-    args,
-    operation,
-    ["point", "other", "scalar", "x", "compressed"],
-    SECP256K1_ARGUMENTS[operation],
-  );
+  refuseForeign(args, operation, SECP256K1_OPTIONAL, SECP256K1_ARGUMENTS[operation]);
   const argument = (name: string): string => {
     if (isUnset(args[name])) throw new TypeError(`${operation} needs ${name}`);
     return requiredString(args[name], name);

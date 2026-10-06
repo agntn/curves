@@ -20,7 +20,7 @@ export default defineCommand({
       required: true,
       description: "a, decimal or 0x hex, reduced mod p, so -3 works",
     },
-    b: { type: "string", required: true, description: "b, decimal or 0x hex" },
+    b: { type: "string", required: true, description: "b, decimal or 0x hex, reduced mod p" },
     p: { type: "string", required: true, description: "The field prime, above 3" },
     point: { type: "string", description: "x,y: the point, or the base for log" },
     other: { type: "string", description: "x,y: the second point for add, the target for log" },
