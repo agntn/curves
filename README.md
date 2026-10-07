@@ -24,8 +24,9 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 - 📏 **Point orders.** Baby step giant step over the Hasse interval, fields up to 2⁴⁸.
 - 🕵️ **Discrete logs.** The smallest k, one prime of the order at a time. A 40-bit order made of small primes? About 20 ms. Only a prime above 2³⁶ stops it. No k? You get `undefined`, not a guess.
 - 🔑 **secp256k1 with SEC1 points.** Add, subtract, multiply, lift an x, convert between 33 and 65 bytes.
-- 🧾 **Written from the specs.** SEC 2 for the domain parameters, SEC 1 for the encodings. No `@noble/curves`.
-- 🤖 **Agent tools.** One for curves you define, one for secp256k1. MCP, Pi, OMP and the AI SDK all get both.
+- 🟣 **sr25519 for Polkadot.** Keys from a seed, signatures, `//hard` and `/soft` children. `//Alice` comes out right.
+- 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1, RFC 9496 for ristretto255. No `@noble/curves`.
+- 🤖 **Agent tools.** One for curves you define, one for secp256k1, one for sr25519. MCP, Pi, OMP and the AI SDK get all three.
 
 ## 📦 Install
 
@@ -68,6 +69,7 @@ The scalar is the inverse of 2 mod n. Look at all those zeros in x. Funny, right
 | ------------------------------ | --------------------------------------------------------------- |
 | `curves compute <operation>`   | add, double, negate, multiply, check, order, count, points, log |
 | `curves secp256k1 <operation>` | add, subtract, negate, multiply, lift, check                    |
+| `curves sr25519 <operation>`   | keypair, sign, verify, derive                                   |
 | `curves mcp`                   | MCP server over stdio                                           |
 
 Points go in as JSON for `compute`, the same `{"x":…,"y":…}` the tool takes, and as SEC1 hex for `secp256k1`. `--a -3` works, it's reduced mod p. The output is the line a model reads, `--json` makes it pretty. Every flag comes from the tool schema through `runCli` of [`@agntn/tools`](https://tools.agntn.dev/guide/cli), so `curves <command> --help` never lies about what a command takes.
@@ -87,7 +89,7 @@ multiplyGenerator("03"); // 02f9308a…36f9
 liftX("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798").odd; // 0379be66…1798
 ```
 
-That's most of it, really. Generic curves take bigints and give `null` for the point at infinity. secp256k1 takes and gives hex. A point off the curve throws, never a silent wrong answer. More in [curves and points](https://curves.agntn.dev/math/curves), [orders and logs](https://curves.agntn.dev/math/groups) and [secp256k1](https://curves.agntn.dev/math/secp256k1).
+That's most of it, really. Generic curves take bigints and give `null` for the point at infinity. secp256k1 takes and gives hex, and so does `@agntn/curves/sr25519`. A point off the curve throws, never a silent wrong answer. More in [curves and points](https://curves.agntn.dev/math/curves), [orders and logs](https://curves.agntn.dev/math/groups), [secp256k1](https://curves.agntn.dev/math/secp256k1) and [sr25519](https://curves.agntn.dev/math/sr25519).
 
 ## 🤖 Agents
 
@@ -104,19 +106,19 @@ omp install @agntn/curves
 }
 ```
 
-Two tools: `curves_compute` and `curves_secp256k1_compute`. The AI SDK versions sit in `@agntn/curves/ai`. Integers travel as decimal or `0x` strings. Infinity comes back as `"infinity"`.
+Three tools: `curves_compute`, `curves_secp256k1_compute` and `curves_sr25519_compute`. The AI SDK versions sit in `@agntn/curves/ai`. Integers travel as decimal or `0x` strings. Infinity comes back as `"infinity"`.
 
 ## 🚫 What this does not do
 
-Keys, addresses and signatures. That's [@agntn/keys](https://github.com/agntn/keys). Nothing here runs in constant time either. And a log over a real 256-bit group? Not happening, here or anywhere else.
+Mnemonics, addresses and secp256k1 signatures. That's [@agntn/keys](https://github.com/agntn/keys). Nothing here runs in constant time either. And a log over a real 256-bit group? Not happening, here or anywhere else.
 
 ## 🛠️ Development
 
 ```bash
 pnpm install
 pnpm --dir docs install   # the /mcp test borrows Zod, the toolkit and the SDK from here
-pnpm build       # dist/, the CLI and the secp256k1 subpath
-pnpm test        # textbook curves, brute force oracles, frozen secp256k1 vectors
+pnpm build       # dist/, the CLI and the secp256k1, ristretto255 and sr25519 subpaths
+pnpm test        # textbook curves, brute force oracles, RFC 9496, frozen secp256k1 and sr25519 vectors
 pnpm lint        # vp lint and vp fmt --check
 pnpm typecheck   # src, the extensions and the tests
 ```
