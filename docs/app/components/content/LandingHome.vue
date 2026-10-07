@@ -17,7 +17,7 @@ const { samples, tick, paused, current, step } = useLandingSample();
       :checks="[
         `Counting and listing points for p up to ${powerOfTwo(MAX_COUNTED_PRIME)}, one x at a time`,
         'Orders by baby step giant step over the Hasse interval',
-        `Logs for a base of order up to ${powerOfTwo(MAX_LOG_ORDER)}. No k? You get null, not a guess`,
+        `Logs split by the primes of the order, each prime up to ${powerOfTwo(MAX_LOG_ORDER)}. No k? You get null, not a guess`,
       ]"
     >
       CTFs love a toy curve. Small prime, a base point, a target, find k. A model will try it in its

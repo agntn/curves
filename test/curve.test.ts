@@ -48,6 +48,20 @@ function bruteForceOrder(curve: ReturnType<typeof defineCurve>, point: AffinePoi
   return order;
 }
 
+/* The smallest k with k times the base equal to the target, by adding the base until it wraps. */
+function bruteForceLog(
+  curve: ReturnType<typeof defineCurve>,
+  base: AffinePoint,
+  target: CurvePoint,
+): bigint | undefined {
+  let current: CurvePoint = null;
+  for (let k = 0n; k === 0n || current !== null; k += 1n) {
+    if (current?.x === target?.x && current?.y === target?.y) return k;
+    current = addPoints(curve, current, base);
+  }
+  return undefined;
+}
+
 describe("Curve definition", () => {
   it("reduces a and b mod p, so a = -3 is p - 3", () => {
     expect(defineCurve({ a: -3n, b: 20n, p: 17n })).toEqual({ a: 14n, b: 3n, p: 17n });
@@ -195,6 +209,25 @@ describe("Curve group", () => {
     expect(discreteLog(f23Curve, generator, multiplyPoint(f23Curve, generator, 5n))).toBe(5n);
   });
 
+  it("finds every log on small curves the same way adding the base does, prime powers too", () => {
+    let primePowerOrders = 0;
+    for (const curve of [
+      f23Curve,
+      defineCurve({ a: 0n, b: 7n, p: 97n }),
+      defineCurve({ a: 1n, b: 1n, p: 23n }),
+    ]) {
+      const points = listPoints(curve);
+      for (const point of points) {
+        const order = pointOrder(curve, point);
+        if ([4n, 8n, 9n, 25n].some((square) => order % square === 0n)) primePowerOrders += 1;
+        for (const target of [null, ...points]) {
+          expect(discreteLog(curve, point, target)).toBe(bruteForceLog(curve, point, target));
+        }
+      }
+    }
+    expect(primePowerOrders).toBeGreaterThan(0);
+  });
+
   it("finds an order over a 40-bit field and a log over a 32-bit one", () => {
     const wide = defineCurve({ a: 2n, b: 3n, p: 1099511627563n });
     const point = { x: 1n, y: 727918651225n };
@@ -205,7 +238,14 @@ describe("Curve group", () => {
       expect(order % prime).toBe(0n);
       expect(multiplyPoint(wide, point, order / prime)).not.toBeNull();
     }
-    expect(() => discreteLog(wide, point, point)).toThrow("above the");
+    const wideScalar = 987654321987n;
+    expect(discreteLog(wide, point, multiplyPoint(wide, point, wideScalar))).toBe(wideScalar);
+    const primeOrder = { x: 6n, y: 6770422436n };
+    const lonely = defineCurve({ a: 2n, b: 2n, p: 1099511627563n });
+    expect(isPrime(pointOrder(lonely, primeOrder))).toBe(true);
+    expect(() => discreteLog(lonely, primeOrder, primeOrder)).toThrow(
+      "the prime factor 1099512267719, above the",
+    );
     const narrow = defineCurve({ a: 2n, b: 3n, p: 4294967291n });
     const generator = { x: 2n, y: 1005604009n };
     const scalar = 1234567890n;

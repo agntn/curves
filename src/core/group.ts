@@ -8,7 +8,7 @@ import {
   type CurvePoint,
   type WeierstrassCurve,
 } from "./arithmetic.ts";
-import { primeFactors, squareRoot } from "./field.ts";
+import { invert, mod, primeFactors, squareRoot } from "./field.ts";
 import { MAX_COUNTED_PRIME, MAX_FILTERED_PRIME, MAX_LOG_ORDER, MAX_ORDER_PRIME } from "./limits.ts";
 
 /** Which points `listPoints` returns. */
@@ -263,13 +263,72 @@ export interface FoundLog {
   readonly scalar: bigint | undefined;
 }
 
+/** One prime power of the order of the base. */
+interface PrimePower {
+  readonly prime: bigint;
+  readonly exponent: bigint;
+}
+
 /**
- * Find k with k times the base equal to the target, and the order of the base on the way.
+ * Split the order of the base into prime powers, refusing a prime too big to search.
+ * @param order - The order of the base, from 1 to 2^53 minus 1
+ * @returns {PrimePower[]} The prime powers, smallest prime first
+ * @throws {RangeError} When a prime factor passes `MAX_LOG_ORDER`
+ */
+function logPrimePowers(order: bigint): PrimePower[] {
+  return primeFactors(order).map((prime) => {
+    if (prime > MAX_LOG_ORDER) {
+      throw new RangeError(
+        `The base has order ${order} with the prime factor ${prime}, above the ${MAX_LOG_ORDER} a search takes`,
+      );
+    }
+    let exponent = 0n;
+    for (let rest = order; rest % prime === 0n; rest /= prime) exponent += 1n;
+    return { prime, exponent };
+  });
+}
+
+/**
+ * Find k mod prime^exponent, one digit in base prime at a time.
+ * @param curve - A checked curve
+ * @param base - The base, its order a multiple of prime^exponent
+ * @param target - A point of the curve
+ * @param order - The order of the base
+ * @param factor - The prime power
+ * @returns {bigint | undefined} k mod prime^exponent, undefined when a digit has no answer
+ */
+function primePowerLog(
+  curve: Readonly<WeierstrassCurve>,
+  base: Readonly<CurvePoint>,
+  target: Readonly<CurvePoint>,
+  order: bigint,
+  factor: Readonly<PrimePower>,
+): bigint | undefined {
+  const { prime, exponent } = factor;
+  const cofactor = order / prime ** exponent;
+  const generator = multiply(curve, base, cofactor);
+  const image = multiply(curve, target, cofactor);
+  const digitBase = multiply(curve, generator, prime ** (exponent - 1n));
+  const steps = squareRoot(prime - 1n) + 1n;
+  let scalar = 0n;
+  for (let place = 0n; place < exponent; place += 1n) {
+    const rest = add(curve, image, negate(curve, multiply(curve, generator, scalar)));
+    const shifted = multiply(curve, rest, prime ** (exponent - 1n - place));
+    const digit = stepSearch(curve, digitBase, shifted, steps);
+    if (digit === undefined) return undefined;
+    scalar += digit * prime ** place;
+  }
+  return scalar;
+}
+
+/**
+ * Find k with k times the base equal to the target, one small search per prime of the order.
  * @param curve - From `defineCurve`, or parameters it accepts
  * @param base - A point of the curve
  * @param target - A point of the curve
  * @returns {FoundLog} The order of the base and k
- * @throws {RangeError} When a point is off the curve, or the base has order above `MAX_LOG_ORDER`
+ * @throws {RangeError} When a point is off the curve, or a prime factor of the order of the base
+ * passes `MAX_LOG_ORDER`
  */
 export function findLog(
   curve: Readonly<WeierstrassCurve>,
@@ -279,19 +338,27 @@ export function findLog(
   const checkedOne = checkedCurve(curve);
   onCurve(checkedOne, target, "The target");
   const order = pointOrder(checkedOne, onCurve(checkedOne, base, "The base"));
-  if (order > MAX_LOG_ORDER) {
-    throw new RangeError(`The base has order ${order}, above the ${MAX_LOG_ORDER} a search takes`);
+  let scalar = 0n;
+  let modulus = 1n;
+  for (const factor of logPrimePowers(order)) {
+    const residue = primePowerLog(checkedOne, base, target, order, factor);
+    if (residue === undefined) return { order, scalar: undefined };
+    const power = factor.prime ** factor.exponent;
+    scalar += modulus * mod((residue - scalar) * invert(modulus, power), power);
+    modulus *= power;
   }
-  return { order, scalar: stepSearch(checkedOne, base, target, squareRoot(order - 1n) + 1n) };
+  const found = key(multiply(checkedOne, base, scalar), checkedOne.p) === key(target, checkedOne.p);
+  return { order, scalar: found ? scalar : undefined };
 }
 
 /**
- * Find k with k times the base equal to the target, by baby step giant step.
+ * Find k with k times the base equal to the target, by Pohlig-Hellman over baby step giant step.
  * @param curve - From `defineCurve`, or parameters it accepts
  * @param base - A point of the curve
  * @param target - A point of the curve
  * @returns {bigint | undefined} The smallest k below the order of the base, or undefined
- * @throws {RangeError} When a point is off the curve, or the base has order above `MAX_LOG_ORDER`
+ * @throws {RangeError} When a point is off the curve, or a prime factor of the order of the base
+ * passes `MAX_LOG_ORDER`
  */
 export function discreteLog(
   curve: Readonly<WeierstrassCurve>,

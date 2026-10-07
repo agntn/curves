@@ -43,7 +43,7 @@ const { copied, copy } = useCopied();
         <div>
           <dt>Orders up to</dt>
           <dd>{{ powerOfTwo(MAX_ORDER_PRIME) }}</dd>
-          <dd class="hero-metric-sub">logs for a base up to {{ powerOfTwo(MAX_LOG_ORDER) }}</dd>
+          <dd class="hero-metric-sub">log primes up to {{ powerOfTwo(MAX_LOG_ORDER) }}</dd>
         </div>
         <div>
           <dt>Network calls</dt>

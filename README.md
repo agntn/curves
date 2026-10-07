@@ -22,7 +22,7 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 - 🔁 **Add, double, negate, multiply.** Negative scalars multiply the negation.
 - 🔢 **Counting and listing.** Every point of a small curve, or just the ones of one order.
 - 📏 **Point orders.** Baby step giant step over the Hasse interval, fields up to 2⁴⁸.
-- 🕵️ **Discrete logs.** The smallest k, for a base of order up to 2³⁶. No k? You get `undefined`, not a guess.
+- 🕵️ **Discrete logs.** The smallest k, one prime of the order at a time. A 40-bit order made of small primes? About 20 ms. Only a prime above 2³⁶ stops it. No k? You get `undefined`, not a guess.
 - 🔑 **secp256k1 with SEC1 points.** Add, subtract, multiply, lift an x, convert between 33 and 65 bytes.
 - 🧾 **Written from the specs.** SEC 2 for the domain parameters, SEC 1 for the encodings. No `@noble/curves`.
 - 🤖 **Agent tools.** One for curves you define, one for secp256k1. MCP, Pi, OMP and the AI SDK all get both.
