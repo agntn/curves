@@ -12,6 +12,7 @@ export default defineNuxtConfig({
     /** The tool listings and the executor `curves mcp` serves, for the MCP server at /mcp. */
     "@agntn/curves/mcp": resolve(librarySource, "mcp.ts"),
     "@agntn/curves/secp256k1": resolve(librarySource, "secp256k1.ts"),
+    "@agntn/curves/sr25519": resolve(librarySource, "sr25519.ts"),
     "@agntn/curves": resolve(librarySource, "index.ts"),
     /** The text the agent tools answer with; it imports nothing beyond the library. */
     "#tool-operations": resolve(librarySource, "tool-operations.ts"),
@@ -57,12 +58,12 @@ export default defineNuxtConfig({
       },
       {
         title: "Playground",
-        description: "Both curve tools, in the browser.",
+        description: "All three tools, in the browser.",
         links: [
           {
             title: "Playground",
             href: "https://curves.agntn.dev/playground",
-            description: "The library running in the page: curves_compute and curves_secp256k1_compute.",
+            description: "The library running in the page: curves_compute, curves_secp256k1_compute and curves_sr25519_compute.",
           },
         ],
       },

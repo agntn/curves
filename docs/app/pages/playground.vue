@@ -1,19 +1,15 @@
 <script setup lang="ts">
 import { version } from "@agntn/curves";
-import { CURVE_OPERATIONS, SECP256K1_OPERATIONS } from "../utils/contract";
+import { OPERATION_COUNT } from "../utils/contract";
 import { spellOut } from "../utils/format";
 import { TOOLS } from "../utils/tools";
-
-/** The curve tools the playground has a form for; sr25519 has none yet. */
-const TOOL_COUNT = TOOLS.filter((tool) => tool !== "curves_sr25519_compute").length;
-const OPERATION_COUNT = CURVE_OPERATIONS.length + SECP256K1_OPERATIONS.length;
 
 definePageMeta({ layout: "default" });
 
 const title = "Playground";
-const description = `All ${spellOut(OPERATION_COUNT)} operations of both curve tools in the browser: points, orders, counts and logs on a curve you define, and secp256k1 with SEC1 points. Same executors the CLI and the agent tools run.`;
+const description = `All ${spellOut(OPERATION_COUNT)} operations of the ${spellOut(TOOLS.length)} tools in the browser: points, orders, counts and logs on a curve you define, secp256k1 with SEC1 points, and sr25519 keys and signatures for Polkadot. Same executors the CLI and the agent tools run.`;
 /** The OG pipeline drops commas from its props, so the card gets a version written without them. */
-const cardDescription = `Points and orders and discrete logs on a curve you define and on secp256k1. In the browser with the library itself.`;
+const cardDescription = `Points and orders and discrete logs on any curve and on secp256k1. Polkadot signatures too. In the browser with the library itself.`;
 
 useSeo({
   title,
@@ -52,19 +48,20 @@ defineOgImage(
         <p class="hero-lead">
           The page imports @agntn/curves and runs the tool executors right here. Type in the curve
           from the challenge, ask for an order, ask for k. Wrong point? It tells you it's off the
-          curve. Every state is a link you can send to a friend who's stuck on the same puzzle.
+          curve. Got a Polkadot signature? Paste it and watch it verify. Every state is a link you can
+          send to a friend who's stuck on the same puzzle.
         </p>
 
         <dl class="hero-metrics">
           <div>
             <dt>Tools</dt>
-            <dd>{{ TOOL_COUNT }}</dd>
+            <dd>{{ TOOLS.length }}</dd>
             <dd class="hero-metric-sub">same as MCP, Pi and OMP</dd>
           </div>
           <div>
             <dt>Operations</dt>
             <dd>{{ OPERATION_COUNT }}</dd>
-            <dd class="hero-metric-sub">on curves you define and on secp256k1</dd>
+            <dd class="hero-metric-sub">any curve, secp256k1 and sr25519</dd>
           </div>
           <div>
             <dt>Network</dt>
