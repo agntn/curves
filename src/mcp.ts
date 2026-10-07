@@ -6,8 +6,8 @@ import {
 } from "@agntn/tools/mcp";
 import type { CallToolResult, Server, Tool } from "@modelcontextprotocol/server";
 import { sourceChangeCheck } from "./source-change.ts";
+import { serverInfo } from "./server-info.ts";
 import { curvesTools } from "./tools.ts";
-import { version } from "./version.ts";
 
 const restart = "src/ changed under this server, restart it to load the new code";
 
@@ -55,7 +55,7 @@ export function callTool(
  * @returns {Server} Unconnected MCP server.
  */
 export function createMcpServer(): Server {
-  const server = createToolServer({ name: "curves", version }, curvesTools);
+  const server = createToolServer(serverInfo, curvesTools);
   if (!changed) return server;
 
   server.setRequestHandler("tools/call", async (request, ctx) => {

@@ -19,7 +19,7 @@ docs/
 ├── app/utils/                     # curves (the landing's curves, computed by the library), secp (the secp256k1 samples), contract (counts and limits), tools (the executors), tokens, formatting
 ├── app/pages/playground.vue       # playground, own route outside the docs layout, its own useSeo and OG image
 ├── server/routes/sitemap.xml.ts   # Docus sitemap plus the Vue pages it cannot see
-├── server/mcp/index.ts            # the Docus MCP handler at /mcp, named and versioned like `curves mcp`
+├── server/mcp/index.ts            # the Docus MCP handler at /mcp, introduced like `curves mcp` by `src/server-info.ts`
 ├── server/mcp/tools/              # one file per tool, each `curvesMcpTool("<name>")`
 ├── server/utils/curves-mcp.ts     # a tool from `@agntn/curves/mcp` for the toolkit
 ├── public/                        # fonts, favicon.svg and the icons and manifest cut from it
@@ -73,7 +73,7 @@ The worker computes whatever an MCP client sends it and keeps none of it. The wo
 
 - `seo.schema` in `app/app.config.ts` emits the landing JSON-LD: `WebSite`, the agntn `Organization` as publisher, and a free `SoftwareApplication` with `sameAs` on GitHub and npm.
 - `server/routes/sitemap.xml.ts` wraps the Docus sitemap and appends the Vue pages listed in `PAGES`; a new page under `app/pages/` goes there too.
-- `public/favicon.svg` is the source, the PNGs and the `.ico` are cut from it with ImageMagick.
+- `public/favicon.svg` is the source, the PNGs and the `.ico` are cut from it with ImageMagick. Both MCP servers show `favicon.svg` and `icon-512.png` as their icons, so `test/mcp.test.ts` fails when either goes missing.
 
 ## OG images
 

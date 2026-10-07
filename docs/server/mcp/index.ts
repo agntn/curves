@@ -1,4 +1,4 @@
-import { version } from "../../../src/version.ts";
+import { serverInfo } from "../../../src/server-info.ts";
 
-/** Named and versioned like `curves mcp`, plus the Docus page tools. */
-export default defineMcpHandler({ name: "curves", version });
+/** Introduces itself like `curves mcp`, plus the Docus page tools. */
+export default defineMcpHandler({ ...serverInfo });
