@@ -65,6 +65,18 @@ describe("sr25519 keys", () => {
     );
     expect(() => getPublicKey(new Uint8Array(64) as unknown as string)).toThrow("Secret must be");
   });
+
+  it("refuse a key that is 0 mod the group order, whose public key is the identity", () => {
+    const orderTimesEight = Buffer.from(
+      (ristretto255.l << 3n).toString(16).padStart(64, "0"),
+      "hex",
+    );
+    const nonce = "00".repeat(32);
+    for (const key of ["00".repeat(32), Buffer.from(orderTimesEight).reverse().toString("hex")]) {
+      expect(() => getPublicKey(`${key}${nonce}`)).toThrow("Secret key is 0 mod the group order");
+      expect(() => sign(`${key}${nonce}`, message)).toThrow("Secret key is 0 mod the group order");
+    }
+  });
 });
 
 describe("sr25519 signatures", () => {

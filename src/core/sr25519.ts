@@ -30,6 +30,8 @@ export const SIGNING_CONTEXT = "substrate";
 /** The one refusal for text that isn't an sr25519 public key. */
 export const INVALID_PUBLIC_KEY = "Invalid sr25519 public key";
 
+const ZERO_KEY = "Secret key is 0 mod the group order, so its public key would be the identity";
+
 /** Signing and verifying options. */
 export interface SignatureOptions {
   /** The schnorrkel signing context. Default: "substrate" */
@@ -66,13 +68,16 @@ function readHex(value: unknown, length: number, name: string, extra = ""): Uint
 }
 
 /**
- * Read a secret.
+ * Read a secret. A key that is 0 mod l would sign for the identity, which verify refuses.
  * @param secret - 128 hex digits
  * @returns {SecretParts} The scalar, the key divided by 8, and the nonce
+ * @throws {RangeError} When the secret is no 128 hex digits, or its key is 0 mod l
  */
 function readSecret(secret: unknown): SecretParts {
   const bytes = readHex(secret, 64, "Secret", ": the key, then the nonce");
-  return { scalar: bytesToNumberLE(bytes.subarray(0, 32)) >> 3n, nonce: bytes.slice(32) };
+  const scalar = bytesToNumberLE(bytes.subarray(0, 32)) >> 3n;
+  if (mod(scalar, L) === 0n) throw new RangeError(ZERO_KEY);
+  return { scalar, nonce: bytes.slice(32) };
 }
 
 /**
