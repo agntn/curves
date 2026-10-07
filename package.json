@@ -9,8 +9,12 @@
     "ecc",
     "elliptic-curve",
     "mcp",
+    "polkadot",
+    "ristretto255",
     "sec1",
     "secp256k1",
+    "sr25519",
+    "substrate",
     "weierstrass"
   ],
   "homepage": "https://curves.agntn.dev",
@@ -42,6 +46,14 @@
       "types": "./dist/secp256k1.d.mts",
       "import": "./dist/secp256k1.mjs"
     },
+    "./ristretto255": {
+      "types": "./dist/ristretto255.d.mts",
+      "import": "./dist/ristretto255.mjs"
+    },
+    "./sr25519": {
+      "types": "./dist/sr25519.d.mts",
+      "import": "./dist/sr25519.mjs"
+    },
     "./ai": {
       "types": "./dist/ai.d.mts",
       "import": "./dist/ai.mjs"
@@ -66,6 +78,7 @@
     "release": "pnpm build && pnpm test && changelogen --release --push"
   },
   "dependencies": {
+    "@agntn/hashes": "0.6.7",
     "@agntn/tools": "0.2.1",
     "@modelcontextprotocol/server": "2.2.0"
   },
@@ -73,7 +86,7 @@
     "@agntn/ox": "0.1.0",
     "@earendil-works/pi-coding-agent": "1.0.2",
     "@modelcontextprotocol/client": "2.2.0",
-    "@oh-my-pi/pi-coding-agent": "18.0.0",
+    "@oh-my-pi/pi-coding-agent": "18.4.2",
     "@types/node": "26.2.0",
     "ai": "7.0.66",
     "changelogen": "0.6.2",
@@ -83,8 +96,8 @@
     "vite-plus": "catalog:"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": ">=0.84.2 <2",
-    "@oh-my-pi/pi-coding-agent": ">=18.0.0 <19",
+    "@earendil-works/pi-coding-agent": ">=0.87.1 <2",
+    "@oh-my-pi/pi-coding-agent": ">=18.4.2 <19",
     "ai": ">=7.0.0"
   },
   "peerDependenciesMeta": {

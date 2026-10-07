@@ -25,16 +25,23 @@ import {
   samplePoints,
   type PointSample,
 } from "./core/group.ts";
+import { hexToBytes } from "./core/bytes.ts";
 import * as secp256k1 from "./core/secp256k1.ts";
+import * as sr25519 from "./core/sr25519.ts";
 import {
   CURVE_INTEGER_PATTERN,
   CURVE_OPERATIONS,
   DEFAULT_CURVE_POINTS_SHOWN,
   MAX_CURVE_INTEGER_LENGTH,
   MAX_CURVE_POINTS_SHOWN,
+  MAX_CONTEXT_LENGTH,
+  MAX_MESSAGE_LENGTH,
+  MESSAGE_ENCODINGS,
   SECP256K1_OPERATIONS,
+  SR25519_OPERATIONS,
   type CurveOperation,
   type Secp256k1Operation,
+  type Sr25519Operation,
 } from "./tool-contract.ts";
 
 /**
@@ -63,6 +70,13 @@ export type Secp256k1Details =
   | { operation: Exclude<Secp256k1Operation, "lift" | "check">; point: string }
   | { operation: "lift"; even: string; odd: string }
   | { operation: "check"; onCurve: boolean };
+
+/** What the sr25519 tool computes, by operation. A secret comes back only when it is new. */
+export type Sr25519Details =
+  | { operation: "keypair"; secret?: string; publicKey: string }
+  | { operation: "sign"; signature: string; publicKey: string }
+  | { operation: "verify"; valid: boolean }
+  | { operation: "derive"; hard: boolean; secret?: string; publicKey: string };
 
 /**
  * Wraps details as the one JSON text every surface returns.
@@ -360,4 +374,163 @@ export function computeSecp256k1(
   }
   const compute = operation === "add" ? secp256k1.addPoints : secp256k1.subtractPoints;
   return result({ operation, point: compute(argument("point"), argument("other"), options) });
+}
+
+/** The arguments each sr25519 operation takes. */
+const SR25519_ARGUMENTS: Readonly<Record<Sr25519Operation, readonly string[]>> = {
+  keypair: ["seed", "secret"],
+  sign: ["secret", "message", "encoding", "context", "random"],
+  verify: ["publicKey", "message", "encoding", "signature", "context"],
+  derive: ["secret", "publicKey", "chainCode", "hard", "random"],
+};
+
+/** Every optional argument of the sr25519 tool. */
+const SR25519_OPTIONAL = [...new Set(Object.values(SR25519_ARGUMENTS).flat())];
+
+/** The sr25519 tool's arguments, read for one operation. */
+interface Sr25519Arguments {
+  readonly operation: Sr25519Operation;
+  readonly has: (name: string) => boolean;
+  readonly text: (name: string) => string;
+}
+
+/**
+ * Read the arguments of one sr25519 operation.
+ * @param args - Tool arguments
+ * @returns {Sr25519Arguments} The operation and readers for the rest
+ */
+function sr25519Arguments(args: Readonly<Record<string, unknown>>): Sr25519Arguments {
+  const operation = oneOf(args["operation"], "operation", SR25519_OPERATIONS);
+  refuseForeign(args, operation, SR25519_OPTIONAL, SR25519_ARGUMENTS[operation]);
+  const has = (name: string): boolean => !isUnset(args[name]);
+  const text = (name: string): string => {
+    if (!has(name)) throw new TypeError(`${operation} needs ${name}`);
+    return requiredString(args[name], name);
+  };
+  return { operation, has, text };
+}
+
+/**
+ * Read the message as bytes. Required, so a blank one is the empty message, not a missing one.
+ * @param args - Tool arguments
+ * @param input - The readers of the operation
+ * @returns {Uint8Array} The message
+ */
+function messageBytes(
+  args: Readonly<Record<string, unknown>>,
+  input: Sr25519Arguments,
+): Uint8Array {
+  const message = args["message"];
+  if (message === undefined) throw new TypeError(`${input.operation} needs message`);
+  if (typeof message !== "string") throw new TypeError("message must be a string");
+  const encoding = input.has("encoding")
+    ? oneOf(args["encoding"], "encoding", MESSAGE_ENCODINGS)
+    : "utf8";
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    throw new RangeError(`message must be at most ${MAX_MESSAGE_LENGTH} characters`);
+  }
+  if (encoding === "utf8") return new TextEncoder().encode(message);
+  const bytes = hexToBytes(message);
+  if (bytes === undefined)
+    throw new RangeError("message must be hex without 0x, two digits a byte");
+  return bytes;
+}
+
+/**
+ * Read the optional context and random bytes.
+ * @param input - The readers of the operation
+ * @returns {{ context?: string; random?: string }} The options the library takes
+ */
+function sr25519Options(input: Sr25519Arguments): { context?: string; random?: string } {
+  if (input.has("context") && input.text("context").length > MAX_CONTEXT_LENGTH) {
+    throw new RangeError(`context must be at most ${MAX_CONTEXT_LENGTH} characters`);
+  }
+  return {
+    ...(input.has("context") ? { context: input.text("context") } : {}),
+    ...(input.has("random") ? { random: input.text("random") } : {}),
+  };
+}
+
+/**
+ * Make a key pair from a seed, or the public key of a secret.
+ * @param input - The readers of the operation
+ * @returns {Sr25519Details} The new secret and its public key, or the public key alone
+ */
+function sr25519Keypair(input: Sr25519Arguments): Sr25519Details {
+  if (input.has("seed") === input.has("secret")) {
+    throw new TypeError("keypair needs seed or secret, one of them");
+  }
+  if (input.has("secret")) {
+    return { operation: "keypair", publicKey: sr25519.getPublicKey(input.text("secret")) };
+  }
+  const secret = sr25519.expandSeed(input.text("seed"));
+  return { operation: "keypair", secret, publicKey: sr25519.getPublicKey(secret) };
+}
+
+/**
+ * Derive the soft child of a public key, the one kind of child a public key has.
+ * @param input - The readers of the operation
+ * @param hard - Whether the caller asked for a hard child
+ * @param chainCode - 64 hex digits
+ * @returns {Sr25519Details} The child public key
+ */
+function derivePublicChild(
+  input: Sr25519Arguments,
+  hard: boolean,
+  chainCode: string,
+): Sr25519Details {
+  if (hard) throw new RangeError("A hard child needs the secret, not the public key");
+  if (input.has("random")) throw new RangeError("derive from publicKey does not take random");
+  const publicKey = sr25519.derivePublic(input.text("publicKey"), chainCode);
+  return { operation: "derive", hard, publicKey };
+}
+
+/**
+ * Derive a child of a secret, or the soft child of a public key.
+ * @param args - Tool arguments
+ * @param input - The readers of the operation
+ * @returns {Sr25519Details} The child secret and public key, or the public key alone
+ */
+function sr25519Derive(
+  args: Readonly<Record<string, unknown>>,
+  input: Sr25519Arguments,
+): Sr25519Details {
+  const hard = args["hard"] ?? false;
+  if (typeof hard !== "boolean") throw new TypeError("hard must be a boolean");
+  if (input.has("secret") === input.has("publicKey")) {
+    throw new TypeError("derive needs secret or publicKey, one of them");
+  }
+  const chainCode = input.text("chainCode");
+  if (input.has("publicKey")) return derivePublicChild(input, hard, chainCode);
+  if (hard && input.has("random")) throw new RangeError("A hard child takes no random");
+  const secret = hard
+    ? sr25519.deriveHard(input.text("secret"), chainCode)
+    : sr25519.deriveSoft(input.text("secret"), chainCode, sr25519Options(input));
+  return { operation: "derive", hard, secret, publicKey: sr25519.getPublicKey(secret) };
+}
+
+/**
+ * Make sr25519 keys from a seed, sign, verify, or derive children as Substrate does.
+ * @param args - Tool arguments, the operation and the ones it takes
+ * @returns {ToolResult<Sr25519Details>} The keys, the signature, the verdict or the child
+ */
+export function computeSr25519(
+  args: Readonly<Record<string, unknown>>,
+): ToolResult<Sr25519Details> {
+  const input = sr25519Arguments(args);
+  if (input.operation === "keypair") return result(sr25519Keypair(input));
+  if (input.operation === "derive") return result(sr25519Derive(args, input));
+  const message = messageBytes(args, input);
+  if (input.operation === "verify") {
+    const valid = sr25519.verify(
+      input.text("signature"),
+      message,
+      input.text("publicKey"),
+      sr25519Options(input),
+    );
+    return result({ operation: "verify", valid });
+  }
+  const secret = input.text("secret");
+  const signature = sr25519.sign(secret, message, sr25519Options(input));
+  return result({ operation: "sign", signature, publicKey: sr25519.getPublicKey(secret) });
 }

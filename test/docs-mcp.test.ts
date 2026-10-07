@@ -46,6 +46,7 @@ async function siteClient(): Promise<SiteClient> {
 
 const G = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const paar = { a: "2", b: "2", p: "17" };
+const SEED = "fac7959dbfe72f052e5a0c3c8d6530f202b02fd8f9f5ca3580ec8deb7797479e";
 
 /** Calls that cover a plain answer, a refusal of the library, a schema miss and an unknown tool. */
 const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
@@ -57,6 +58,8 @@ const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
   ["curves_compute", { ...paar, operation: "count", scalre: "3" }],
   ["curves_secp256k1_compute", { operation: "lift", x: G.slice(2) }],
   ["curves_secp256k1_compute", { operation: "subtract", point: G, other: G }],
+  ["curves_sr25519_compute", { operation: "keypair", seed: SEED }],
+  ["curves_sr25519_compute", { operation: "derive", publicKey: SEED, chainCode: SEED, hard: true }],
   ["curves_nope", {}],
 ];
 

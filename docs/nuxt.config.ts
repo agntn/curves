@@ -22,8 +22,10 @@ export default defineNuxtConfig({
     build: { target: "es2024" },
     resolve: {
       /** `../src` imports them; Vite would look for them from the repo root upward. */
-      dedupe: ["@agntn/tools", "@modelcontextprotocol/server"],
+      dedupe: ["@agntn/hashes", "@agntn/tools", "@modelcontextprotocol/server"],
     },
+    /** sr25519 hashes its seeds with SHA-512 from `@agntn/hashes`, in the playground too. */
+    optimizeDeps: { include: ["@agntn/hashes/sha2"] },
     server: {
       /** Dev serves the library from outside the workspace, which Vite refuses without this. */
       fs: { allow: [resolve(librarySource, "..")] },
@@ -39,7 +41,7 @@ export default defineNuxtConfig({
     domain: "https://curves.agntn.dev",
     title: "@agntn/curves",
     description:
-      "Arithmetic on elliptic curves: short Weierstrass curves over a prime you pick (points, orders, counts, discrete logs) and secp256k1 with SEC1 points, written from the specs, as a library, a CLI, an MCP server and Pi and OMP extensions. Computed locally.",
+      "Arithmetic on elliptic curves: short Weierstrass curves over a prime you pick (points, orders, counts, discrete logs), secp256k1 with SEC1 points and sr25519 over ristretto255 for Polkadot keys, written from the specs, as a library, a CLI, an MCP server and Pi and OMP extensions. Computed locally.",
     sections: [
       {
         title: "MCP Server",

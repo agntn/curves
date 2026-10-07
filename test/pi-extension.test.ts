@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { wireSchema } from "@agntn/tools";
 import { describe, expect, it } from "vite-plus/test";
 
-import { computeTool, secp256k1ComputeTool } from "../src/tools.ts";
+import { computeTool, secp256k1ComputeTool, sr25519ComputeTool } from "../src/tools.ts";
 import { loadPiExtension } from "./fixtures/pi-host.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
@@ -12,14 +12,19 @@ const extensionPath = fileURLToPath(
 );
 
 describe("pi curves extension", () => {
-  it("registers both tools with the shared schemas and nothing else", async () => {
+  it("registers every tool with the shared schemas and nothing else", async () => {
     const host = await loadPiExtension(extensionPath);
 
-    expect([...host.tools.keys()]).toEqual(["curves_compute", "curves_secp256k1_compute"]);
+    expect([...host.tools.keys()]).toEqual([
+      "curves_compute",
+      "curves_secp256k1_compute",
+      "curves_sr25519_compute",
+    ]);
     expect(host.tool("curves_compute").parameters).toEqual(wireSchema(computeTool));
     expect(host.tool("curves_secp256k1_compute").parameters).toEqual(
       wireSchema(secp256k1ComputeTool),
     );
+    expect(host.tool("curves_sr25519_compute").parameters).toEqual(wireSchema(sr25519ComputeTool));
   });
 
   it("executes through the shared executor and returns structured details", async () => {

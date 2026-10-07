@@ -8,7 +8,7 @@ vi.mock("@oh-my-pi/pi-coding-agent/tui", () => {
 });
 
 import curvesExtension from "../packages/omp/extensions/curves.ts";
-import { computeTool, secp256k1ComputeTool } from "../src/tools.ts";
+import { computeTool, secp256k1ComputeTool, sr25519ComputeTool } from "../src/tools.ts";
 import {
   ompTestTheme as theme,
   ompToolContext,
@@ -28,10 +28,14 @@ function renderedText(component: unknown): string {
 }
 
 describe("omp curves extension", () => {
-  it("registers both tools as read-approval tools with the shared schemas", async () => {
+  it("registers every tool as a read-approval tool with the shared schemas", async () => {
     const host = await registerOmpExtension(curvesExtension);
 
-    expect([...host.tools.keys()]).toEqual(["curves_compute", "curves_secp256k1_compute"]);
+    expect([...host.tools.keys()]).toEqual([
+      "curves_compute",
+      "curves_secp256k1_compute",
+      "curves_sr25519_compute",
+    ]);
     expect(host.labels).toEqual(["Curves"]);
     const compute = host.tool("curves_compute");
     expect(compute.label).toBe("Compute on a Curve");
@@ -40,6 +44,8 @@ describe("omp curves extension", () => {
     expect(host.tool("curves_secp256k1_compute").parameters).toEqual(
       wireSchema(secp256k1ComputeTool),
     );
+    expect(host.tool("curves_sr25519_compute").approval).toBe("read");
+    expect(host.tool("curves_sr25519_compute").parameters).toEqual(wireSchema(sr25519ComputeTool));
   });
 
   it("refuses what the shared schema rejects", async () => {

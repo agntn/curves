@@ -3,7 +3,9 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createMcpServer } from "../src/mcp.ts";
 import { serverInfo } from "../src/server-info.ts";
-import { computeCurve, computeSecp256k1 } from "../src/tool-operations.ts";
+import { getPublicKey } from "../src/sr25519.ts";
+import { computeCurve, computeSecp256k1, computeSr25519 } from "../src/tool-operations.ts";
+import { devAccounts, scureVectors } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
 const openConnections: Array<{ close(): Promise<void> }> = [];
@@ -65,7 +67,7 @@ describe("curves MCP server", () => {
     }
   });
 
-  it("advertises both tools as read-only", async () => {
+  it("advertises every tool as read-only", async () => {
     const client = await connectTestClient();
 
     const response = await client.listTools();
@@ -73,6 +75,7 @@ describe("curves MCP server", () => {
     expect(response.tools.map((tool) => tool.name)).toEqual([
       "curves_compute",
       "curves_secp256k1_compute",
+      "curves_sr25519_compute",
     ]);
     for (const tool of response.tools) {
       expect(tool.annotations).toMatchObject({
@@ -193,6 +196,47 @@ describe("curves MCP server", () => {
     ).toContain("point at infinity");
   });
 
+  it("makes, signs with and derives sr25519 keys", async () => {
+    const client = await connectTestClient();
+    const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+      answer(await client.callTool({ name: "curves_sr25519_compute", arguments: args }));
+    const { seed, secret, publicKey, message, random, signature, chainCode } = scureVectors;
+
+    expect(await call({ operation: "keypair", seed })).toEqual({
+      operation: "keypair",
+      secret,
+      publicKey,
+    });
+    expect(await call({ operation: "sign", secret, message, random })).toEqual({
+      operation: "sign",
+      signature,
+      publicKey,
+    });
+    const hex = Buffer.from(message).toString("hex");
+    expect(
+      await call({ operation: "verify", publicKey, message: hex, encoding: "hex", signature }),
+    ).toEqual({ operation: "verify", valid: true });
+    expect(await call({ operation: "derive", publicKey, chainCode })).toEqual({
+      operation: "derive",
+      hard: false,
+      publicKey: scureVectors.softPublic,
+    });
+    expect(await call({ operation: "derive", secret, chainCode, hard: true })).toEqual({
+      operation: "derive",
+      hard: true,
+      secret: scureVectors.hard,
+      publicKey: getPublicKey(scureVectors.hard),
+    });
+    expect(
+      failure(
+        await client.callTool({
+          name: "curves_sr25519_compute",
+          arguments: { operation: "derive", publicKey: devAccounts.alice, chainCode, hard: true },
+        }),
+      ),
+    ).toContain("A hard child needs the secret, not the public key");
+  });
+
   it("rejects arguments that miss the schema", async () => {
     const client = await connectTestClient();
 
@@ -291,5 +335,63 @@ describe("curve executors", () => {
     expect(() => computeSecp256k1({ operation: "negate", point: g, compressed: "yes" })).toThrow(
       "Compressed must be a boolean",
     );
+  });
+});
+
+describe("sr25519 executor", () => {
+  const { seed, secret, publicKey, chainCode } = scureVectors;
+
+  it("takes a blank optional argument as none, as OMP sends it", () => {
+    expect(computeSr25519({ operation: "keypair", seed, secret: "", random: "" }).details).toEqual({
+      operation: "keypair",
+      secret,
+      publicKey,
+    });
+  });
+
+  it("signs an empty or blank message instead of reading it as missing", () => {
+    for (const message of ["", " "]) {
+      const { details } = computeSr25519({ operation: "sign", secret, message });
+      if (details.operation !== "sign") throw new Error("sign answered something else");
+      const check = { operation: "verify", publicKey, message, signature: details.signature };
+      expect(computeSr25519(check).details).toEqual({ operation: "verify", valid: true });
+    }
+  });
+
+  it("guards the contract even when a host skips schema validation", () => {
+    expect(() => computeSr25519({ operation: "keypair" })).toThrow(
+      "keypair needs seed or secret, one of them",
+    );
+    expect(() => computeSr25519({ operation: "keypair", seed, secret })).toThrow(
+      "keypair needs seed or secret, one of them",
+    );
+    expect(() => computeSr25519({ operation: "sign", secret })).toThrow("sign needs message");
+    expect(() => computeSr25519({ operation: "sign", secret, message: "x", seed })).toThrow(
+      "sign does not take seed",
+    );
+    expect(() =>
+      computeSr25519({ operation: "sign", secret, message: "abc", encoding: "hex" }),
+    ).toThrow("message must be hex without 0x, two digits a byte");
+    expect(() =>
+      computeSr25519({ operation: "sign", secret, message: "x", encoding: "base64" }),
+    ).toThrow("encoding must be one of utf8, hex");
+    expect(() => computeSr25519({ operation: "sign", secret, message: "x".repeat(8193) })).toThrow(
+      "message must be at most 8192 characters",
+    );
+    expect(() => computeSr25519({ operation: "derive", secret, publicKey, chainCode })).toThrow(
+      "derive needs secret or publicKey, one of them",
+    );
+    expect(() => computeSr25519({ operation: "derive", secret, chainCode, hard: "yes" })).toThrow(
+      "hard must be a boolean",
+    );
+    expect(() =>
+      computeSr25519({ operation: "derive", publicKey, chainCode, random: "00".repeat(32) }),
+    ).toThrow("derive from publicKey does not take random");
+    expect(() =>
+      computeSr25519({ operation: "derive", secret, chainCode, hard: true, random: chainCode }),
+    ).toThrow("A hard child takes no random");
+    expect(() =>
+      computeSr25519({ operation: "sign", secret, message: "x", context: "c".repeat(257) }),
+    ).toThrow("context must be at most 256 characters");
   });
 });

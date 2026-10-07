@@ -1,6 +1,6 @@
 # docs/
 
-Docus site for `@agntn/curves` at curves.agntn.dev. Markdown lives in `content/`. The playground is a Vue page that imports the library into the browser. The one route that answers at request time is `/mcp`, the Docus MCP server with both tools of `curves mcp` beside its own `list-pages` and `get-page`.
+Docus site for `@agntn/curves` at curves.agntn.dev. Markdown lives in `content/`. The playground is a Vue page that imports the library into the browser. The one route that answers at request time is `/mcp`, the Docus MCP server with every tool of `curves mcp` beside its own `list-pages` and `get-page`.
 
 ## Layout
 
@@ -25,7 +25,7 @@ docs/
 ├── public/                        # fonts, favicon.svg and the icons and manifest cut from it
 ├── content/index.md               # landing
 ├── content/1.guide/               # getting started, CLI, agents, playground
-└── content/2.math/                # overview, curves and points, orders and logs, secp256k1
+└── content/2.math/                # overview, curves and points, orders and logs, secp256k1, sr25519
 ```
 
 ## Commands
@@ -39,7 +39,7 @@ pnpm deploy           # build, then wrangler deploy to curves.agntn.dev
 
 Deployment: Workers Builds with root directory `docs`. It installs `docs/` and nothing else, and that's enough, because the library comes from `../src` (next paragraph). Nitro preset `cloudflare_module`. Nuxt Content wants a D1 binding named `DB`. `wrangler.jsonc` carries it plus the `NUXT_SITE_URL` var. The database `agntn-curves` lives in the EU jurisdiction, which is set at creation; the binding names it by id alone. Pull request previews get their own database, `agntn-curves-preview`, also EU, through the `previews` block, so a preview build never writes to production. No KV binding. Nothing is fetched, so nothing is cached.
 
-`@agntn/curves` is an alias in `nuxt.config.ts` for `../src/index.ts`, with `@agntn/curves/secp256k1`, `#tool-operations` and `#tool-contract` beside it. Vite bundles the checkout's sources for the browser and Nitro gets the same alias for the prerender, so `dist/` and the root `node_modules` are never touched. Nothing those four modules load imports an npm package or `node:*`, so the site needs no dedupe or optimizeDeps entry for the library. A new npm import under them needs one in `docs/package.json`, `vite.resolve.dedupe` and `vite.optimizeDeps.include`, or it breaks the deploy.
+`@agntn/curves` is an alias in `nuxt.config.ts` for `../src/index.ts`, with `@agntn/curves/secp256k1`, `#tool-operations` and `#tool-contract` beside it. Vite bundles the checkout's sources for the browser and Nitro gets the same alias for the prerender, so `dist/` and the root `node_modules` are never touched. The one npm package those four modules load is `@agntn/hashes/sha2`, for the SHA-512 of sr25519, and it has its entry in `docs/package.json`, `vite.resolve.dedupe` and `vite.optimizeDeps.include`. A new npm import under them needs the same three, or it breaks the deploy. Nothing there imports `node:*`.
 
 The root `.node-version` is the only place Workers Builds takes Node.js 26 from. Its build image reads `NODE_VERSION`, `.nvmrc` or `.node-version`, never `engines` in `package.json`, and falls back to Node.js 24 without them. Keep it.
 
@@ -64,7 +64,7 @@ The worker computes whatever an MCP client sends it and keeps none of it. The wo
 
 - Every value on the landing comes from the library at render time. `CURVES` in `app/utils/curves.ts` runs `listPoints`, `pointOrder`, `multiplyPoint` and `discreteLog` over each spec when the module loads. A spec names a, b, p, a scalar below the order and one sentence; without a base, the first point of the largest order is taken.
 - The secp256k1 samples in `app/utils/secp.ts` run through `computeSecp256k1` from `src/tool-operations.ts`, so their dialogs show exactly the tool text.
-- Counts in prose (the hero, the OG image, the SEO description, the playground) come from `CURVE_OPERATIONS`, `SECP256K1_OPERATIONS`, `TOOLS` and the `MAX_*` limits through `spellOut` and `powerOfTwo`. Frontmatter and `content/` can't call a function, so a limit written there is checked against `src/core/limits.ts` by hand.
+- Counts in prose (the hero, the OG image, the SEO description, the playground) come from `CURVE_OPERATIONS`, `SECP256K1_OPERATIONS`, `SR25519_OPERATIONS`, `TOOLS` and the `MAX_*` limits through `spellOut` and `powerOfTwo`. The playground has no sr25519 form yet, so its page counts only the two curve tools. Frontmatter and `content/` can't call a function, so a limit written there is checked against `src/core/limits.ts` by hand.
 - The samples are deterministic, so SSR and the client agree and hydration doesn't flicker. Keep it that way. No `Math.random`, no clock inside a computed.
 - `CurvesPlayground.vue` reads the deep link through a `watch(route.query)` registered in `onMounted` that fires once. A prerendered page hydrates with an empty `route.query` and Nuxt restores the address only afterwards. It writes state back with `router.replace` on every change and runs a call 250 ms after the form stops changing.
 - The playground catches the `Error` an executor throws and shows its message, the way `callTool` would.
