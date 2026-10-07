@@ -1,24 +1,53 @@
 <script setup lang="ts">
 import { invertScalar, multiplyGenerator } from "@agntn/curves/secp256k1";
-import type { CurveDetails, CurvePointText, Secp256k1Details } from "#tool-operations";
+import type { CurvePointText, Sr25519Details } from "#tool-operations";
+import { SR25519_OPERATIONS } from "../../utils/contract";
 import { CURVES, pointArgument } from "../../utils/curves";
 import { shellArg } from "../../utils/format";
+import { ALICE, ALICE_HELLO, ALICE_JUNCTION, DEV_SECRET, DEV_SEED, flipBit } from "../../utils/sr25519";
 import { jsonTokens, shellTokens } from "../../utils/tokens";
-import { runTool, type ToolName } from "../../utils/tools";
+import { runTool, type ToolDetails, type ToolName } from "../../utils/tools";
 
-type Field = "point" | "other" | "scalar" | "order" | "limit" | "x" | "compressed";
+/** An sr25519 key the operation can start from. The tool takes exactly one. */
+type KeySource = "seed" | "secret" | "publicKey";
+
+type Field =
+  | "point"
+  | "other"
+  | "scalar"
+  | "order"
+  | "limit"
+  | "x"
+  | "compressed"
+  | "source"
+  | "secret"
+  | "publicKey"
+  | "message"
+  | "encoding"
+  | "signature"
+  | "chainCode"
+  | "hard";
 
 interface Operation {
-  /** `compute:log` or `secp256k1:lift`, unique across both tools. */
+  /** `compute:log`, `secp256k1:lift` or `sr25519:sign`, unique across the tools. */
   readonly key: string;
   readonly tool: ToolName;
   /** The `operation` argument. */
   readonly op: string;
   readonly takes: readonly Field[];
+  /** The keys `source` picks from, the first one by default. */
+  readonly sources?: readonly KeySource[];
   readonly about: string;
 }
 
-/** Every operation of both tools, in the order the tools list them. */
+/** The CLI command of each tool, which is also its name in the operation list. */
+const COMMANDS: Record<ToolName, string> = {
+  curves_compute: "compute",
+  curves_secp256k1_compute: "secp256k1",
+  curves_sr25519_compute: "sr25519",
+};
+
+/** Every operation of every tool, in the order the tools list them. */
 const OPERATIONS: readonly Operation[] = [
   { key: "compute:add", tool: "curves_compute", op: "add", takes: ["point", "other"], about: "Add two points of the curve." },
   { key: "compute:double", tool: "curves_compute", op: "double", takes: ["point"], about: "Twice a point, infinity for a point with y = 0." },
@@ -35,6 +64,10 @@ const OPERATIONS: readonly Operation[] = [
   { key: "secp256k1:multiply", tool: "curves_secp256k1_compute", op: "multiply", takes: ["point", "scalar", "compressed"], about: "A point times a scalar from 1 to n - 1. G times a private key is its public key." },
   { key: "secp256k1:lift", tool: "curves_secp256k1_compute", op: "lift", takes: ["x", "compressed"], about: "Both points above an x. The even one is what a BIP340 key stands for." },
   { key: "secp256k1:check", tool: "curves_secp256k1_compute", op: "check", takes: ["point"], about: "Whether a SEC1 point lies on secp256k1." },
+  { key: "sr25519:keypair", tool: "curves_sr25519_compute", op: "keypair", takes: ["source"], sources: ["seed", "secret"], about: "A 32-byte seed grows into a secret and a public key. A secret alone gives back its public key." },
+  { key: "sr25519:sign", tool: "curves_sr25519_compute", op: "sign", takes: ["secret", "message", "encoding"], about: "Sign under the substrate context. Fresh randomness each time, so the bytes change and both still verify." },
+  { key: "sr25519:verify", tool: "curves_sr25519_compute", op: "verify", takes: ["publicKey", "message", "encoding", "signature"], about: "Whether the key signed these bytes. A wrong signature is a plain false, not an error." },
+  { key: "sr25519:derive", tool: "curves_sr25519_compute", op: "derive", takes: ["source", "chainCode", "hard"], sources: ["secret", "publicKey"], about: "A child as Substrate HDKD makes it. Hard needs the secret, soft follows from the public key too." },
 ];
 
 const G = multiplyGenerator("1");
@@ -58,10 +91,48 @@ const secpOther = ref(TWO_G);
 const secpScalar = ref("3");
 const x = ref(G.slice(2));
 const uncompressed = ref(false);
+const seed = ref(DEV_SEED);
+const secret = ref(DEV_SECRET);
+const publicKey = ref(ALICE);
+const message = ref("hello");
+const hexMessage = ref(false);
+const signature = ref(ALICE_HELLO);
+const chainCode = ref(ALICE_JUNCTION);
+const hard = ref(true);
+const from = ref<KeySource>("seed");
 
 const current = computed(() => OPERATIONS.find((row) => row.key === key.value) ?? OPERATIONS[0]!);
 const position = computed(() => OPERATIONS.indexOf(current.value) + 1);
 const secp = computed(() => current.value.tool === "curves_secp256k1_compute");
+const sr = computed(() => current.value.tool === "curves_sr25519_compute");
+/** The key the operation on screen starts from: the one picked, when this operation takes it. */
+const source = computed(() => {
+  const options = current.value.sources ?? [];
+  return options.includes(from.value) ? from.value : options[0];
+});
+const SR_KEYS = { seed, secret, publicKey, signature, chainCode } as const;
+
+/**
+ * The sr25519 arguments on screen. The message stays as typed, so blank signs the empty one.
+ *
+ * @returns {Record<string, unknown>} The arguments, operation included.
+ */
+function srArgs(): Record<string, unknown> {
+  const args: Record<string, unknown> = { operation: current.value.op };
+  for (const field of current.value.takes) {
+    if (field === "message") args.message = message.value;
+    else if (field === "encoding") {
+      if (hexMessage.value) args.encoding = "hex";
+    } else if (field === "hard") {
+      if (hard.value) args.hard = true;
+    } else {
+      const name = field === "source" ? source.value : (field as "secret" | "publicKey" | "signature" | "chainCode");
+      const value = name === undefined ? "" : SR_KEYS[name].value.trim();
+      if (name !== undefined && value !== "") args[name] = value;
+    }
+  }
+  return args;
+}
 
 /**
  * A point typed as `x,y`, as the tool takes it, or the text as typed when it has no comma.
@@ -76,6 +147,7 @@ function pointValue(text: string): { x: string; y: string } | string {
 
 /** The arguments the operation on screen takes, from the fields it shows; blanks stay out. */
 const toolArgs = computed(() => {
+  if (sr.value) return srArgs();
   const args: Record<string, unknown> = { operation: current.value.op };
   if (!secp.value) Object.assign(args, { a: a.value.trim(), b: b.value.trim(), p: p.value.trim() });
   for (const field of current.value.takes) {
@@ -101,7 +173,7 @@ interface Answer {
   readonly ok: boolean;
   /** `content[0].text`, or the error line an MCP client reads. */
   readonly text: string;
-  readonly details?: CurveDetails | Secp256k1Details;
+  readonly details?: ToolDetails;
   readonly error?: string;
   readonly ms: number;
 }
@@ -153,11 +225,12 @@ const cliLine = computed(() => {
     .filter(([name]) => name !== "operation")
     .map(([name, value]) => {
       if (name === "compressed") return " --no-compressed";
+      if (name === "hard") return " --hard";
       const text = typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
-      return ` --${name} ${shellArg(text)}`;
+      return ` --${name.replaceAll(/[A-Z]/gu, (upper) => `-${upper.toLowerCase()}`)} ${shellArg(text)}`;
     })
     .join("");
-  return `curves ${operation.tool === "curves_compute" ? "compute" : "secp256k1"} ${operation.op}${flags}`;
+  return `curves ${COMMANDS[operation.tool]} ${operation.op}${flags}`;
 });
 const toolCall = computed(() => JSON.stringify({ name: answered.value.tool, arguments: request.value.args }, null, 2));
 const responseTitle = computed(() => `${answered.value.tool}(${JSON.stringify(request.value.args)})`);
@@ -172,15 +245,69 @@ function shortHex(value: string): string {
   return value.length > 24 ? `${value.slice(0, 12)}…${value.slice(-8)}` : value;
 }
 
+interface Row {
+  readonly label: string;
+  readonly value: string;
+  readonly full?: string;
+  readonly accent?: boolean;
+}
+
+/** A hex value as a row: cut on screen, whole in the tooltip. */
+function hexRow(label: string, value: string, accent = false): Row {
+  return { label, value: shortHex(value), full: value, accent };
+}
+
+const SR_OPERATIONS = new Set<string>(SR25519_OPERATIONS);
+
+/**
+ * Whether the details came from the sr25519 tool, whose operation names no other tool uses.
+ *
+ * @param {ToolDetails} details - Any tool's details.
+ * @returns {boolean} True for sr25519.
+ */
+function isSr25519(details: ToolDetails): details is Sr25519Details {
+  return SR_OPERATIONS.has(details.operation);
+}
+
+/**
+ * The sr25519 answer as a glyph, a heading and rows.
+ *
+ * @param {Sr25519Details} details - What the tool returned.
+ * @returns {{ icon: string; heading: string; rows: Row[] }} The subject band.
+ */
+function srView(details: Sr25519Details): { icon: string; heading: string; rows: Row[] } {
+  if (details.operation === "verify") {
+    return {
+      icon: details.valid ? "i-lucide-circle-check" : "i-lucide-circle-x",
+      heading: details.valid ? "Signed by this key" : "Doesn't verify",
+      rows: [{ label: "valid", value: String(details.valid), accent: true }],
+    };
+  }
+  if (details.operation === "sign") {
+    return {
+      icon: "i-lucide-signature",
+      heading: shortHex(details.signature),
+      rows: [hexRow("signature", details.signature, true), hexRow("publicKey", details.publicKey)],
+    };
+  }
+  const rows = [hexRow("publicKey", details.publicKey, true)];
+  if (details.secret !== undefined) rows.push(hexRow("secret", details.secret));
+  if (details.operation === "derive") rows.push({ label: "child", value: details.hard ? "hard, //" : "soft, /" });
+  return { icon: details.operation === "derive" ? "i-lucide-git-branch" : "i-lucide-key-round", heading: shortHex(details.publicKey), rows };
+}
+
 /** The answer as the response band shows it: a glyph, a heading, rows, and the points of a listing. */
 const view = computed(() => {
   const result = answer.value;
-  const label = `${answered.value.tool === "curves_compute" ? "Compute" : "secp256k1"} / ${answered.value.op}`;
+  const label = `${answered.value.tool === "curves_compute" ? "Compute" : COMMANDS[answered.value.tool]} / ${answered.value.op}`;
   if (!result.ok || result.details === undefined) {
     return { icon: "i-lucide-circle-alert", label, heading: "Refused", about: result.error ?? "", rows: [], points: [] };
   }
   const details = result.details;
-  const rows: Array<{ label: string; value: string; full?: string; accent?: boolean }> = [];
+  if (isSr25519(details)) {
+    return { ...srView(details), label, about: answered.value.about, points: [] };
+  }
+  const rows: Row[] = [];
   let heading = "";
   let icon = "i-lucide-spline";
   let points: string[] = [];
@@ -245,16 +372,52 @@ const SECP_SAMPLES = [
   { label: "x = 5", load: () => ((x.value = "5".padStart(64, "0")), (secpPoint.value = `02${"5".padStart(64, "0")}`)) },
 ] as const;
 
+/** sr25519 samples: the dev seed with `//Alice`, and her signature one bit off. */
+const SR_SAMPLES = [
+  {
+    label: "dev seed //Alice",
+    load: () => {
+      seed.value = DEV_SEED;
+      secret.value = DEV_SECRET;
+      publicKey.value = ALICE;
+      message.value = "hello";
+      hexMessage.value = false;
+      signature.value = ALICE_HELLO;
+      chainCode.value = ALICE_JUNCTION;
+      hard.value = true;
+    },
+  },
+  { label: "one bit off", load: () => (signature.value = flipBit(ALICE_HELLO)) },
+] as const;
+
 const { copied, copy } = useCopied();
 
 /** The query keys a link may carry, each with the field it sets. */
 const FIELDS = { a, b, p, point, other, scalar, order, limit, x } as const;
 const SECP_FIELDS = { point: secpPoint, other: secpOther, scalar: secpScalar } as const;
+const SR_FIELDS = { ...SR_KEYS, message } as const;
+
+/**
+ * The sr25519 part of a link. A flag it leaves out is off: an unticked box writes nothing.
+ *
+ * @param {Operation} op - The operation the link opens.
+ * @param {Record<string, unknown>} query - The query.
+ */
+function readSrQuery(op: Operation, query: Readonly<Record<string, unknown>>) {
+  for (const [name, field] of Object.entries(SR_FIELDS)) {
+    if (typeof query[name] === "string") field.value = query[name];
+  }
+  const given = op.sources?.find((name) => typeof query[name] === "string");
+  if (given) from.value = given;
+  if (op.takes.includes("hard")) hard.value = query.hard === "true";
+  if (op.takes.includes("encoding")) hexMessage.value = query.encoding === "hex";
+}
 
 /** Query in, state out. Only values the form knows are read, the rest of the query is ignored. */
 function readQuery(query: Readonly<Record<string, unknown>>) {
   const op = OPERATIONS.find((row) => row.key === query.op);
   if (op) key.value = op.key;
+  if (op?.tool === "curves_sr25519_compute") readSrQuery(op, query);
   const onSecp = op?.tool === "curves_secp256k1_compute";
   for (const [name, field] of Object.entries(onSecp ? { ...FIELDS, ...SECP_FIELDS } : FIELDS)) {
     if (typeof query[name] === "string") field.value = query[name];
@@ -339,7 +502,7 @@ const shareLink = computed(() => {
               @click="key = row.key"
             >
               <span class="console-tag">{{ row.op }}</span>
-              <span>{{ row.tool === "curves_compute" ? "compute" : "secp256k1" }}</span>
+              <span>{{ COMMANDS[row.tool] }}</span>
               <span class="console-leader" aria-hidden="true" :style="{ animationDelay: `${index * 60}ms` }" />
             </button>
           </div>
@@ -356,7 +519,7 @@ const shareLink = computed(() => {
           </p>
 
           <div class="console-readout">
-            <dl v-if="!secp" class="console-readout-rows">
+            <dl v-if="!secp && !sr" class="console-readout-rows">
               <div>
                 <dt><label for="playground-a">a</label></dt>
                 <dd><UInput id="playground-a" v-model="a" variant="none" class="w-full" spellcheck="false" /></dd>
@@ -390,7 +553,7 @@ const shareLink = computed(() => {
                 <dd><UInput id="playground-limit" v-model="limit" variant="none" inputmode="numeric" placeholder="default 100" class="w-full" /></dd>
               </div>
             </dl>
-            <dl v-else class="console-readout-rows">
+            <dl v-else-if="secp" class="console-readout-rows">
               <div v-if="current.takes.includes('point')">
                 <dt><label for="playground-secp-point">point</label></dt>
                 <dd><UInput id="playground-secp-point" v-model="secpPoint" variant="none" placeholder="SEC1 hex" class="w-full" spellcheck="false" /></dd>
@@ -412,9 +575,57 @@ const shareLink = computed(() => {
                 <dd><UCheckbox id="playground-uncompressed" v-model="uncompressed" label="uncompressed, 65 bytes" /></dd>
               </div>
             </dl>
+            <dl v-else class="console-readout-rows">
+              <div v-if="current.sources">
+                <dt>from</dt>
+                <dd class="playground-sources" role="group" aria-label="The key to start from">
+                  <UButton
+                    v-for="name in current.sources"
+                    :key="name"
+                    variant="chip"
+                    :color="source === name ? 'primary' : 'neutral'"
+                    :aria-pressed="source === name"
+                    :label="name"
+                    @click="from = name"
+                  />
+                </dd>
+              </div>
+              <div v-if="source === 'seed'">
+                <dt><label for="playground-seed">seed</label></dt>
+                <dd><UInput id="playground-seed" v-model="seed" variant="none" placeholder="64 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="source === 'secret' || current.takes.includes('secret')">
+                <dt><label for="playground-secret">secret</label></dt>
+                <dd><UInput id="playground-secret" v-model="secret" variant="none" placeholder="128 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="source === 'publicKey' || current.takes.includes('publicKey')">
+                <dt><label for="playground-public-key">publicKey</label></dt>
+                <dd><UInput id="playground-public-key" v-model="publicKey" variant="none" placeholder="64 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('message')">
+                <dt><label for="playground-message">message</label></dt>
+                <dd><UInput id="playground-message" v-model="message" variant="none" placeholder="empty is a message too" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('encoding')">
+                <dt><label for="playground-hex-message">read as</label></dt>
+                <dd><UCheckbox id="playground-hex-message" v-model="hexMessage" label="hex bytes, not text" /></dd>
+              </div>
+              <div v-if="current.takes.includes('signature')">
+                <dt><label for="playground-signature">signature</label></dt>
+                <dd><UInput id="playground-signature" v-model="signature" variant="none" placeholder="128 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('chainCode')">
+                <dt><label for="playground-chain-code">chainCode</label></dt>
+                <dd><UInput id="playground-chain-code" v-model="chainCode" variant="none" placeholder="64 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('hard')">
+                <dt><label for="playground-hard">child</label></dt>
+                <dd><UCheckbox id="playground-hard" v-model="hard" label="hard, the // kind" /></dd>
+              </div>
+            </dl>
           </div>
 
-          <div v-if="!secp" class="playground-chips" role="group" aria-label="Sample curves">
+          <div v-if="!secp && !sr" class="playground-chips" role="group" aria-label="Sample curves">
             <UButton
               v-for="(sample, index) in CURVES"
               :key="sample.key"
@@ -424,12 +635,19 @@ const shareLink = computed(() => {
               @click="loadCurve(index)"
             />
           </div>
-          <div v-else class="playground-chips" role="group" aria-label="Sample points">
+          <div v-else-if="secp" class="playground-chips" role="group" aria-label="Sample points">
             <UButton v-for="sample in SECP_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
+          </div>
+          <div v-else class="playground-chips" role="group" aria-label="Sample keys">
+            <UButton v-for="sample in SR_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
 
           <p class="playground-note">
-            <template v-if="secp"
+            <template v-if="sr"
+              >Keys and signatures are hex without 0x. The dev seed is public on purpose, so anyone
+              can sign as Alice. Your own secret would land in the address bar, so maybe don't.</template
+            >
+            <template v-else-if="secp"
               >Points are SEC1 hex, 33 or 65 bytes. The scalar is hex without 0x. It lands in the
               address bar, so keep real keys out of it.</template
             >
@@ -656,6 +874,12 @@ const shareLink = computed(() => {
 .playground-ops .console-lead[aria-pressed="true"] > span:not(.console-tag, .console-leader),
 .playground-ops .console-lead:hover > span:not(.console-tag, .console-leader) {
   color: var(--ui-text-highlighted);
+}
+/* The key picker: a chip row like the samples, only inside the readout. */
+.playground-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .playground-chips {
   display: flex;

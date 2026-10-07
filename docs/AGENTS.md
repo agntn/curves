@@ -7,7 +7,7 @@ Docus site for `@agntn/curves` at curves.agntn.dev. Markdown lives in `content/`
 ```
 docs/
 ├── DESIGN.md                      # the instruments this site owns and where it departs from the agntn design system
-├── nuxt.config.ts                 # extends: ['docus'], cloudflare_module preset (Workers), @agntn/curves, its /secp256k1 and /mcp, #tool-operations and #tool-contract aliased to ../src
+├── nuxt.config.ts                 # extends: ['docus'], cloudflare_module preset (Workers), @agntn/curves, its /secp256k1, /sr25519 and /mcp, #tool-operations and #tool-contract aliased to ../src
 ├── shiki-theme.ts                 # code block theme, every colour a --shiki-token-* variable from app.css
 ├── app/app.config.ts              # title, github, theme, the Nuxt UI variants in the instrument grammar
 ├── app/app.css                    # theme tokens, the shared `console-*` and `hero-*` grammar, `curves-*` classes
@@ -16,7 +16,7 @@ docs/
 ├── app/components/OgImage/        # Docs.takumi and Landing.takumi override the Docus OG templates
 ├── app/assets/fonts.css           # @font-face for the TTFs served from public/fonts (site and OG images)
 ├── app/composables/               # useLandingSample (one clock for every live panel), useSubNavigation, useCopied
-├── app/utils/                     # curves (the landing's curves, computed by the library), secp (the secp256k1 samples), contract (counts and limits), tools (the executors), tokens, formatting
+├── app/utils/                     # curves (the landing's curves, computed by the library), secp (the secp256k1 samples), sr25519 (the playground's dev keys), contract (counts and limits), tools (the executors), tokens, formatting
 ├── app/pages/playground.vue       # playground, own route outside the docs layout, its own useSeo and OG image
 ├── server/routes/sitemap.xml.ts   # Docus sitemap plus the Vue pages it cannot see
 ├── server/mcp/index.ts            # the Docus MCP handler at /mcp, introduced like `curves mcp` by `src/server-info.ts`
@@ -39,7 +39,7 @@ pnpm deploy           # build, then wrangler deploy to curves.agntn.dev
 
 Deployment: Workers Builds with root directory `docs`. It installs `docs/` and nothing else, and that's enough, because the library comes from `../src` (next paragraph). Nitro preset `cloudflare_module`. Nuxt Content wants a D1 binding named `DB`. `wrangler.jsonc` carries it plus the `NUXT_SITE_URL` var. The database `agntn-curves` lives in the EU jurisdiction, which is set at creation; the binding names it by id alone. Pull request previews get their own database, `agntn-curves-preview`, also EU, through the `previews` block, so a preview build never writes to production. No KV binding. Nothing is fetched, so nothing is cached.
 
-`@agntn/curves` is an alias in `nuxt.config.ts` for `../src/index.ts`, with `@agntn/curves/secp256k1`, `#tool-operations` and `#tool-contract` beside it. Vite bundles the checkout's sources for the browser and Nitro gets the same alias for the prerender, so `dist/` and the root `node_modules` are never touched. The one npm package those four modules load is `@agntn/hashes/sha2`, for the SHA-512 of sr25519, and it has its entry in `docs/package.json`, `vite.resolve.dedupe` and `vite.optimizeDeps.include`. A new npm import under them needs the same three, or it breaks the deploy. Nothing there imports `node:*`.
+`@agntn/curves` is an alias in `nuxt.config.ts` for `../src/index.ts`, with `@agntn/curves/secp256k1`, `@agntn/curves/sr25519`, `#tool-operations` and `#tool-contract` beside it. Vite bundles the checkout's sources for the browser and Nitro gets the same alias for the prerender, so `dist/` and the root `node_modules` are never touched. The one npm package those modules load is `@agntn/hashes/sha2`, for the SHA-512 of sr25519, and it has its entry in `docs/package.json`, `vite.resolve.dedupe` and `vite.optimizeDeps.include`. A new npm import under them needs the same three, or it breaks the deploy. Nothing there imports `node:*`.
 
 The root `.node-version` is the only place Workers Builds takes Node.js 26 from. Its build image reads `NODE_VERSION`, `.nvmrc` or `.node-version`, never `engines` in `package.json`, and falls back to Node.js 24 without them. Keep it.
 
@@ -64,7 +64,8 @@ The worker computes whatever an MCP client sends it and keeps none of it. The wo
 
 - Every value on the landing comes from the library at render time. `CURVES` in `app/utils/curves.ts` runs `listPoints`, `pointOrder`, `multiplyPoint` and `discreteLog` over each spec when the module loads. A spec names a, b, p, a scalar below the order and one sentence; without a base, the first point of the largest order is taken.
 - The secp256k1 samples in `app/utils/secp.ts` run through `computeSecp256k1` from `src/tool-operations.ts`, so their dialogs show exactly the tool text.
-- Counts in prose (the hero, the OG image, the SEO description, the playground) come from `CURVE_OPERATIONS`, `SECP256K1_OPERATIONS`, `SR25519_OPERATIONS`, `TOOLS` and the `MAX_*` limits through `spellOut` and `powerOfTwo`. The playground has no sr25519 form yet, so its page counts only the two curve tools. Frontmatter and `content/` can't call a function, so a limit written there is checked against `src/core/limits.ts` by hand.
+- Counts in prose (the hero, the OG image, the SEO description, the playground) come from `CURVE_OPERATIONS`, `SECP256K1_OPERATIONS`, `SR25519_OPERATIONS`, `TOOLS` and the `MAX_*` limits through `spellOut` and `powerOfTwo`. Frontmatter and `content/` can't call a function, so a limit written there is checked against `src/core/limits.ts` by hand.
+- The sr25519 samples in `app/utils/sr25519.ts` are the Substrate dev seed, `//Alice` and her signature over `hello`, the one the CLI guide verifies. A signature made in the playground is random each time, the way schnorrkel signs.
 - The samples are deterministic, so SSR and the client agree and hydration doesn't flicker. Keep it that way. No `Math.random`, no clock inside a computed.
 - `CurvesPlayground.vue` reads the deep link through a `watch(route.query)` registered in `onMounted` that fires once. A prerendered page hydrates with an empty `route.query` and Nuxt restores the address only afterwards. It writes state back with `router.replace` on every change and runs a call 250 ms after the form stops changing.
 - The playground catches the `Error` an executor throws and shows its message, the way `callTool` would.
