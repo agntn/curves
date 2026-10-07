@@ -8,6 +8,8 @@ export default defineBuildConfig({
       input: [
         "./src/index.ts",
         "./src/secp256k1.ts",
+        "./src/ristretto255.ts",
+        "./src/sr25519.ts",
         "./src/cli.ts",
         "./src/ai.ts",
         "./src/mcp.ts",

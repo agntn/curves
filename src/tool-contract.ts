@@ -34,6 +34,22 @@ export const SECP256K1_OPERATIONS = [
 
 export type Secp256k1Operation = (typeof SECP256K1_OPERATIONS)[number];
 
+/** What `curves_sr25519_compute` does with sr25519 keys and signatures. */
+export const SR25519_OPERATIONS = ["keypair", "sign", "verify", "derive"] as const;
+
+export type Sr25519Operation = (typeof SR25519_OPERATIONS)[number];
+
+/** How `curves_sr25519_compute` reads a message. */
+export const MESSAGE_ENCODINGS = ["utf8", "hex"] as const;
+
+export type MessageEncoding = (typeof MESSAGE_ENCODINGS)[number];
+
+/** Longest message `curves_sr25519_compute` reads, in characters. */
+export const MAX_MESSAGE_LENGTH = 8192;
+
+/** Longest signing context `curves_sr25519_compute` reads, in characters. */
+export const MAX_CONTEXT_LENGTH = 256;
+
 /** Longest integer `curves_compute` reads, enough for a 512-bit decimal with a sign. */
 export const MAX_CURVE_INTEGER_LENGTH = 160;
 

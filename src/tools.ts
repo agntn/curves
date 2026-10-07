@@ -14,12 +14,16 @@ import {
   DEFAULT_CURVE_POINTS_SHOWN,
   MAX_COUNTED_PRIME,
   MAX_CURVE_INTEGER_LENGTH,
+  MAX_CONTEXT_LENGTH,
   MAX_CURVE_POINTS_SHOWN,
   MAX_FILTERED_PRIME,
   MAX_LOG_ORDER,
+  MAX_MESSAGE_LENGTH,
   MAX_ORDER_PRIME,
+  MESSAGE_ENCODINGS,
   SEC1_PATTERN,
   SECP256K1_OPERATIONS,
+  SR25519_OPERATIONS,
 } from "./tool-contract.ts";
 
 type ToolOperations = typeof import("./tool-operations.ts");
@@ -208,4 +212,99 @@ export const secp256k1ComputeTool = defineTool({
   execute: async (params) => (await loadOperations()).computeSecp256k1(params),
 });
 
-export const curvesTools: readonly ToolDefinition[] = [computeTool, secp256k1ComputeTool];
+/**
+ * Hex argument of the sr25519 tool, of one byte length.
+ * @param bytes - The byte count
+ * @param description - What it is and which operations take it
+ * @returns {TOptional<TString>} The optional argument
+ */
+function sr25519Hex(bytes: number, description: string): TOptional<TString> {
+  return Type.Optional(
+    Type.String({
+      maxLength: bytes * 2,
+      pattern: `^(?:[0-9A-Fa-f]{${bytes * 2}})?$`,
+      description: `${description}. ${bytes * 2} hex digits without 0x`,
+    }),
+  );
+}
+
+export const sr25519ComputeSchema = Type.Object(
+  {
+    operation: Type.String({
+      enum: [...SR25519_OPERATIONS],
+      description:
+        "keypair takes seed or secret, sign takes secret and message, verify takes publicKey, message and signature, derive takes chainCode with secret or publicKey",
+    }),
+    seed: sr25519Hex(
+      32,
+      "keypair only: the 32-byte mini secret Substrate keeps, which expands into a secret",
+    ),
+    secret: sr25519Hex(
+      64,
+      "keypair, sign and derive: the 64-byte secret, the key as schnorrkel writes it for ed25519, then the nonce",
+    ),
+    publicKey: sr25519Hex(32, "verify, required there, and derive: a ristretto255 public key"),
+    message: Type.Optional(
+      Type.String({
+        maxLength: MAX_MESSAGE_LENGTH,
+        description: "sign and verify only, required there: the signed bytes, read by encoding",
+      }),
+    ),
+    encoding: Type.Optional(
+      Type.String({
+        enum: [...MESSAGE_ENCODINGS],
+        description:
+          "sign and verify only: utf8 reads message as text, hex as bytes. Default: utf8",
+      }),
+    ),
+    signature: sr25519Hex(64, "verify only, required there: the signature with its marker bit"),
+    context: Type.Optional(
+      Type.String({
+        maxLength: MAX_CONTEXT_LENGTH,
+        description: 'sign and verify only: the schnorrkel signing context. Default: "substrate"',
+      }),
+    ),
+    chainCode: sr25519Hex(
+      32,
+      "derive only, required there: the chain code Substrate builds from a junction, its SCALE encoding padded or hashed to 32 bytes",
+    ),
+    hard: Type.Optional(
+      Type.Boolean({
+        description: "derive only: a hard child, which needs secret. Default: false, a soft child",
+      }),
+    ),
+    random: sr25519Hex(
+      32,
+      "sign and soft derive from secret only: bytes in place of fresh randomness, for repeatable output",
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const sr25519ComputeTool = defineTool({
+  name: "curves_sr25519_compute",
+  title: "Compute with sr25519",
+  description:
+    "Work with sr25519, the Schnorr signatures over ristretto255 that Polkadot and Substrate accounts use: expand a 32-byte seed into a key pair, sign a message, verify a signature, or derive a hard or soft child as Substrate HDKD does. Keys, signatures and chain codes go in and come out as hex without 0x. Signatures are randomized, so signing twice gives two valid signatures. Seeds and secrets enter the transcript, so pass only disposable keys or dev accounts.",
+  snippet: "Use for Polkadot and Substrate keys, signatures and //hard or /soft derivations.",
+  guidelines: [
+    "keypair takes seed and returns secret and publicKey, or takes secret and returns publicKey",
+    "sign takes secret and message and returns signature; verify takes publicKey, message and signature",
+    "derive takes chainCode with secret, or with publicKey for a soft child; hard needs secret",
+    "message is utf8 text unless encoding is hex; the context defaults to substrate",
+  ],
+  effect: "read",
+  cli: {
+    command: "sr25519",
+    description: "sr25519 keys, signatures and HDKD, as Polkadot accounts use them",
+    positional: ["operation"],
+  },
+  input: sr25519ComputeSchema,
+  execute: async (params) => (await loadOperations()).computeSr25519(params),
+});
+
+export const curvesTools: readonly ToolDefinition[] = [
+  computeTool,
+  secp256k1ComputeTool,
+  sr25519ComputeTool,
+];

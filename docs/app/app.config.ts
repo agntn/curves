@@ -9,7 +9,7 @@ export default defineAppConfig({
   /** Landing JSON-LD: a free SoftwareApplication published by the agntn Organization, tied to GitHub and npm through sameAs. */
   seo: {
     title: "@agntn/curves",
-    description: `Points, orders, counts and discrete logs on curves you define, and secp256k1 with SEC1 points. ${spellOutCapital(OPERATION_COUNT)} operations in ${spellOut(TOOLS.length)} agent tools, a library and a CLI. Written from the specs, all offline.`,
+    description: `Points, orders, counts and discrete logs on curves you define, secp256k1 with SEC1 points and sr25519 for Polkadot keys. ${spellOutCapital(OPERATION_COUNT)} operations in ${spellOut(TOOLS.length)} agent tools, a library and a CLI. Written from the specs, all offline.`,
     schema: {
       type: "SoftwareApplication",
       applicationCategory: "DeveloperApplication",

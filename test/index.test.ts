@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as root from "../src/index.ts";
+import * as ristretto255 from "../src/ristretto255.ts";
 import * as secp256k1 from "../src/secp256k1.ts";
+import * as sr25519 from "../src/sr25519.ts";
 import manifest from "../package.json" with { type: "json" };
 
 describe("@agntn/curves", () => {
@@ -45,6 +47,30 @@ describe("@agntn/curves", () => {
       "secp256k1",
       "subtractPoints",
       "subtractScalars",
+    ]);
+  });
+
+  it("keeps ristretto255 and sr25519 in entries of their own", () => {
+    expect(Object.keys(ristretto255).toSorted()).toEqual([
+      "INVALID_POINT",
+      "addPoints",
+      "isValidPoint",
+      "multiplyGenerator",
+      "multiplyPoint",
+      "negatePoint",
+      "ristretto255",
+      "subtractPoints",
+    ]);
+    expect(Object.keys(sr25519).toSorted()).toEqual([
+      "INVALID_PUBLIC_KEY",
+      "SIGNING_CONTEXT",
+      "deriveHard",
+      "derivePublic",
+      "deriveSoft",
+      "expandSeed",
+      "getPublicKey",
+      "sign",
+      "verify",
     ]);
   });
 });

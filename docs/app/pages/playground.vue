@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { version } from "@agntn/curves";
-import { OPERATION_COUNT } from "../utils/contract";
+import { CURVE_OPERATIONS, SECP256K1_OPERATIONS } from "../utils/contract";
 import { spellOut } from "../utils/format";
 import { TOOLS } from "../utils/tools";
+
+/** The curve tools the playground has a form for; sr25519 has none yet. */
+const TOOL_COUNT = TOOLS.filter((tool) => tool !== "curves_sr25519_compute").length;
+const OPERATION_COUNT = CURVE_OPERATIONS.length + SECP256K1_OPERATIONS.length;
 
 definePageMeta({ layout: "default" });
 
@@ -54,7 +58,7 @@ defineOgImage(
         <dl class="hero-metrics">
           <div>
             <dt>Tools</dt>
-            <dd>{{ TOOLS.length }}</dd>
+            <dd>{{ TOOL_COUNT }}</dd>
             <dd class="hero-metric-sub">same as MCP, Pi and OMP</dd>
           </div>
           <div>

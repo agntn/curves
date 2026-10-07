@@ -47,6 +47,7 @@ describe("curves CLI", () => {
 
     expect(help.stdout).toContain("USAGE curves <command> [OPTIONS]");
     expect(help.stdout).toMatch(/^ {2}secp256k1 {2}Point math/m);
+    expect(help.stdout).toMatch(/^ {2}sr25519 {4}sr25519 keys/m);
     expect(usage.stdout).toContain("USAGE curves compute [OPTIONS] <OPERATION>");
     expect(unknown).toMatchObject({
       code: 1,
@@ -82,6 +83,24 @@ describe("curves CLI", () => {
         "0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798" +
         "b7c52588d95c3b9aa25b0403f1eef75702e84bb7597aabe663b82f6f04ef2777",
     });
+  });
+
+  it("makes an sr25519 key pair and verifies a hex message", () => {
+    const seed = "fac7959dbfe72f052e5a0c3c8d6530f202b02fd8f9f5ca3580ec8deb7797479e";
+    const keypair = run("sr25519", "keypair", "--seed", seed, "--json");
+    expect(keypair).toMatchObject({ code: 0, stderr: "" });
+    const { secret, publicKey } = JSON.parse(keypair.stdout) as Record<string, string>;
+    expect(publicKey).toBe("46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a");
+    const signed = run("sr25519", "sign", "--secret", secret ?? "", "--message", "c0ffee");
+    const { signature } = JSON.parse(signed.stdout) as Record<string, string>;
+    const verify = ["--public-key", publicKey ?? "", "--signature", signature ?? ""];
+    expect(run("sr25519", "verify", ...verify, "--message", "c0ffee")).toMatchObject({
+      code: 0,
+      stdout: '{"operation":"verify","valid":true}\n',
+    });
+    expect(
+      run("sr25519", "verify", ...verify, "--message", "c0ffee", "--encoding", "hex"),
+    ).toMatchObject({ code: 0, stdout: '{"operation":"verify","valid":false}\n' });
   });
 
   it("prints a refusal of the library as one line with exit code 1", () => {
