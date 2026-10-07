@@ -30,7 +30,8 @@ export const SIGNING_CONTEXT = "substrate";
 /** The one refusal for text that isn't an sr25519 public key. */
 export const INVALID_PUBLIC_KEY = "Invalid sr25519 public key";
 
-const ZERO_KEY = "Secret key is 0 mod the group order, so its public key would be the identity";
+const NONCANONICAL_KEY =
+  "Secret key must be 8 times a scalar from 1 to the group order minus 1, as schnorrkel writes it";
 
 /** Signing and verifying options. */
 export interface SignatureOptions {
@@ -68,15 +69,16 @@ function readHex(value: unknown, length: number, name: string, extra = ""): Uint
 }
 
 /**
- * Read a secret. A key that is 0 mod l would sign for the identity, which verify refuses.
+ * Read a secret whose key is canonical, 8 times a scalar from 1 to l minus 1.
  * @param secret - 128 hex digits
  * @returns {SecretParts} The scalar, the key divided by 8, and the nonce
- * @throws {RangeError} When the secret is no 128 hex digits, or its key is 0 mod l
+ * @throws {RangeError} When the secret is no 128 hex digits, or its key isn't canonical
  */
 function readSecret(secret: unknown): SecretParts {
   const bytes = readHex(secret, 64, "Secret", ": the key, then the nonce");
-  const scalar = bytesToNumberLE(bytes.subarray(0, 32)) >> 3n;
-  if (mod(scalar, L) === 0n) throw new RangeError(ZERO_KEY);
+  const key = bytesToNumberLE(bytes.subarray(0, 32));
+  const scalar = key >> 3n;
+  if ((key & 7n) !== 0n || scalar === 0n || scalar >= L) throw new RangeError(NONCANONICAL_KEY);
   return { scalar, nonce: bytes.slice(32) };
 }
 

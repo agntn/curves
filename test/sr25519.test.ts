@@ -66,16 +66,17 @@ describe("sr25519 keys", () => {
     expect(() => getPublicKey(new Uint8Array(64) as unknown as string)).toThrow("Secret must be");
   });
 
-  it("refuse a key that is 0 mod the group order, whose public key is the identity", () => {
-    const orderTimesEight = Buffer.from(
-      (ristretto255.l << 3n).toString(16).padStart(64, "0"),
-      "hex",
-    );
-    const nonce = "00".repeat(32);
-    for (const key of ["00".repeat(32), Buffer.from(orderTimesEight).reverse().toString("hex")]) {
-      expect(() => getPublicKey(`${key}${nonce}`)).toThrow("Secret key is 0 mod the group order");
-      expect(() => sign(`${key}${nonce}`, message)).toThrow("Secret key is 0 mod the group order");
+  it("refuse a key that isn't 8 times a scalar from 1 to the group order minus 1", () => {
+    const refusal = "Secret key must be 8 times a scalar from 1 to the group order minus 1";
+    const nonce = secret.slice(64);
+    const key = (value: bigint): string =>
+      Buffer.from(value.toString(16).padStart(64, "0"), "hex").reverse().toString("hex");
+    const scalar = BigInt(`0x${Buffer.from(secret.slice(0, 64), "hex").reverse().toString("hex")}`);
+    for (const bad of [0n, ristretto255.l << 3n, scalar + (ristretto255.l << 3n), scalar + 1n]) {
+      expect(() => getPublicKey(`${key(bad)}${nonce}`), bad.toString(16)).toThrow(refusal);
+      expect(() => deriveHard(`${key(bad)}${nonce}`, chainCode), bad.toString(16)).toThrow(refusal);
     }
+    expect(getPublicKey(`${key(scalar)}${nonce}`)).toBe(publicKey);
   });
 });
 
