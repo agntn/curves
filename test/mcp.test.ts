@@ -103,6 +103,27 @@ describe("curves MCP server", () => {
     });
   });
 
+  it("finds a log over a 40-bit field when the order of the base splits into small primes", async () => {
+    const client = await connectTestClient();
+    const result = await client.callTool({
+      name: "curves_compute",
+      arguments: {
+        operation: "log",
+        a: "2",
+        b: "3",
+        p: "1099511627563",
+        point: { x: "1", y: "727918651225" },
+        other: { x: "746206281184", y: "443106390269" },
+      },
+    });
+
+    expect(answer(result)).toEqual({
+      operation: "log",
+      order: "1099513053442",
+      scalar: "987654321987",
+    });
+  });
+
   it("refuses an argument the operation does not take and a point off the curve", async () => {
     const client = await connectTestClient();
 

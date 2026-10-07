@@ -16,7 +16,7 @@ const TAGLINE =
 /** The same three readouts as the hero, from the same tool contract. */
 const METRICS = [
   { label: "Operations", value: String(OPERATION_COUNT), unit: "", note: `in ${TOOLS.length} agent tools`, accent: false },
-  { label: "Orders up to", value: powerOfTwo(MAX_ORDER_PRIME), unit: "", note: `logs to ${powerOfTwo(MAX_LOG_ORDER)}`, accent: false },
+  { label: "Orders up to", value: powerOfTwo(MAX_ORDER_PRIME), unit: "", note: `log primes to ${powerOfTwo(MAX_LOG_ORDER)}`, accent: false },
   { label: "Network", value: "0", unit: "calls", note: "computed in place", accent: true },
 ];
 

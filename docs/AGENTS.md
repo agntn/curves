@@ -58,7 +58,7 @@ Two resolution traps, both because the repo root is its own pnpm workspace:
 
 `src/mcp.ts` imports `@agntn/tools` and `@modelcontextprotocol/server`. Both are dependencies here, pinned to the root's versions and listed in `vite.resolve.dedupe`. They run on the worker only, so they stay out of `optimizeDeps`. On the `cloudflare_module` preset the toolkit hands its server to `createMcpHandler` from `agents`, which tells an SDK v1 server apart with `instanceof`. `nitro.alias` points every import of the SDK at the copy in `docs/node_modules`, so the toolkit and `agents` share one.
 
-The worker computes whatever an MCP client sends it and keeps none of it. The work is bounded by the library's limits: the slowest call, a log for a base of order near 2^36, takes under half a second. Workers Logs record the invocation, not the body; keep it that way, no `console` call with tool arguments.
+The worker computes whatever an MCP client sends it and keeps none of it. The work is bounded by the library's limits: the slowest call, a log for a base of prime order near 2^36, takes about 0.6 s. Workers Logs record the invocation, not the body; keep it that way, no `console` call with tool arguments.
 
 ## Live values
 

@@ -131,9 +131,9 @@ export const computeSchema = Type.Object(
 export const computeTool = defineTool({
   name: "curves_compute",
   title: "Compute on a Curve",
-  description: `Do arithmetic on a short Weierstrass curve y^2 = x^3 + ax + b over a prime field the caller gives: add, double, negate or multiply points, check a point, find the order of a point, count the points, list them, or find a discrete log. Integers go in as decimal or 0x hex strings and come out as decimal strings; the point at infinity comes out as "infinity". count and points take p up to ${MAX_COUNTED_PRIME}, or ${MAX_FILTERED_PRIME} when points filters by order. order and log take p up to ${MAX_ORDER_PRIME}, and log a base of order up to ${MAX_LOG_ORDER}. Public math only; secp256k1 with SEC1 points has curves_secp256k1_compute.`,
+  description: `Do arithmetic on a short Weierstrass curve y^2 = x^3 + ax + b over a prime field the caller gives: add, double, negate or multiply points, check a point, find the order of a point, count the points, list them, or find a discrete log. Integers go in as decimal or 0x hex strings and come out as decimal strings; the point at infinity comes out as "infinity". count and points take p up to ${MAX_COUNTED_PRIME}, or ${MAX_FILTERED_PRIME} when points filters by order. order and log take p up to ${MAX_ORDER_PRIME}, and log a base whose order has no prime factor above ${MAX_LOG_ORDER}. Public math only; secp256k1 with SEC1 points has curves_secp256k1_compute.`,
   snippet:
-    "Use for toy curves over small prime fields, points of a given order and small discrete logs.",
+    "Use for toy curves over small prime fields, points of a given order and discrete logs, smooth orders included.",
   guidelines: [
     "add takes point and other; double, negate, check and order take point",
     "multiply takes point and scalar, any integer",

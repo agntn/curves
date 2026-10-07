@@ -12,5 +12,5 @@ export const MAX_FILTERED_PRIME = 1n << 16n;
 /** Largest p for the order of a point, found by baby step giant step over the Hasse interval. */
 export const MAX_ORDER_PRIME = 1n << 48n;
 
-/** Largest order of the base point a discrete log is searched in. */
+/** Largest prime in the order of a log's base. The search takes one prime at a time. */
 export const MAX_LOG_ORDER = 1n << 36n;
