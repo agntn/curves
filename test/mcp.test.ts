@@ -349,6 +349,15 @@ describe("sr25519 executor", () => {
     });
   });
 
+  it("signs an empty or blank message instead of reading it as missing", () => {
+    for (const message of ["", " "]) {
+      const { details } = computeSr25519({ operation: "sign", secret, message });
+      if (details.operation !== "sign") throw new Error("sign answered something else");
+      const check = { operation: "verify", publicKey, message, signature: details.signature };
+      expect(computeSr25519(check).details).toEqual({ operation: "verify", valid: true });
+    }
+  });
+
   it("guards the contract even when a host skips schema validation", () => {
     expect(() => computeSr25519({ operation: "keypair" })).toThrow(
       "keypair needs seed or secret, one of them",

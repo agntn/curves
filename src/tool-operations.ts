@@ -411,7 +411,7 @@ function sr25519Arguments(args: Readonly<Record<string, unknown>>): Sr25519Argum
 }
 
 /**
- * Read the message as bytes.
+ * Read the message as bytes. Required, so a blank one is the empty message, not a missing one.
  * @param args - Tool arguments
  * @param input - The readers of the operation
  * @returns {Uint8Array} The message
@@ -420,7 +420,9 @@ function messageBytes(
   args: Readonly<Record<string, unknown>>,
   input: Sr25519Arguments,
 ): Uint8Array {
-  const message = input.text("message");
+  const message = args["message"];
+  if (message === undefined) throw new TypeError(`${input.operation} needs message`);
+  if (typeof message !== "string") throw new TypeError("message must be a string");
   const encoding = input.has("encoding")
     ? oneOf(args["encoding"], "encoding", MESSAGE_ENCODINGS)
     : "utf8";
