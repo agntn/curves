@@ -1,6 +1,8 @@
+import { existsSync } from "node:fs";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createMcpServer } from "../src/mcp.ts";
+import { serverInfo } from "../src/server-info.ts";
 import { computeCurve, computeSecp256k1 } from "../src/tool-operations.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
@@ -53,6 +55,16 @@ const paar = { a: "2", b: "2", p: "17" };
 const { g, twoG, threeG, minusG } = secp256k1Vectors;
 
 describe("curves MCP server", () => {
+  it("introduces itself with a description and icons the site serves", async () => {
+    const client = await connectTestClient();
+
+    expect(client.getServerVersion()).toEqual(serverInfo);
+    for (const icon of serverInfo.icons) {
+      const file = new URL(`../docs/public${new URL(icon.src).pathname}`, import.meta.url);
+      expect(existsSync(file), icon.src).toBe(true);
+    }
+  });
+
   it("advertises both tools as read-only", async () => {
     const client = await connectTestClient();
 

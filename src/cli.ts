@@ -24,13 +24,10 @@ function isMcpModule(value: unknown): value is { createMcpServer: typeof createM
 /**
  * A checkout serves the live source with its restart guard, so a change needs no `pnpm build`.
  * Node never strips types under `node_modules`, and `CURVES_DIST=1` keeps the bundle for tests.
- * @param argv - Every argument after the bin.
- * @returns {boolean} Whether the line is a bare `mcp` and the source is there to serve.
+ * @returns {boolean} Whether the source is there to serve.
  */
-function servesSource(argv: readonly string[]): boolean {
+function servesSource(): boolean {
   return (
-    argv.length === 1 &&
-    argv[0] === "mcp" &&
     process.env["CURVES_DIST"] !== "1" &&
     !sourceMcpPath.includes(`${sep}node_modules${sep}`) &&
     existsSync(sourceMcpPath)
@@ -38,12 +35,13 @@ function servesSource(argv: readonly string[]): boolean {
 }
 
 /**
- * Serves `src/mcp.ts` over stdio. The URL is built at runtime, so the bundler leaves `src` out.
+ * Serves `createMcpServer` over stdio, since the `mcp` of `runCli` can't show a description or
+ * icons. The source URL is built at runtime, so the bundler leaves `src` out.
  * @returns {Promise<void>} Once the server is connected.
  */
-async function serveSource(): Promise<void> {
-  const module: unknown = await import(sourceMcp.href);
-  if (!isMcpModule(module)) throw new TypeError(`${sourceMcpPath} has no createMcpServer`);
+async function serveMcp(): Promise<void> {
+  const module: unknown = servesSource() ? await import(sourceMcp.href) : await import("./mcp.ts");
+  if (!isMcpModule(module)) throw new TypeError("The MCP module has no createMcpServer");
   const { StdioServerTransport } = await import("@modelcontextprotocol/server/stdio");
   await module.createMcpServer().connect(new StdioServerTransport());
 }
@@ -58,8 +56,8 @@ function isRefusal(error: unknown): boolean {
 }
 
 const argv = process.argv.slice(2);
-if (servesSource(argv)) {
-  await serveSource();
+if (argv.length === 1 && argv[0] === "mcp") {
+  await serveMcp();
 } else {
   await runCli(
     {

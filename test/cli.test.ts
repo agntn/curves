@@ -16,6 +16,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { describe, expect, it } from "vite-plus/test";
 import pkg from "../package.json" with { type: "json" };
+import { serverInfo } from "../src/server-info.ts";
 
 const switches = new Set([
   "CI",
@@ -109,12 +110,12 @@ describe("curves CLI", () => {
       stdout: "",
       stderr: `Invalid arguments: unknown option "--nmae"; ${takes}\n`,
     });
-    expect(run("compute", "--version")).toMatchObject({
+    expect(run("compute", "add", "--version")).toMatchObject({
       code: 1,
       stdout: "",
       stderr: `Invalid arguments: unknown option "--version"; ${takes}\n`,
     });
-    expect(run("compute", "-hh")).toMatchObject({
+    expect(run("compute", "add", "-hh")).toMatchObject({
       code: 1,
       stderr: `Invalid arguments: unknown option "-hh"; ${takes}\n`,
     });
@@ -161,8 +162,8 @@ const initialize = `${JSON.stringify({
  * from. stdin closes after the request, so the server exits on its own.
  * @param base - Package root the bin sits in.
  * @param extraEnv - Environment on top of the shared one.
- * @returns {{ code: number | null, from: string, name: string | undefined, stderr: string }} The
- * exit code, where the server came from, the server name from the reply and stderr.
+ * @returns {{ code: number | null, from: string, info: unknown, stderr: string }} The exit code,
+ * where the server came from, the `serverInfo` of the reply and stderr.
  */
 function serve(base: string, extraEnv: Readonly<Record<string, string>> = {}) {
   const record = mkdtempSync(join(tmpdir(), "curves-loaded-"));
@@ -186,17 +187,18 @@ function serve(base: string, extraEnv: Readonly<Record<string, string>> = {}) {
   let from: "bundle" | "source" | "unknown" = "unknown";
   if (source) from = "source";
   else if (bundle) from = "bundle";
-  const name = /"serverInfo":\{"name":"([^"]+)"/.exec(stdout)?.[1];
-  return { code: status, from, name, stderr };
+  const [line = "{}"] = stdout.split("\n");
+  const reply = JSON.parse(line) as { result?: { serverInfo?: unknown } };
+  return { code: status, from, info: reply.result?.serverInfo, stderr };
 }
 
 /**
  * A run that answered the initialize request.
  * @param from - Where the server has to come from.
- * @returns {{ code: number, from: string, name: string }} The fields `serve` has to match.
+ * @returns {{ code: number, from: string, info: object }} The fields `serve` has to match.
  */
 function served(from: "bundle" | "source") {
-  return { code: 0, from, name: "curves" };
+  return { code: 0, from, info: serverInfo };
 }
 
 const refused = {
