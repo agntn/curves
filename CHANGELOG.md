@@ -1,6 +1,31 @@
 # Changelog
 
 
+## v0.2.0
+
+[compare changes](https://github.com/agntn/curves/compare/v0.1.1...v0.2.0)
+
+### 🚀 Enhancements
+
+- Find logs by Pohlig-Hellman ([#6](https://github.com/agntn/curves/pull/6))
+- Add MCP server description and icons ([#8](https://github.com/agntn/curves/pull/8))
+- ⚠️  Add sr25519 and ristretto255 ([#10](https://github.com/agntn/curves/pull/10))
+- Add sr25519 to the playground ([#12](https://github.com/agntn/curves/pull/12))
+
+### 💅 Refactors
+
+- ⚠️  Build the CLI with runCli ([#5](https://github.com/agntn/curves/pull/5))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Add sr25519 and ristretto255 ([#10](https://github.com/agntn/curves/pull/10))
+- ⚠️  Build the CLI with runCli ([#5](https://github.com/agntn/curves/pull/5))
+
+### ❤️ Contributors
+
+- Ori ([@oritwoen](https://github.com/oritwoen))
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+
 ## v0.1.1
 
 [compare changes](https://github.com/agntn/curves/compare/v0.1.0...v0.1.1)
