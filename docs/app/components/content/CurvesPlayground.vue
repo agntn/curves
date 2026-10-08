@@ -53,6 +53,7 @@ const OPERATIONS: readonly Operation[] = [
   { key: "compute:double", tool: "curves_compute", op: "double", takes: ["point"], about: "Twice a point, infinity for a point with y = 0." },
   { key: "compute:negate", tool: "curves_compute", op: "negate", takes: ["point"], about: "Same x, the other y." },
   { key: "compute:multiply", tool: "curves_compute", op: "multiply", takes: ["point", "scalar"], about: "A point times any integer, a negative one multiplies the negation." },
+  { key: "compute:lift", tool: "curves_compute", op: "lift", takes: ["x"], about: "Every point above an x, smaller y first. A compressed point is just x and a parity bit." },
   { key: "compute:check", tool: "curves_compute", op: "check", takes: ["point"], about: "Whether a point lies on the curve." },
   { key: "compute:order", tool: "curves_compute", op: "order", takes: ["point"], about: "The smallest n with n times the point at infinity." },
   { key: "compute:count", tool: "curves_compute", op: "count", takes: [], about: "How many points the curve has, infinity included." },
@@ -85,6 +86,7 @@ const point = ref("5,1");
 const other = ref("16,4");
 const scalar = ref("13");
 const order = ref("");
+const curveX = ref("5");
 const limit = ref("");
 const secpPoint = ref(G);
 const secpOther = ref(TWO_G);
@@ -162,7 +164,7 @@ const toolArgs = computed(() => {
       const value = (field === "point" ? point : other).value.trim();
       if (value !== "") args[field] = pointValue(value);
     } else {
-      const value = (field === "scalar" ? scalar : order).value.trim();
+      const value = { scalar, order, x: curveX }[field as "scalar" | "order" | "x"].value.trim();
       if (value !== "") args[field] = value;
     }
   }
@@ -320,6 +322,11 @@ const view = computed(() => {
     heading = `${details.points.length} of ${details.total} points`;
     points = details.points.map(pointRow);
     rows.push({ label: "total", value: details.total, accent: true }, { label: "listed", value: String(details.points.length) }, { label: "truncated", value: String(details.truncated) });
+  } else if ("points" in details) {
+    icon = "i-lucide-arrow-up-from-dot";
+    heading = details.points.length === 0 ? "Nothing up there" : `${details.points.length === 1 ? "One point" : "Two points"} above x`;
+    points = details.points.map(pointRow);
+    rows.push({ label: "points", value: String(details.points.length), accent: true });
   } else if ("scalar" in details) {
     icon = "i-lucide-target";
     heading = details.scalar === null ? "No k" : `k = ${details.scalar}`;
@@ -393,8 +400,8 @@ const SR_SAMPLES = [
 const { copied, copy } = useCopied();
 
 /** The query keys a link may carry, each with the field it sets. */
-const FIELDS = { a, b, p, point, other, scalar, order, limit, x } as const;
-const SECP_FIELDS = { point: secpPoint, other: secpOther, scalar: secpScalar } as const;
+const FIELDS = { a, b, p, point, other, scalar, order, limit, x: curveX } as const;
+const SECP_FIELDS = { point: secpPoint, other: secpOther, scalar: secpScalar, x } as const;
 const SR_FIELDS = { ...SR_KEYS, message } as const;
 
 /**
@@ -547,6 +554,10 @@ const shareLink = computed(() => {
               <div v-if="current.takes.includes('order')">
                 <dt><label for="playground-order">order</label></dt>
                 <dd><UInput id="playground-order" v-model="order" variant="none" placeholder="every order" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('x')">
+                <dt><label for="playground-curve-x">x</label></dt>
+                <dd><UInput id="playground-curve-x" v-model="curveX" variant="none" placeholder="0 to p - 1" class="w-full" spellcheck="false" /></dd>
               </div>
               <div v-if="current.takes.includes('limit')">
                 <dt><label for="playground-limit">limit</label></dt>

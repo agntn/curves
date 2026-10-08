@@ -59,6 +59,17 @@ export const curveVectors = {
       y: 0x388f7b0f632de8140fe337e62a37f3566500a99934c2231b6cb9fd7584b8e672n,
     },
   },
+  /** NIST P-224 from FIPS 186-4 D.1.2.2, whose p - 1 holds 2^96, a hard case for a root. */
+  p224: {
+    a: -3n,
+    b: 0xb4050a850c04b3abf54132565044b0b7d7bfd8ba270b39432355ffb4n,
+    p: 0xffffffffffffffffffffffffffffffff000000000000000000000001n,
+    n: 0xffffffffffffffffffffffffffff16a2e0b8f03e13dd29455c5c2a3dn,
+    g: {
+      x: 0xb70e0cbd6bb4bf7f321390b94a03c1d356c21122343280d6115c1d21n,
+      y: 0xbd376388b5f723fb4c22dfe6cd4375a05a07476444d5819985007e34n,
+    },
+  },
 } as const;
 
 /** Multiples of G as SEC1 hex and scalars mod n, the usual published secp256k1 constants. */

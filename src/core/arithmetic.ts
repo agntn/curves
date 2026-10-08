@@ -1,4 +1,4 @@
-import { invert, isPrime, mod } from "./field.ts";
+import { invert, isPrime, mod, squareRootMod } from "./field.ts";
 
 /** A short Weierstrass curve y^2 = x^3 + ax + b over the prime field of p. */
 export interface WeierstrassCurve {
@@ -161,6 +161,24 @@ export function multiply(
  */
 export function isOnCurve(curve: Readonly<WeierstrassCurve>, point: Readonly<CurvePoint>): boolean {
   return satisfies(checkedCurve(curve), point);
+}
+
+/**
+ * Find the points above an x coordinate, which is all a compressed point keeps besides a parity.
+ * @param curve - From `defineCurve`, or parameters it accepts
+ * @param x - From 0 to p minus 1
+ * @returns {AffinePoint[]} Smaller y first: none when x has no point, one when y is 0, else two
+ * @throws {RangeError} When x is outside 0 to p minus 1
+ */
+export function liftX(curve: Readonly<WeierstrassCurve>, x: bigint): AffinePoint[] {
+  if (typeof x !== "bigint") throw new TypeError("x must be a bigint");
+  const { a, b, p } = checkedCurve(curve);
+  if (x < 0n || x >= p) throw new RangeError("x must run from 0 to p minus 1");
+  const y = squareRootMod(x * x * x + a * x + b, p);
+  if (y === undefined) return [];
+  const points = [{ x, y }];
+  if (y !== 0n) points.push({ x, y: p - y });
+  return points;
 }
 
 /**

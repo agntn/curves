@@ -23,6 +23,7 @@ describe("@agntn/curves", () => {
       "doublePoint",
       "isOnCurve",
       "isPrime",
+      "liftX",
       "listPoints",
       "multiplyPoint",
       "negatePoint",

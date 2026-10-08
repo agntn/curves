@@ -7,6 +7,7 @@ import {
   doublePoint,
   isOnCurve,
   isPrime,
+  liftX,
   listPoints,
   multiplyPoint,
   negatePoint,
@@ -17,9 +18,9 @@ import {
   type AffinePoint,
   type CurvePoint,
 } from "../src/index.ts";
-import { invert } from "../src/core/field.ts";
+import { invert, power, squareRootMod } from "../src/core/field.ts";
 import { curveVectors } from "./fixtures/vectors.ts";
-const { paar, f23, secp256k1 } = curveVectors;
+const { paar, f23, secp256k1, p224 } = curveVectors;
 const paarCurve = defineCurve(paar);
 const f23Curve = defineCurve(f23);
 const paarMultiples: AffinePoint[] = paar.multiples.map(([x, y]) => ({ x, y }));
@@ -101,6 +102,35 @@ describe("Curve field", () => {
     expect(isPrime(((1n << 61n) - 1n) ** 2n)).toBe(false);
   });
 
+  it("takes the smaller square root mod every prime below 600, as squaring every y finds it", () => {
+    for (let p = 5n; p < 600n; p += 2n) {
+      if (!isPrime(p)) continue;
+      const roots = new Map<bigint, bigint>();
+      for (let y = p - 1n; y >= 0n; y -= 1n) roots.set((y * y) % p, y);
+      for (let value = 0n; value < p; value += 1n) {
+        expect(squareRootMod(value, p)).toBe(roots.get(value));
+      }
+    }
+  });
+
+  it("finds square roots where p - 1 holds 2^96, and only where Euler's criterion says one exists", () => {
+    const { p } = p224;
+    const found = { roots: 0, none: 0 };
+    for (let seed = 1n; seed <= 60n; seed += 1n) {
+      const value = (seed * 0x9e3779b97f4a7c15f39cc0605cedc834n) % p;
+      const root = squareRootMod(value, p);
+      expect(root === undefined).toBe(power(value, (p - 1n) / 2n, p) === p - 1n);
+      if (root === undefined) found.none += 1;
+      else {
+        expect((root * root) % p).toBe(value);
+        expect(root <= p - root).toBe(true);
+        found.roots += 1;
+      }
+    }
+    expect(found.roots).toBeGreaterThan(10);
+    expect(found.none).toBeGreaterThan(10);
+  });
+
   it("refuses an inverse that does not exist instead of returning a wrong one", () => {
     expect(invert(4n, 17n)).toBe(13n);
     expect(() => invert(6n, 15n)).toThrow("p is not prime");
@@ -150,6 +180,33 @@ describe("Curve arithmetic", () => {
       expect(() => doublePoint(paarCurve, point)).toThrow("not on the curve");
     }
     expect(() => addPoints(paarCurve, base, { x: 5n, y: 2n })).toThrow("right is not on the curve");
+  });
+});
+
+describe("Curve lift", () => {
+  it("lifts every x of a small curve to the points the walk lists", () => {
+    for (const curve of [paarCurve, f23Curve, defineCurve({ a: -3n, b: 5n, p: 401n })]) {
+      const lifted = [];
+      for (let x = 0n; x < curve.p; x += 1n) lifted.push(...liftX(curve, x));
+      expect(lifted).toEqual(listPoints(curve));
+    }
+  });
+
+  it("gives one point where y is 0 and none for an x without a point", () => {
+    expect(liftX(f23Curve, f23.orderTwo.x)).toEqual([f23.orderTwo]);
+    expect(liftX(paarCurve, 5n)).toEqual([base, { x: 5n, y: 16n }]);
+    expect(liftX(paarCurve, 1n)).toEqual([]);
+  });
+
+  it("finds the generator of NIST P-224 from x alone", () => {
+    const curve = defineCurve(p224);
+    expect(liftX(curve, p224.g.x)).toEqual([{ x: p224.g.x, y: p224.p - p224.g.y }, p224.g]);
+    expect(multiplyPoint(curve, p224.g, p224.n)).toBeNull();
+  });
+
+  it("refuses an x outside 0 to p minus 1", () => {
+    expect(() => liftX(paarCurve, 17n)).toThrow("x must run from 0 to p minus 1");
+    expect(() => liftX(paarCurve, -1n)).toThrow("x must run from 0 to p minus 1");
   });
 });
 

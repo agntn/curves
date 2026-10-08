@@ -103,6 +103,14 @@ describe("curves MCP server", () => {
       operation: "multiply",
       point: "infinity",
     });
+    expect(await call({ operation: "lift", x: "0x5" })).toEqual({
+      operation: "lift",
+      points: [
+        { x: "5", y: "1" },
+        { x: "5", y: "16" },
+      ],
+    });
+    expect(await call({ operation: "lift", x: "1" })).toEqual({ operation: "lift", points: [] });
     expect(await call({ operation: "count" })).toEqual({ operation: "count", count: "19" });
     expect(
       await call({ operation: "log", point: { x: "5", y: "1" }, other: { x: "0x10", y: "4" } }),
@@ -326,6 +334,13 @@ describe("curve executors", () => {
     expect(() =>
       computeCurve({ operation: "add", ...paar, point: { x: "5", y: "1", z: "1" }, other: {} }),
     ).toThrow("point takes only x and y");
+    expect(() => computeCurve({ operation: "lift", ...paar })).toThrow("lift needs x");
+    expect(() => computeCurve({ operation: "lift", ...paar, x: "17" })).toThrow(
+      "x must run from 0 to p minus 1",
+    );
+    expect(() =>
+      computeCurve({ operation: "lift", ...paar, x: "5", point: { x: "5", y: "1" } }),
+    ).toThrow("lift does not take point");
     expect(() => computeSecp256k1({ operation: "multiply", point: g })).toThrow(
       "multiply needs scalar",
     );
