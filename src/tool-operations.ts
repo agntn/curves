@@ -10,6 +10,7 @@ import {
   addPoints,
   doublePoint,
   isOnCurve,
+  liftX,
   multiplyPoint,
   negatePoint,
   type AffinePoint,
@@ -53,12 +54,16 @@ export interface ToolResult<Details> {
   details: Details;
 }
 
+/** A finite point as the curve tool writes it, in decimal. */
+export type AffinePointText = { x: string; y: string };
+
 /** A point as the curve tool writes it: decimal coordinates, or "infinity". */
-export type CurvePointText = { x: string; y: string } | "infinity";
+export type CurvePointText = AffinePointText | "infinity";
 
 /** What the curve tool computes, by operation. */
 export type CurveDetails =
   | { operation: "add" | "double" | "negate" | "multiply"; point: CurvePointText }
+  | { operation: "lift"; points: AffinePointText[] }
   | { operation: "check"; onCurve: boolean }
   | { operation: "order"; order: string }
   | { operation: "count"; count: string }
@@ -135,6 +140,7 @@ const CURVE_ARGUMENTS: Readonly<Record<CurveOperation, readonly string[]>> = {
   double: ["point"],
   negate: ["point"],
   multiply: ["point", "scalar"],
+  lift: ["x"],
   check: ["point"],
   order: ["point"],
   count: [],
@@ -300,6 +306,11 @@ const CURVE_COMPUTATIONS: Readonly<
     if (isUnset(args["scalar"])) throw new TypeError("multiply needs scalar");
     const scalar = curveInteger(args["scalar"], "scalar");
     return { operation: "multiply", point: curvePointText(multiplyPoint(curve, point, scalar)) };
+  },
+  lift: (curve, args) => {
+    if (isUnset(args["x"])) throw new TypeError("lift needs x");
+    const points = liftX(curve, curveInteger(args["x"], "x"));
+    return { operation: "lift", points: points.map(({ x, y }) => ({ x: `${x}`, y: `${y}` })) };
   },
   check: (curve, args) => ({
     operation: "check",

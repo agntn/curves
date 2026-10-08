@@ -108,15 +108,20 @@ export const computeSchema = Type.Object(
     operation: Type.String({
       enum: [...CURVE_OPERATIONS],
       description:
-        "add takes point and other, double, negate and order take point, multiply takes point and scalar, check takes point and answers whether it lies on the curve, count counts the points, points lists them, log takes point as the base and other as the target",
+        "add takes point and other, double, negate and order take point, multiply takes point and scalar, lift takes x and lists the points above it, check takes point and answers whether it lies on the curve, count counts the points, points lists them, log takes point as the base and other as the target",
     }),
     a: curveInteger("a in y^2 = x^3 + ax + b, reduced mod p, so -3 works"),
     b: curveInteger("b in y^2 = x^3 + ax + b, reduced mod p"),
     p: curveInteger("The field prime, above 3"),
-    point: curvePoint("Every operation but count and points, required there; the base for log"),
+    point: curvePoint(
+      "Every operation but lift, count and points, required there; the base for log",
+    ),
     other: curvePoint("add and log only, required there; the target for log"),
     scalar: optionalCurveInteger(
       "multiply only, required there: any integer, decimal or hex with 0x. A negative one multiplies the negation",
+    ),
+    x: optionalCurveInteger(
+      "lift only, required there: the x coordinate, from 0 to p - 1, decimal or hex with 0x. No limit on p, unlike count and points",
     ),
     order: optionalCurveInteger(
       `points only: list just the points of exactly this order, 1 or more. Takes p up to ${MAX_FILTERED_PRIME}`,
@@ -135,12 +140,13 @@ export const computeSchema = Type.Object(
 export const computeTool = defineTool({
   name: "curves_compute",
   title: "Compute on a Curve",
-  description: `Do arithmetic on a short Weierstrass curve y^2 = x^3 + ax + b over a prime field the caller gives: add, double, negate or multiply points, check a point, find the order of a point, count the points, list them, or find a discrete log. Integers go in as decimal or 0x hex strings and come out as decimal strings; the point at infinity comes out as "infinity". count and points take p up to ${MAX_COUNTED_PRIME}, or ${MAX_FILTERED_PRIME} when points filters by order. order and log take p up to ${MAX_ORDER_PRIME}, and log a base whose order has no prime factor above ${MAX_LOG_ORDER}. Public math only; secp256k1 with SEC1 points has curves_secp256k1_compute.`,
+  description: `Do arithmetic on a short Weierstrass curve y^2 = x^3 + ax + b over a prime field the caller gives: add, double, negate or multiply points, lift an x coordinate to the points above it, check a point, find the order of a point, count the points, list them, or find a discrete log. Integers go in as decimal or 0x hex strings and come out as decimal strings; the point at infinity comes out as "infinity". count and points take p up to ${MAX_COUNTED_PRIME}, or ${MAX_FILTERED_PRIME} when points filters by order. order and log take p up to ${MAX_ORDER_PRIME}, and log a base whose order has no prime factor above ${MAX_LOG_ORDER}. Public math only; secp256k1 with SEC1 points has curves_secp256k1_compute.`,
   snippet:
-    "Use for toy curves over small prime fields, points of a given order and discrete logs, smooth orders included.",
+    "Use for toy curves over small prime fields, points of a given order and discrete logs, smooth orders included, and for lifting an x on a curve of any size.",
   guidelines: [
     "add takes point and other; double, negate, check and order take point",
     "multiply takes point and scalar, any integer",
+    "lift takes x and lists the points with that x, smaller y first, none when x has no point; pick the y a compressed point's parity asks for",
     "count gives the group order with infinity; points lists by x then y, optionally of one order",
     "log takes point as the base and other as the target, and answers scalar null when there is no k",
   ],

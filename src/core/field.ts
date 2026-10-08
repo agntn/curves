@@ -105,6 +105,56 @@ function jacobi(top: bigint, bottom: bigint): number {
 }
 
 /**
+ * The first quadratic non-residue mod an odd prime, which Tonelli-Shanks starts from.
+ * @param p - An odd prime
+ * @returns {bigint} The smallest z with Legendre symbol -1
+ */
+function nonResidue(p: bigint): bigint {
+  let z = 2n;
+  while (jacobi(z, p) !== -1) z += 1n;
+  return z;
+}
+
+/**
+ * Count the squarings that take t to 1 mod p.
+ * @param t - A value whose order mod p is a power of 2
+ * @param p - The modulus
+ * @returns {bigint} The least i with t^(2^i) = 1
+ */
+function squaringsToOne(t: bigint, p: bigint): bigint {
+  let i = 0n;
+  for (let rest = t; rest !== 1n; rest = (rest * rest) % p) i += 1n;
+  return i;
+}
+
+/**
+ * A square root mod any odd prime by Tonelli-Shanks, so p needn't be 3 mod 4 as on secp256k1.
+ * @param value - Any integer
+ * @param p - An odd prime
+ * @returns {bigint | undefined} The smaller root, undefined when value is no square mod p
+ */
+export function squareRootMod(value: bigint, p: bigint): bigint | undefined {
+  const square = mod(value, p);
+  if (square === 0n) return 0n;
+  if (jacobi(square, p) !== 1) return undefined;
+  let odd = p - 1n;
+  let shifts = 0n;
+  for (; (odd & 1n) === 0n; odd >>= 1n) shifts += 1n;
+  let [c, t, root] = [
+    power(nonResidue(p), odd, p),
+    power(square, odd, p),
+    power(square, (odd + 1n) / 2n, p),
+  ];
+  while (t !== 1n) {
+    const i = squaringsToOne(t, p);
+    const b = power(c, 1n << (shifts - i - 1n), p);
+    [shifts, c] = [i, (b * b) % p];
+    [t, root] = [(t * c) % p, (root * b) % p];
+  }
+  return root <= p - root ? root : p - root;
+}
+
+/**
  * Find D for the Lucas test, the first of 5, -7, 9, -11 and on with Jacobi symbol -1.
  * @param n - An odd number above 41 that is no perfect square
  * @returns {bigint | undefined} D, or undefined when one of the candidates shares a factor with n

@@ -4,6 +4,7 @@ export {
   defineCurve,
   doublePoint,
   isOnCurve,
+  liftX,
   multiplyPoint,
   negatePoint,
 } from "./core/arithmetic.ts";

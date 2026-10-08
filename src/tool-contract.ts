@@ -13,6 +13,7 @@ export const CURVE_OPERATIONS = [
   "double",
   "negate",
   "multiply",
+  "lift",
   "check",
   "order",
   "count",

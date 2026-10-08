@@ -20,6 +20,7 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 
 - 🧮 **Any short Weierstrass curve.** y² = x³ + ax + b over a prime you pass. `a = -3` works too.
 - 🔁 **Add, double, negate, multiply.** Negative scalars multiply the negation.
+- 🪝 **Lift an x.** Both points above it, on a curve of any size. A compressed point from a CTF stops being half a point.
 - 🔢 **Counting and listing.** Every point of a small curve, or just the ones of one order.
 - 📏 **Point orders.** Baby step giant step over the Hasse interval, fields up to 2⁴⁸.
 - 🕵️ **Discrete logs.** The smallest k, one prime of the order at a time. A 40-bit order made of small primes? About 20 ms. Only a prime above 2³⁶ stops it. No k? You get `undefined`, not a guess.
@@ -65,12 +66,12 @@ The scalar is the inverse of 2 mod n. Look at all those zeros in x. Funny, right
 
 ### Commands
 
-| Command                        | Does                                                            |
-| ------------------------------ | --------------------------------------------------------------- |
-| `curves compute <operation>`   | add, double, negate, multiply, check, order, count, points, log |
-| `curves secp256k1 <operation>` | add, subtract, negate, multiply, lift, check                    |
-| `curves sr25519 <operation>`   | keypair, sign, verify, derive                                   |
-| `curves mcp`                   | MCP server over stdio                                           |
+| Command                        | Does                                                                  |
+| ------------------------------ | --------------------------------------------------------------------- |
+| `curves compute <operation>`   | add, double, negate, multiply, lift, check, order, count, points, log |
+| `curves secp256k1 <operation>` | add, subtract, negate, multiply, lift, check                          |
+| `curves sr25519 <operation>`   | keypair, sign, verify, derive                                         |
+| `curves mcp`                   | MCP server over stdio                                                 |
 
 Points go in as JSON for `compute`, the same `{"x":…,"y":…}` the tool takes, and as SEC1 hex for `secp256k1`. `--a -3` works, it's reduced mod p. The output is the line a model reads, `--json` makes it pretty. Every flag comes from the tool schema through `runCli` of [`@agntn/tools`](https://tools.agntn.dev/guide/cli), so `curves <command> --help` never lies about what a command takes.
 
