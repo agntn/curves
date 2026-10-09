@@ -5,6 +5,7 @@ import { sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCli } from "@agntn/tools/cli";
 import type { createMcpServer } from "./mcp.ts";
+import { serverInfo } from "./server-info.ts";
 import { curvesTools } from "./tools.ts";
 import { version } from "./version.ts";
 
@@ -35,12 +36,12 @@ function servesSource(): boolean {
 }
 
 /**
- * Serves `createMcpServer` over stdio, since the `mcp` of `runCli` can't show a description or
- * icons. The source URL is built at runtime, so the bundler leaves `src` out.
+ * Serves the live `createMcpServer` over stdio, so an edit costs a restart, not a build. The URL
+ * is built at runtime, so the bundler leaves `src` out.
  * @returns {Promise<void>} Once the server is connected.
  */
-async function serveMcp(): Promise<void> {
-  const module: unknown = servesSource() ? await import(sourceMcp.href) : await import("./mcp.ts");
+async function serveSource(): Promise<void> {
+  const module: unknown = await import(sourceMcp.href);
   if (!isMcpModule(module)) throw new TypeError("The MCP module has no createMcpServer");
   const { StdioServerTransport } = await import("@modelcontextprotocol/server/stdio");
   await module.createMcpServer().connect(new StdioServerTransport());
@@ -56,8 +57,8 @@ function isRefusal(error: unknown): boolean {
 }
 
 const argv = process.argv.slice(2);
-if (argv.length === 1 && argv[0] === "mcp") {
-  await serveMcp();
+if (argv.length === 1 && argv[0] === "mcp" && servesSource()) {
+  await serveSource();
 } else {
   await runCli(
     {
@@ -65,7 +66,7 @@ if (argv.length === 1 && argv[0] === "mcp") {
       version,
       description: "Arithmetic on elliptic curves: curves you define, and secp256k1",
       tools: curvesTools,
-      mcp: true,
+      mcp: serverInfo,
       expected: isRefusal,
     },
     argv,
