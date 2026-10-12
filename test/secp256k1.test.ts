@@ -33,17 +33,19 @@ const {
   orderMinusOne,
   inverseOfTwo,
   xWithoutPoint,
+  xOne,
+  yOne,
 } = secp256k1Vectors;
 const infinity = "The result is the point at infinity";
 const invalidPoint = "Invalid SEC1 secp256k1 public key";
-const pHex = secp256k1.p.toString(16);
+const order = BigInt(`0x${orderMinusOne}`) + 1n;
+const onePlusP = (curveVectors.secp256k1.p + 1n).toString(16);
 
 describe("secp256k1 domain parameters", () => {
-  it("match the generic curve code: G lies on it and n times G is infinity", () => {
-    const curve = defineCurve(secp256k1);
-    expect(curve).toEqual({ a: 0n, b: 7n, p: secp256k1.p });
-    expect(multiplyOnCurve(curve, secp256k1.g, secp256k1.n)).toBeNull();
-    expect(multiplyOnCurve(curve, secp256k1.g, 3n)).toEqual(curveVectors.secp256k1.threeG);
+  it("match SEC 2, and n times G is infinity on the generic curve code", () => {
+    const { a, b, p, g: generator } = curveVectors.secp256k1;
+    expect(secp256k1).toEqual({ a, b, p, n: order, h: 1n, g: generator });
+    expect(multiplyOnCurve(defineCurve(secp256k1), generator, order)).toBeNull();
   });
 });
 
@@ -93,8 +95,9 @@ describe("secp256k1 point math", () => {
     for (const scalar of ["0", 0n, "0x03", "", "f".repeat(65)]) {
       expect(() => multiplyPoint(g, scalar)).toThrow(RangeError);
     }
-    const order = (BigInt(`0x${orderMinusOne}`) + 1n).toString(16);
-    expect(() => multiplyGenerator(order)).toThrow("from 1 to the curve order minus 1");
+    expect(() => multiplyGenerator(order.toString(16))).toThrow(
+      "from 1 to the curve order minus 1",
+    );
     expect(() => multiplyGenerator(-1n)).toThrow(RangeError);
     for (const point of [`06${threeGUncompressed.slice(2)}`, g.slice(2), `0x${g}`]) {
       expect(() => negatePoint(point)).toThrow(invalidPoint);
@@ -102,12 +105,11 @@ describe("secp256k1 point math", () => {
   });
 
   it("refuses coordinates at or above p, as SEC 1 section 2.3.4 asks", () => {
-    const y = gUncompressed.slice(66);
-    expect(() => negatePoint(`02${pHex}`)).toThrow(invalidPoint);
-    expect(() => negatePoint(`04${pHex}${y}`)).toThrow(invalidPoint);
-    const x = gUncompressed.slice(2, 66);
-    const yAboveP = (secp256k1.p + 1n).toString(16);
-    expect(isOnCurve(`04${x}${yAboveP}`)).toBe(false);
+    expect(isOnCurve(xOne)).toBe(true);
+    expect(isOnCurve(`04${onePlusP}${xOne.slice(66)}`)).toBe(false);
+    expect(() => negatePoint(`02${onePlusP}`)).toThrow(invalidPoint);
+    expect(isOnCurve(yOne)).toBe(true);
+    expect(isOnCurve(`${yOne.slice(0, 66)}${onePlusP}`)).toBe(false);
   });
 });
 
@@ -122,8 +124,7 @@ describe("secp256k1 scalar math", () => {
 
   it("refuses zero as an inverse and values at or above n", () => {
     expect(() => invertScalar("0")).toThrow(RangeError);
-    const order = (BigInt(`0x${orderMinusOne}`) + 1n).toString(16);
-    expect(() => addScalars(order, "1")).toThrow("Scalar a must be hex");
+    expect(() => addScalars(order.toString(16), "1")).toThrow("Scalar a must be hex");
     expect(() => subtractScalars("1", order)).toThrow("Scalar b must be hex");
   });
 });
