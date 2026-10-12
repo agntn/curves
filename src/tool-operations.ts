@@ -7,12 +7,12 @@
  */
 
 import {
-  addPoints,
-  doublePoint,
+  add,
+  double,
   isOnCurve,
   liftX,
-  multiplyPoint,
-  negatePoint,
+  multiply,
+  negate,
   onCurve,
   type AffinePoint,
   type CurvePoint,
@@ -306,7 +306,7 @@ const CURVE_COMPUTATIONS: Readonly<
   add: (curve, args) => ({
     operation: "add",
     point: curvePointText(
-      addPoints(
+      add(
         curve,
         curvePointOn(curve, args, "add", "point"),
         curvePointOn(curve, args, "add", "other"),
@@ -315,17 +315,17 @@ const CURVE_COMPUTATIONS: Readonly<
   }),
   double: (curve, args) => ({
     operation: "double",
-    point: curvePointText(doublePoint(curve, curvePointOn(curve, args, "double", "point"))),
+    point: curvePointText(double(curve, curvePointOn(curve, args, "double", "point"))),
   }),
   negate: (curve, args) => ({
     operation: "negate",
-    point: curvePointText(negatePoint(curve, curvePointOn(curve, args, "negate", "point"))),
+    point: curvePointText(negate(curve, curvePointOn(curve, args, "negate", "point"))),
   }),
   multiply: (curve, args) => {
     const point = curvePointOn(curve, args, "multiply", "point");
     if (isUnset(args["scalar"])) throw new TypeError("multiply needs scalar");
     const scalar = curveInteger(args["scalar"], "scalar");
-    return { operation: "multiply", point: curvePointText(multiplyPoint(curve, point, scalar)) };
+    return { operation: "multiply", point: curvePointText(multiply(curve, point, scalar)) };
   },
   lift: (curve, args) => {
     if (isUnset(args["x"])) throw new TypeError("lift needs x");
