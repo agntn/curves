@@ -1,6 +1,35 @@
 # Changelog
 
 
+## v0.2.1
+
+[compare changes](https://github.com/agntn/curves/compare/v0.2.0...v0.2.1)
+
+### 🚀 Enhancements
+
+- Lift an x on curves you define ([#13](https://github.com/agntn/curves/pull/13))
+- Build /mcp with `toToolkitTools` ([#21](https://github.com/agntn/curves/pull/21))
+- Add ed25519 point math ([#26](https://github.com/agntn/curves/pull/26))
+
+### 🩹 Fixes
+
+- Stop shipping broken source maps ([#20](https://github.com/agntn/curves/pull/20))
+- Name the argument behind a refused point ([#23](https://github.com/agntn/curves/pull/23))
+- List infinity among the points ([#24](https://github.com/agntn/curves/pull/24))
+
+### 💅 Refactors
+
+- **cli:** Serve the bundled mcp via runCli ([#14](https://github.com/agntn/curves/pull/14))
+
+### ✅ Tests
+
+- Drop tautological assertions ([#19](https://github.com/agntn/curves/pull/19))
+
+### ❤️ Contributors
+
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+- Ori ([@oritwoen](https://github.com/oritwoen))
+
 ## v0.2.0
 
 [compare changes](https://github.com/agntn/curves/compare/v0.1.1...v0.2.0)
