@@ -23,7 +23,7 @@ docs/
 ├── public/                        # fonts, favicon.svg and the icons and manifest cut from it
 ├── content/index.md               # landing
 ├── content/1.guide/               # getting started, CLI, agents, playground
-└── content/2.math/                # overview, curves and points, orders and logs, secp256k1, sr25519
+└── content/2.math/                # overview, curves and points, orders and logs, secp256k1, sr25519, ed25519
 ```
 
 ## Commands

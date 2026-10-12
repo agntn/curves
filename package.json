@@ -7,8 +7,10 @@
     "bitcoin",
     "discrete-log",
     "ecc",
+    "ed25519",
     "elliptic-curve",
     "mcp",
+    "monero",
     "polkadot",
     "ristretto255",
     "sec1",
@@ -45,6 +47,10 @@
     "./secp256k1": {
       "types": "./dist/secp256k1.d.mts",
       "import": "./dist/secp256k1.mjs"
+    },
+    "./ed25519": {
+      "types": "./dist/ed25519.d.mts",
+      "import": "./dist/ed25519.mjs"
     },
     "./ristretto255": {
       "types": "./dist/ristretto255.d.mts",

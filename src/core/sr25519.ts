@@ -9,20 +9,8 @@ import { sha512 } from "@agntn/hashes/sha2";
 import { bytesToHex, bytesToNumberLE, concatBytes, hexToBytes, numberToBytesLE } from "./bytes.ts";
 import { mod } from "./field.ts";
 import { Transcript } from "./merlin.ts";
-import {
-  BASE,
-  IDENTITY,
-  add,
-  decode,
-  encode,
-  equals,
-  multiply,
-  negate,
-  ristretto255,
-  type Extended,
-} from "./ristretto255.ts";
-
-const L = ristretto255.l;
+import { BASE, IDENTITY, L, add, multiply, negate, type Extended } from "./edwards25519.ts";
+import { decode, encode, equals } from "./ristretto255.ts";
 
 /** The signing context Substrate signs under. */
 export const SIGNING_CONTEXT = "substrate";

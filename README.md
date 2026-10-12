@@ -26,7 +26,8 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 - 🕵️ **Discrete logs.** The smallest k, one prime of the order at a time. A 40-bit order made of small primes? About 20 ms. Only a prime above 2³⁶ stops it. No k? You get `undefined`, not a guess.
 - 🔑 **secp256k1 with SEC1 points.** Add, subtract, multiply, lift an x, convert between 33 and 65 bytes.
 - 🟣 **sr25519 for Polkadot.** Keys from a seed, signatures, `//hard` and `/soft` children. `//Alice` comes out right.
-- 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1, RFC 9496 for ristretto255. No `@noble/curves`.
+- 🟠 **ed25519 for Monero.** Add, multiply, reduce a scalar like `sc_reduce32`. A point of order 8 decodes fine, and `isTorsionFree` still says no.
+- 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1, RFC 9496 for ristretto255, RFC 8032 for ed25519. No `@noble/curves`.
 - 🤖 **Agent tools.** One for curves you define, one for secp256k1, one for sr25519. MCP, Pi, OMP and the AI SDK get all three.
 
 ## 📦 Install
@@ -90,7 +91,7 @@ multiplyGenerator("03"); // 02f9308a…36f9
 liftX("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798").odd; // 0379be66…1798
 ```
 
-That's most of it, really. Generic curves take bigints and give `null` for the point at infinity. secp256k1 takes and gives hex, and so does `@agntn/curves/sr25519`. A point off the curve throws, never a silent wrong answer. More in [curves and points](https://curves.agntn.dev/math/curves), [orders and logs](https://curves.agntn.dev/math/groups), [secp256k1](https://curves.agntn.dev/math/secp256k1) and [sr25519](https://curves.agntn.dev/math/sr25519).
+That's most of it, really. Generic curves take bigints and give `null` for the point at infinity. secp256k1 takes and gives hex, and so does `@agntn/curves/sr25519`. `@agntn/curves/ed25519` writes points as hex and takes scalars as bigints, since its bytes read little-endian. A point off the curve throws, never a silent wrong answer. More in [curves and points](https://curves.agntn.dev/math/curves), [orders and logs](https://curves.agntn.dev/math/groups), [secp256k1](https://curves.agntn.dev/math/secp256k1), [sr25519](https://curves.agntn.dev/math/sr25519) and [ed25519](https://curves.agntn.dev/math/ed25519).
 
 ## 🤖 Agents
 
@@ -118,8 +119,8 @@ Mnemonics, addresses and secp256k1 signatures. That's [@agntn/keys](https://gith
 ```bash
 pnpm install
 pnpm --dir docs install   # the /mcp test borrows Zod, the toolkit and the SDK from here
-pnpm build       # dist/, the CLI and the secp256k1, ristretto255 and sr25519 subpaths
-pnpm test        # textbook curves, brute force oracles, RFC 9496, frozen secp256k1 and sr25519 vectors
+pnpm build       # dist/, the CLI and the secp256k1, ristretto255, sr25519 and ed25519 subpaths
+pnpm test        # textbook curves, brute force oracles, RFC 9496 and RFC 8032, frozen secp256k1 and sr25519 vectors
 pnpm lint        # vp lint and vp fmt --check
 pnpm typecheck   # src, the extensions and the tests
 ```
