@@ -206,6 +206,83 @@ function multiply(point: Jacobian, scalar: bigint): Jacobian {
 }
 
 /**
+ * Add a finite affine point to a Jacobian one, cheaper than `add` since the right Z is 1.
+ * @param left - Any point
+ * @param right - A finite point
+ * @returns {Jacobian} The sum
+ */
+function addAffine(left: Jacobian, right: Affine): Jacobian {
+  if (left.z === 0n) return toJacobian(right);
+  const zz = (left.z * left.z) % P;
+  const h = mod(right.x * zz - left.x, P);
+  const r = mod(right.y * left.z * zz - left.y, P);
+  if (h === 0n) return r === 0n ? double(left) : ZERO;
+  const hh = (h * h) % P;
+  const hhh = (hh * h) % P;
+  const v = (left.x * hh) % P;
+  const sumX = mod(r * r - hhh - 2n * v, P);
+  return { x: sumX, y: mod(r * (v - sumX) - left.y * hhh, P), z: (left.z * h) % P };
+}
+
+/**
+ * Bring many Jacobian points to x and y with one inversion, Montgomery's trick.
+ * @param points - Finite points
+ * @returns {Affine[]} The same points, in order
+ */
+function toAffineAll(points: readonly Jacobian[]): Affine[] {
+  let product = 1n;
+  const steps = points.map((point) => {
+    const before = product;
+    product = (product * point.z) % P;
+    return { point, before };
+  });
+  let inverse = invert(product, P);
+  return steps
+    .toReversed()
+    .map(({ point, before }) => {
+      const zInverse = (inverse * before) % P;
+      inverse = (inverse * point.z) % P;
+      const square = (zInverse * zInverse) % P;
+      return { x: (point.x * square) % P, y: (point.y * square * zInverse) % P };
+    })
+    .toReversed();
+}
+
+/** Entry j of row i is (j + 1) times 16^(63 - i) times G, so hex digit i picks entry digit - 1. */
+let generatorTable: readonly (readonly Affine[])[] | undefined;
+
+function buildGeneratorTable(): readonly (readonly Affine[])[] {
+  const points: Jacobian[] = [];
+  let base = toJacobian(G);
+  for (let row = 0; row < 64; row++) {
+    let multiple = base;
+    for (let digit = 1; digit < 16; digit++) {
+      points.push(multiple);
+      multiple = add(multiple, base);
+    }
+    base = multiple;
+  }
+  const affine = toAffineAll(points);
+  return Array.from({ length: 64 }, (_, row) => affine.slice(row * 15, row * 15 + 15)).toReversed();
+}
+
+/**
+ * Multiply G with one table lookup per nonzero hex digit and not a single doubling.
+ * @param scalar - Zero to n minus 1
+ * @returns {Jacobian} The product
+ */
+function multiplyBase(scalar: bigint): Jacobian {
+  generatorTable ??= buildGeneratorTable();
+  const digits = scalar.toString(16).padStart(64, "0");
+  let result = ZERO;
+  for (const [row, multiples] of generatorTable.entries()) {
+    const point = multiples[Number.parseInt(digits.charAt(row), 16) - 1];
+    if (point !== undefined) result = addAffine(result, point);
+  }
+  return result;
+}
+
+/**
  * Encode a result, refusing the point at infinity, which SEC1 public keys have no form for.
  * @param point - Any point
  * @param options - Output encoding
@@ -299,7 +376,7 @@ export function multiplyPoint(
  * @returns {string} The product as SEC1 hex
  */
 export function multiplyGenerator(scalar: Scalar, options: PointEncodingOptions = {}): string {
-  return encodePoint(multiply(toJacobian(G), decodeScalar(scalar, "Scalar", 1n)), options);
+  return encodePoint(multiplyBase(decodeScalar(scalar, "Scalar", 1n)), options);
 }
 
 /**
