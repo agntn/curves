@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import type { ToolkitTool } from "@agntn/tools/toolkit";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { Client as SiteClient } from "../docs/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
 import { InMemoryTransport as SiteTransport } from "../docs/node_modules/@modelcontextprotocol/sdk/dist/esm/inMemory.js";
@@ -9,15 +9,14 @@ import { createMcpServer, toolListings } from "../src/mcp.ts";
 import { devAccounts } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
-/* The toolkit's entry pulls in Nitro, and `defineMcpTool` only hands its input back. */
+/* The toolkit's entry pulls in Nitro, so the handler gets its page tools and options here. */
 vi.mock(
   "../docs/node_modules/@nuxtjs/mcp-toolkit/dist/runtime/server/mcp/definitions/index.js",
   () => ({
-    defineMcpTool: (definition: unknown) => definition,
+    defineMcpHandler: (options: unknown) => options,
+    getMcpTools: async () => [{ name: "list-pages" }, { name: "get-page" }],
   }),
 );
-
-const toolsDir = new URL("../docs/server/mcp/tools/", import.meta.url);
 
 const openConnections: Array<{ close(): Promise<void> }> = [];
 
@@ -26,21 +25,42 @@ afterEach(async () => {
 });
 
 /**
- * Connects an SDK client to every docs tool, through the same SDK copy the worker runs.
+ * What `docs/server/mcp/index.ts` serves for one request, Docus page tools included.
+ * @returns {Promise<readonly ToolkitTool[]>} The tools in the order the toolkit gets them.
+ */
+async function docsTools(): Promise<readonly ToolkitTool[]> {
+  const { default: handler } = await import("../docs/server/mcp/index.ts");
+  const { tools } = handler;
+  if (typeof tools !== "function") throw new TypeError("the handler should resolve its tools");
+  return (await tools(undefined as never)) as ToolkitTool[];
+}
+
+/**
+ * Connects an SDK client to every curve tool, through the same SDK copy the worker runs.
  * @returns {Promise<SiteClient>} The connected client.
  */
 async function siteClient(): Promise<SiteClient> {
-  const { curvesMcpTool } = await import("../docs/server/utils/curves-mcp.ts");
   const server = new McpServer({ name: "curves-docs", version: "0.0.0" });
-  for (const listing of toolListings) {
-    const tool = curvesMcpTool(listing.name);
-    const handler = tool.handler as (
-      args: Readonly<Record<string, unknown>>,
-    ) => Promise<CallToolResult>;
-    server.registerTool(listing.name, tool, handler);
+  for (const tool of await docsTools()) {
+    if (!tool.name.startsWith("curves_")) continue;
+    const handler = tool.handler as (args: unknown) => Promise<CallToolResult>;
+    server.registerTool(tool.name, tool as never, handler);
   }
   const [clientTransport, serverTransport] = SiteTransport.createLinkedPair();
   const client = new SiteClient({ name: "curves-docs-test", version: "0.0.0" });
+  openConnections.push(client, server);
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  return client;
+}
+
+/**
+ * Connects a client to `curves mcp` as stdio serves it.
+ * @returns {Promise<Client>} The connected client.
+ */
+async function stdioClient(): Promise<Client> {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = createMcpServer();
+  const client = new Client({ name: "curves-docs-test", version: "1.0.0" });
   openConnections.push(client, server);
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   return client;
@@ -65,28 +85,26 @@ const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
 ];
 
 describe("docs MCP tools", () => {
-  it("serves every tool `curves mcp` lists, one file each", () => {
-    const files = readdirSync(toolsDir).toSorted();
-    expect(files).toEqual(
-      toolListings.map((tool) => `${tool.name.replaceAll("_", "-")}.ts`).toSorted(),
-    );
-    for (const file of files) {
-      const name = file.slice(0, -".ts".length).replaceAll("-", "_");
-      expect(readFileSync(new URL(file, toolsDir), "utf8")).toBe(
-        `export default curvesMcpTool(${JSON.stringify(name)});\n`,
-      );
-    }
+  it("serves every tool `curves mcp` lists after the Docus page tools", async () => {
+    expect((await docsTools()).map((tool) => tool.name)).toEqual([
+      "list-pages",
+      "get-page",
+      ...toolListings.map((tool) => tool.name),
+    ]);
+    const listed = (await (await siteClient()).listTools()).tools;
+    /* SDK v1 adds `execution` and a `$schema`; the rest is what stdio lists, field for field. */
+    expect(
+      listed.map(({ inputSchema, ...tool }) => ({
+        ...tool,
+        execution: undefined,
+        inputSchema: { ...inputSchema, $schema: undefined },
+      })),
+    ).toEqual((await (await stdioClient()).listTools()).tools);
   });
 
-  it("answer like stdio, built from what stdio lists, bare calls too", async () => {
+  it("answer like stdio, bare calls too", async () => {
     const site = await siteClient();
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = createMcpServer();
-    const stdio = new Client({ name: "curves-docs-test", version: "1.0.0" });
-    openConnections.push(stdio, server);
-    await Promise.all([server.connect(serverTransport), stdio.connect(clientTransport)]);
-
-    expect((await stdio.listTools()).tools).toEqual(toolListings);
+    const stdio = await stdioClient();
     for (const [name, args] of CALLS) {
       expect(await site.callTool({ name, arguments: args }), name).toEqual(
         await stdio.callTool({ name, arguments: args }),

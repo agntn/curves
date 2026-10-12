@@ -112,7 +112,7 @@ describe("curves CLI", () => {
     const paar = ["--a", "2", "--b", "2", "--p", "17"];
     expect(run("compute", "double", ...paar, "--point", "5,1")).toMatchObject({
       code: 1,
-      stderr: "Invalid arguments at /point: must be JSON\n",
+      stderr: "Invalid arguments at --point: must be JSON\n",
     });
   });
 
