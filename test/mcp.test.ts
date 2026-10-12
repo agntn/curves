@@ -116,11 +116,8 @@ describe("curves MCP server", () => {
     ).toEqual({ operation: "log", order: "19", scalar: "13" });
     expect(await call({ operation: "points", limit: 2 })).toEqual({
       operation: "points",
-      total: "18",
-      points: [
-        { x: "0", y: "6" },
-        { x: "0", y: "11" },
-      ],
+      total: "19",
+      points: ["infinity", { x: "0", y: "6" }],
       truncated: true,
     });
   });
@@ -347,6 +344,27 @@ describe("curve executors", () => {
 
     expect(result.details).toEqual({ operation: "count", count: "19" });
     expect(JSON.parse(result.content[0]?.text ?? "")).toEqual(result.details);
+  });
+
+  it("list infinity with the points, so order 1 has its point and total matches count", () => {
+    const count = computeCurve({ operation: "count", ...paar }).details;
+    const all = computeCurve({ operation: "points", ...paar }).details;
+
+    expect(count).toEqual({ operation: "count", count: "19" });
+    expect(all).toMatchObject({ total: "19", truncated: false });
+    expect(all.operation === "points" && all.points[0]).toBe("infinity");
+    expect(computeCurve({ operation: "points", ...paar, order: "1" }).details).toEqual({
+      operation: "points",
+      total: "1",
+      points: ["infinity"],
+      truncated: false,
+    });
+    expect(computeCurve({ operation: "points", ...paar, order: "19", limit: 1 }).details).toEqual({
+      operation: "points",
+      total: "18",
+      points: [{ x: "0", y: "6" }],
+      truncated: true,
+    });
   });
 
   it("take a blank optional argument as none, as OMP sends it", () => {

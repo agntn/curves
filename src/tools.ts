@@ -108,7 +108,7 @@ export const computeSchema = Type.Object(
     operation: Type.String({
       enum: [...CURVE_OPERATIONS],
       description:
-        "add takes point and other, double, negate and order take point, multiply takes point and scalar, lift takes x and lists the points above it, check takes point and answers whether it lies on the curve, count counts the points, points lists them, log takes point as the base and other as the target",
+        "add takes point and other, double, negate and order take point, multiply takes point and scalar, lift takes x and lists the points above it, check takes point and answers whether it lies on the curve, count counts the points, points lists them with infinity first, log takes point as the base and other as the target",
     }),
     a: curveInteger("a in y^2 = x^3 + ax + b, reduced mod p, so -3 works"),
     b: curveInteger("b in y^2 = x^3 + ax + b, reduced mod p"),
@@ -147,7 +147,7 @@ export const computeTool = defineTool({
     "add takes point and other; double, negate, check and order take point",
     "multiply takes point and scalar, any integer",
     "lift takes x and lists the points with that x, smaller y first, none when x has no point; pick the y a compressed point's parity asks for",
-    "count gives the group order with infinity; points lists by x then y, optionally of one order",
+    "count gives the group order with infinity; points lists infinity, then by x then y, optionally of one order, and its total counts infinity too",
     "log takes point as the base and other as the target, and answers scalar null when there is no k",
   ],
   effect: "read",

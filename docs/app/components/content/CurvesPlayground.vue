@@ -57,7 +57,7 @@ const OPERATIONS: readonly Operation[] = [
   { key: "compute:check", tool: "curves_compute", op: "check", takes: ["point"], about: "Whether a point lies on the curve." },
   { key: "compute:order", tool: "curves_compute", op: "order", takes: ["point"], about: "The smallest n with n times the point at infinity." },
   { key: "compute:count", tool: "curves_compute", op: "count", takes: [], about: "How many points the curve has, infinity included." },
-  { key: "compute:points", tool: "curves_compute", op: "points", takes: ["order", "limit"], about: "The points by x then y, optionally only those of one order." },
+  { key: "compute:points", tool: "curves_compute", op: "points", takes: ["order", "limit"], about: "Infinity, then the points by x then y, optionally only those of one order." },
   { key: "compute:log", tool: "curves_compute", op: "log", takes: ["point", "other"], about: "The smallest k with k times the base equal to the target." },
   { key: "secp256k1:add", tool: "curves_secp256k1_compute", op: "add", takes: ["point", "other", "compressed"], about: "The sum of two secp256k1 points." },
   { key: "secp256k1:subtract", tool: "curves_secp256k1_compute", op: "subtract", takes: ["point", "other", "compressed"], about: "The offset between two known points." },
