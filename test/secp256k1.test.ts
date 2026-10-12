@@ -38,6 +38,7 @@ const {
 } = secp256k1Vectors;
 const infinity = "The result is the point at infinity";
 const invalidPoint = "Invalid SEC1 secp256k1 public key";
+const uncompressed = { compressed: false };
 const order = BigInt(`0x${orderMinusOne}`) + 1n;
 const onePlusP = (curveVectors.secp256k1.p + 1n).toString(16);
 
@@ -83,6 +84,17 @@ describe("secp256k1 point math", () => {
       const x = point.x.toString(16).padStart(64, "0");
       const y = point.y.toString(16).padStart(64, "0");
       expect(multiplyGenerator(scalar, { compressed: false })).toBe(`04${x}${y}`);
+    }
+  });
+
+  it("reads every entry of the generator table right", () => {
+    for (let row = 0n; row < 64n; row++) {
+      const base = multiplyPoint(g, 16n ** row, uncompressed);
+      let multiple = base;
+      for (let digit = 1n; digit < 16n; digit++) {
+        expect(multiplyGenerator(digit * 16n ** row, uncompressed)).toBe(multiple);
+        multiple = addPoints(multiple, base, uncompressed);
+      }
     }
   });
 
