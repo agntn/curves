@@ -7,12 +7,13 @@
  */
 
 import {
-  addPoints,
-  doublePoint,
+  add,
+  double,
   isOnCurve,
   liftX,
-  multiplyPoint,
-  negatePoint,
+  multiply,
+  negate,
+  onCurve,
   type AffinePoint,
   type CurvePoint,
   type WeierstrassCurve,
@@ -197,6 +198,25 @@ function curvePointArgument(
 }
 
 /**
+ * Read a point argument and refuse it by its own name when it's off the curve.
+ * @param curve - A checked curve
+ * @param args - Tool arguments
+ * @param operation - The operation, for the error
+ * @param name - point or other
+ * @returns {AffinePoint} A point of the curve
+ */
+function curvePointOn(
+  curve: Readonly<WeierstrassCurve>,
+  args: Readonly<Record<string, unknown>>,
+  operation: CurveOperation,
+  name: string,
+): AffinePoint {
+  const point = curvePointArgument(args, operation, name);
+  onCurve(curve, point, name);
+  return point;
+}
+
+/**
  * Write a point for the tool result.
  * @param point - A point, or null for infinity
  * @returns {CurvePointText} Decimal coordinates, or "infinity"
@@ -266,8 +286,8 @@ function findCurveLog(
   curve: Readonly<WeierstrassCurve>,
   args: Readonly<Record<string, unknown>>,
 ): CurveDetails {
-  const base = curvePointArgument(args, "log", "point");
-  const target = curvePointArgument(args, "log", "other");
+  const base = curvePointOn(curve, args, "log", "point");
+  const target = curvePointOn(curve, args, "log", "other");
   const { order, scalar } = findLog(curve, base, target);
   return {
     operation: "log",
@@ -286,26 +306,26 @@ const CURVE_COMPUTATIONS: Readonly<
   add: (curve, args) => ({
     operation: "add",
     point: curvePointText(
-      addPoints(
+      add(
         curve,
-        curvePointArgument(args, "add", "point"),
-        curvePointArgument(args, "add", "other"),
+        curvePointOn(curve, args, "add", "point"),
+        curvePointOn(curve, args, "add", "other"),
       ),
     ),
   }),
   double: (curve, args) => ({
     operation: "double",
-    point: curvePointText(doublePoint(curve, curvePointArgument(args, "double", "point"))),
+    point: curvePointText(double(curve, curvePointOn(curve, args, "double", "point"))),
   }),
   negate: (curve, args) => ({
     operation: "negate",
-    point: curvePointText(negatePoint(curve, curvePointArgument(args, "negate", "point"))),
+    point: curvePointText(negate(curve, curvePointOn(curve, args, "negate", "point"))),
   }),
   multiply: (curve, args) => {
-    const point = curvePointArgument(args, "multiply", "point");
+    const point = curvePointOn(curve, args, "multiply", "point");
     if (isUnset(args["scalar"])) throw new TypeError("multiply needs scalar");
     const scalar = curveInteger(args["scalar"], "scalar");
-    return { operation: "multiply", point: curvePointText(multiplyPoint(curve, point, scalar)) };
+    return { operation: "multiply", point: curvePointText(multiply(curve, point, scalar)) };
   },
   lift: (curve, args) => {
     if (isUnset(args["x"])) throw new TypeError("lift needs x");
@@ -318,7 +338,7 @@ const CURVE_COMPUTATIONS: Readonly<
   }),
   order: (curve, args) => ({
     operation: "order",
-    order: pointOrder(curve, curvePointArgument(args, "order", "point")).toString(),
+    order: pointOrder(curve, curvePointOn(curve, args, "order", "point")).toString(),
   }),
   count: (curve) => ({ operation: "count", count: countPoints(curve).toString() }),
   points: listCurvePoints,
@@ -355,6 +375,41 @@ const SECP256K1_ARGUMENTS: Readonly<Record<Secp256k1Operation, readonly string[]
 const SECP256K1_OPTIONAL = [...new Set(Object.values(SECP256K1_ARGUMENTS).flat())];
 
 /**
+ * Tell whether an argument is a SEC1 point of secp256k1, false for anything that isn't SEC1 hex.
+ * @param value - Raw argument
+ * @returns {boolean} Whether the point decodes
+ */
+function isSec1Point(value: unknown): boolean {
+  try {
+    return typeof value === "string" && secp256k1.isOnCurve(value);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Run a secp256k1 operation and turn its invalid point refusal into one that names the argument.
+ * @param args - Tool arguments
+ * @param names - The point arguments the operation reads
+ * @param run - The operation
+ * @returns {Value} What the operation returns
+ */
+function namingPoints<Value>(
+  args: Readonly<Record<string, unknown>>,
+  names: readonly string[],
+  run: () => Value,
+): Value {
+  try {
+    return run();
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== secp256k1.INVALID_POINT) throw error;
+    const name = names.find((candidate) => !isSec1Point(args[candidate]));
+    if (name === undefined) throw error;
+    throw new RangeError(`${name} is not a SEC1 point of secp256k1`, { cause: error });
+  }
+}
+
+/**
  * Add, subtract, negate or multiply public secp256k1 points, lift an x or check a point.
  * @param args - Tool arguments, the operation and the ones it takes
  * @returns {ToolResult<Secp256k1Details>} The resulting point, both lifted points or the verdict
@@ -377,14 +432,22 @@ export function computeSecp256k1(
   if (operation === "lift")
     return result({ operation, ...secp256k1.liftX(argument("x"), options) });
   if (operation === "negate") {
-    return result({ operation, point: secp256k1.negatePoint(argument("point"), options) });
+    const point = namingPoints(args, ["point"], () =>
+      secp256k1.negatePoint(argument("point"), options),
+    );
+    return result({ operation, point });
   }
   if (operation === "multiply") {
-    const point = secp256k1.multiplyPoint(argument("point"), argument("scalar"), options);
+    const point = namingPoints(args, ["point"], () =>
+      secp256k1.multiplyPoint(argument("point"), argument("scalar"), options),
+    );
     return result({ operation, point });
   }
   const compute = operation === "add" ? secp256k1.addPoints : secp256k1.subtractPoints;
-  return result({ operation, point: compute(argument("point"), argument("other"), options) });
+  const point = namingPoints(args, ["point", "other"], () =>
+    compute(argument("point"), argument("other"), options),
+  );
+  return result({ operation, point });
 }
 
 /** The arguments each sr25519 operation takes. */

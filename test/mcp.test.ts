@@ -175,6 +175,44 @@ describe("curves MCP server", () => {
     ).toContain("p must be a prime above 3");
   });
 
+  it("names the argument that holds a point off the curve", async () => {
+    const client = await connectTestClient();
+    const refusal = async (name: string, args: Readonly<Record<string, unknown>>) =>
+      failure(await client.callTool({ name, arguments: args }));
+    const base = { x: "5", y: "1" };
+    const offCurve = { x: "5", y: "2" };
+    const notOnSecp256k1 = `02${"00".repeat(32)}`;
+
+    expect(
+      await refusal("curves_compute", { ...paar, operation: "add", point: base, other: offCurve }),
+    ).toContain("other is not on the curve");
+    expect(
+      await refusal("curves_compute", { ...paar, operation: "log", point: offCurve, other: base }),
+    ).toContain("point is not on the curve");
+    expect(
+      await refusal("curves_secp256k1_compute", {
+        operation: "add",
+        point: g,
+        other: notOnSecp256k1,
+      }),
+    ).toContain("other is not a SEC1 point of secp256k1");
+    expect(
+      await refusal("curves_secp256k1_compute", {
+        operation: "subtract",
+        point: notOnSecp256k1,
+        other: g,
+      }),
+    ).toContain("point is not a SEC1 point of secp256k1");
+    expect(
+      answer(
+        await client.callTool({
+          name: "curves_compute",
+          arguments: { ...paar, operation: "check", point: offCurve },
+        }),
+      ),
+    ).toEqual({ operation: "check", onCurve: false });
+  });
+
   it("computes on secp256k1 with SEC1 points", async () => {
     const client = await connectTestClient();
     const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
