@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import oxfmt from "@agntn/ox/oxfmt";
 import oxlint from "@agntn/ox/oxlint";
 import { defineConfig } from "vite-plus";
@@ -38,11 +37,5 @@ export default defineConfig({
       ],
     },
     ignorePatterns: ["docs"],
-  },
-  test: {
-    alias: {
-      /** The docs site imports the MCP module by the package name, as its alias in nuxt.config.ts does. */
-      "@agntn/curves/mcp": fileURLToPath(new URL("src/mcp.ts", import.meta.url)),
-    },
   },
 });

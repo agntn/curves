@@ -9,8 +9,6 @@ export default defineNuxtConfig({
   /** The repo root is its own pnpm workspace; Nuxt must not treat it as this site's. */
   workspaceDir: import.meta.dirname,
   alias: {
-    /** The tool listings and the executor `curves mcp` serves, for the MCP server at /mcp. */
-    "@agntn/curves/mcp": resolve(librarySource, "mcp.ts"),
     "@agntn/curves/secp256k1": resolve(librarySource, "secp256k1.ts"),
     "@agntn/curves/sr25519": resolve(librarySource, "sr25519.ts"),
     "@agntn/curves": resolve(librarySource, "index.ts"),
@@ -23,7 +21,7 @@ export default defineNuxtConfig({
     build: { target: "es2024" },
     resolve: {
       /** `../src` imports them; Vite would look for them from the repo root upward. */
-      dedupe: ["@agntn/hashes", "@agntn/tools", "@modelcontextprotocol/server"],
+      dedupe: ["@agntn/hashes", "@agntn/tools"],
     },
     /** sr25519 hashes its seeds with SHA-512 from `@agntn/hashes`, in the playground too. */
     optimizeDeps: { include: ["@agntn/hashes/sha2"] },

@@ -16,7 +16,7 @@ const changed = import.meta.url.endsWith(".ts")
   ? sourceChangeCheck(import.meta.dirname)
   : undefined;
 
-/** The `tools/list` entries shared by `curves mcp` and the MCP server of the docs site. */
+/** The `tools/list` entries `curves mcp` answers with. */
 export const toolListings: readonly Tool[] = listTools(curvesTools);
 
 /** What a host running the tools for someone else can add to a call. */

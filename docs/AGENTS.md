@@ -7,7 +7,7 @@ Docus site for `@agntn/curves` at curves.agntn.dev. Markdown lives in `content/`
 ```
 docs/
 ├── DESIGN.md                      # the instruments this site owns and where it departs from the agntn design system
-├── nuxt.config.ts                 # extends: ['docus'], cloudflare_module preset (Workers), @agntn/curves, its /secp256k1, /sr25519 and /mcp, #tool-operations and #tool-contract aliased to ../src
+├── nuxt.config.ts                 # extends: ['docus'], cloudflare_module preset (Workers), @agntn/curves, its /secp256k1 and /sr25519, #tool-operations and #tool-contract aliased to ../src
 ├── shiki-theme.ts                 # code block theme, every colour a --shiki-token-* variable from app.css
 ├── app/app.config.ts              # title, github, theme, the Nuxt UI variants in the instrument grammar
 ├── app/app.css                    # theme tokens, the shared `console-*` and `hero-*` grammar, `curves-*` classes
@@ -19,9 +19,7 @@ docs/
 ├── app/utils/                     # curves (the landing's curves, computed by the library), secp (the secp256k1 samples), sr25519 (the playground's dev keys), contract (counts and limits), tools (the executors), tokens, formatting
 ├── app/pages/playground.vue       # playground, own route outside the docs layout, its own useSeo and OG image
 ├── server/routes/sitemap.xml.ts   # Docus sitemap plus the Vue pages it cannot see
-├── server/mcp/index.ts            # the Docus MCP handler at /mcp, introduced like `curves mcp` by `src/server-info.ts`
-├── server/mcp/tools/              # one file per tool, each `curvesMcpTool("<name>")`
-├── server/utils/curves-mcp.ts     # a tool from `@agntn/curves/mcp` for the toolkit
+├── server/mcp/index.ts            # the Docus MCP handler at /mcp: the page tools, then every curve tool through `toToolkitTools`, introduced like `curves mcp` by `src/server-info.ts`
 ├── public/                        # fonts, favicon.svg and the icons and manifest cut from it
 ├── content/index.md               # landing
 ├── content/1.guide/               # getting started, CLI, agents, playground
@@ -52,11 +50,9 @@ Two resolution traps, both because the repo root is its own pnpm workspace:
 
 ## MCP
 
-`@agntn/curves/mcp` is one more alias, for `../src/mcp.ts`. Its `toolListings` and `callTool` come from `listTools` and `callTool` of `@agntn/tools/mcp`. A file in `server/mcp/tools/` names one tool and nothing else: `curvesMcpTool()` takes the name, prose, schema and annotations from `toolListings` and runs `callTool()` from there, so a tool changed in `src/` changes here without an edit. A new tool in `src/tools.ts` needs one more file here, and `test/docs-mcp.test.ts` fails until it has one.
+`server/mcp/index.ts` imports `src/tools.ts` and `src/server-info.ts` by path and hands `curvesTools` to `toToolkitTools` from `@agntn/tools/toolkit`. A tool added to `src/tools.ts` shows up here without an edit. `tools` is a function that puts them after `getMcpTools({ event })`: an array would replace the toolkit's own pool and quietly take `list-pages` and `get-page` with it. `@nuxtjs/mcp-toolkit` wants Zod, so the adapter hands it a `z.looseObject({})` whose `toJSONSchema` returns the tool's own schema: `tools/list` shows what `curves mcp` lists, Zod waves any object through, and `@agntn/tools` turns a bad one down in the library's words, sanitized. A call with no `arguments` at all reads as `{}`, the way stdio does. Progress would need `mcp: { sessions: { enabled: true } }`, and no curve tool reports any, so the handler stays stateless. `test/docs-mcp.test.ts` loads the handler and holds its listing and every answer to `curves mcp` through the SDK copy in `docs/node_modules`, with Zod and the adapter from there, so every workflow that lints, typechecks or tests installs `docs/` too. `test/tsconfig.json` points `@agntn/tools/toolkit` at the root's copy, so `tsc` sees one `ToolDefinition`, as `vite.resolve.dedupe` leaves one in the build.
 
-`@nuxtjs/mcp-toolkit` wants Zod and validates with it before the handler runs. A Zod error echoes the client's keys as they came and reads differently from `curves mcp`. So the Zod schema is `z.looseObject({})`, which passes any object, and its `_zod.toJSONSchema` hook returns the wire schema from `toolListings`, so `tools/list` still shows the real one. `callTool` then checks the arguments the way stdio does. A call with no `arguments` at all reaches Zod as `undefined`, so the schema's `run` reads it as `{}` first. `test/docs-mcp.test.ts` calls the tools through the SDK copy in `docs/node_modules` with Zod and the toolkit from there, so every workflow that lints, typechecks or tests installs `docs/` too.
-
-`src/mcp.ts` imports `@agntn/tools` and `@modelcontextprotocol/server`. Both are dependencies here, pinned to the root's versions and listed in `vite.resolve.dedupe`. They run on the worker only, so they stay out of `optimizeDeps`. On the `cloudflare_module` preset the toolkit hands its server to `createMcpHandler` from `agents`, which tells an SDK v1 server apart with `instanceof`. `nitro.alias` points every import of the SDK at the copy in `docs/node_modules`, so the toolkit and `agents` share one.
+`src/tools.ts` imports `@agntn/tools`, a dependency here pinned to the root's version and listed in `vite.resolve.dedupe`, so the build keeps one copy. `zod` stays for the adapter. Both run on the worker only, so they stay out of `optimizeDeps`. On the `cloudflare_module` preset the toolkit hands its server to `createMcpHandler` from `agents`, which tells an SDK v1 server apart with `instanceof`. `nitro.alias` points every import of the SDK at the copy in `docs/node_modules`, so the toolkit and `agents` share one.
 
 The worker computes whatever an MCP client sends it and keeps none of it. The work is bounded by the library's limits: the slowest call, a log for a base of prime order near 2^36, takes about 0.6 s. Workers Logs record the invocation, not the body; keep it that way, no `console` call with tool arguments.
 
