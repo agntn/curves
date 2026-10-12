@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import * as ed25519 from "../src/ed25519.ts";
 import * as root from "../src/index.ts";
 import * as ristretto255 from "../src/ristretto255.ts";
 import * as secp256k1 from "../src/secp256k1.ts";
@@ -48,6 +49,22 @@ describe("@agntn/curves", () => {
       "secp256k1",
       "subtractPoints",
       "subtractScalars",
+    ]);
+  });
+
+  it("keeps ed25519 in its own entry", () => {
+    expect(Object.keys(ed25519).toSorted()).toEqual([
+      "INVALID_POINT",
+      "addPoints",
+      "ed25519",
+      "isIdentity",
+      "isTorsionFree",
+      "isValidPoint",
+      "multiplyGenerator",
+      "multiplyPoint",
+      "negatePoint",
+      "reduceScalar",
+      "subtractPoints",
     ]);
   });
 
