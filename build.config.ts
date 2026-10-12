@@ -15,6 +15,8 @@ export default defineBuildConfig({
         "./src/mcp.ts",
         "./src/tools.ts",
       ],
+      /** No maps. remove-comments throws the JS ones off, the type ones want an unshipped src/. */
+      dts: { sourcemap: false },
     },
   ],
 });

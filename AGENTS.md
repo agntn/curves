@@ -37,13 +37,14 @@ Keep AGENTS.md updated with project status.
 - `src/mcp.ts` exports `toolListings` and `callTool` over `listTools` and `callTool` from `@agntn/tools/mcp` (0.2.2), and `createMcpServer` serves under `serverInfo` from `src/server-info.ts`: the name, version, description and icons the site's `/mcp` shows too; the docs site serves every tool at `/mcp` through them, and `test/docs-mcp.test.ts` holds the site's answers to the stdio server's. That test imports from `docs/node_modules`, so every workflow installs `docs/` too, and `vite.config.ts` aliases `@agntn/curves/mcp` to `src/mcp.ts` for it.
 - `pnpm-workspace.yaml` exempts `@agntn/*` from `minimumReleaseAge`. A clean frozen install rejects a lockfile entry younger than a day, so CI failed for a day after every sibling release. The scope pattern also covers the next package and version, which an exact entry does not.
 - The toolchain runs on Vite+ 1.0 for lint, fmt and test, and CI installs through `voidzero-dev/setup-vp`. The build went back to obuild, like `@agntn/puzzles`, `@agntn/keys` and `@agntn/hashes`: the same `dist/` files and exports as `vp pack`, with less JS.
+- `dist/` ships no source maps (`dts: { sourcemap: false }`, #16). obuild's `remove-comments` rewrites every chunk without its map, so a stack trace from `_chunks/field.mjs` blamed an innocent `return result;` in `src/core/field.ts`. The declaration maps pointed at a `src/` the tarball never carried. A wrong map is worse than none. Without them the tarball went from 270.4 to 108.8 kB unpacked, and `test/release.test.ts` fails once a map or a `sourceMappingURL` comes back.
 
 ## Stack
 
 - **Runtime**: Node.js >= 26
 - **Language**: TypeScript (strict)
 - **Toolchain**: Vite+ (`vp`), one `vite.config.ts` for test, lint and fmt
-- **Build**: obuild from `build.config.ts`, one bundle for all eight entries, chunks under `dist/_chunks/` with stable names
+- **Build**: obuild from `build.config.ts`, one bundle for all eight entries, chunks under `dist/_chunks/` with stable names, no source maps
 - **Test**: `vp test` (bundled Vitest, API from `vite-plus/test`)
 - **Lint**: `vp lint` + `vp fmt` (Oxlint + Oxfmt) through `@agntn/ox`
 - **Typecheck**: tsc (native TypeScript 7)

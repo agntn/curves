@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, globSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vite-plus/test";
@@ -30,5 +30,14 @@ describe("a release", () => {
     expect(refs.map((match) => match[1])).toEqual([
       "${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}",
     ]);
+  });
+
+  /** obuild's remove-comments leaves every map pointing at the wrong line, worse than no map. */
+  it.skipIf(!existsSync(join(root, "dist")))("ships no source maps", () => {
+    const pointers = globSync("dist/**/*.{mjs,d.mts}", { cwd: root }).filter((file) =>
+      read(file).includes("sourceMappingURL"),
+    );
+
+    expect([...globSync("dist/**/*.map", { cwd: root }), ...pointers]).toEqual([]);
   });
 });
