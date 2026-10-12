@@ -147,7 +147,7 @@ export const computeTool = defineTool({
     "add takes point and other; double, negate, check and order take point",
     "multiply takes point and scalar, any integer",
     "lift takes x and lists the points with that x, smaller y first, none when x has no point; pick the y a compressed point's parity asks for",
-    "count gives the group order with infinity; points lists infinity, then by x then y, optionally of one order, and its total counts infinity too",
+    "count gives the group order with infinity; points lists infinity, then by x then y, and its total matches count; with order it lists just that order, infinity only for 1",
     "log takes point as the base and other as the target, and answers scalar null when there is no k",
   ],
   effect: "read",
