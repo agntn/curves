@@ -255,6 +255,25 @@ function sampleOfOrder(curve: Readonly<WeierstrassCurve>, order: bigint): PointS
 }
 
 /**
+ * Put infinity, the one point of order 1, ahead of the finite points when the order lets it in.
+ * @param sample - Finite points and their count
+ * @param order - The order asked for, or undefined for every point
+ * @param limit - Most points to write
+ * @returns {{ points: CurvePointText[]; total: bigint }} Up to limit points and how many there are
+ */
+function sampleText(
+  sample: Readonly<{ points: readonly Readonly<AffinePoint>[]; total: bigint }>,
+  order: bigint | undefined,
+  limit: number,
+): { points: CurvePointText[]; total: bigint } {
+  if (order !== undefined && order !== 1n) {
+    return { points: sample.points.slice(0, limit).map(curvePointText), total: sample.total };
+  }
+  const points = sample.points.slice(0, limit - 1).map(curvePointText);
+  return { points: ["infinity", ...points], total: sample.total + 1n };
+}
+
+/**
  * List points, at most the limit of them, and say how many there are.
  * @param curve - A checked curve
  * @param args - Tool arguments
@@ -266,12 +285,15 @@ function listCurvePoints(
 ): CurveDetails {
   const order = isUnset(args["order"]) ? undefined : curveInteger(args["order"], "order");
   const limit = pointLimit(args["limit"]);
-  const { points, total } =
-    order === undefined ? samplePoints(curve, limit) : sampleOfOrder(curve, order);
+  const { points, total } = sampleText(
+    order === undefined ? samplePoints(curve, limit) : sampleOfOrder(curve, order),
+    order,
+    limit,
+  );
   return {
     operation: "points",
     total: total.toString(),
-    points: points.slice(0, limit).map(curvePointText),
+    points,
     truncated: total > BigInt(limit),
   };
 }
