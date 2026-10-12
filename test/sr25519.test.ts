@@ -9,7 +9,6 @@ import {
   getPublicKey,
   INVALID_PUBLIC_KEY,
   sign,
-  SIGNING_CONTEXT,
   verify,
 } from "../src/sr25519.ts";
 import { devAccounts, merlinVector, scureVectors } from "./fixtures/sr25519.ts";
@@ -103,7 +102,7 @@ describe("sr25519 signatures", () => {
     expect(verify(signature, message.subarray(1), publicKey)).toBe(false);
     expect(verify(signature, message, devAccounts.alice)).toBe(false);
     expect(verify(signature, message, publicKey, { context: "polkadot" })).toBe(false);
-    expect(verify(signature, message, publicKey, { context: SIGNING_CONTEXT })).toBe(true);
+    expect(verify(signature, message, publicKey, { context: "substrate" })).toBe(true);
   });
 
   it("sign and verify under a context of the caller's", () => {

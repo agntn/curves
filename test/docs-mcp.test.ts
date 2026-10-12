@@ -5,7 +5,9 @@ import { InMemoryTransport as SiteTransport } from "../docs/node_modules/@modelc
 import { McpServer } from "../docs/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js";
 import type { CallToolResult } from "../docs/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { callTool, createMcpServer, toolListings } from "../src/mcp.ts";
+import { createMcpServer, toolListings } from "../src/mcp.ts";
+import { devAccounts } from "./fixtures/sr25519.ts";
+import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
 /* The toolkit's entry pulls in Nitro, and `defineMcpTool` only hands its input back. */
 vi.mock(
@@ -44,11 +46,11 @@ async function siteClient(): Promise<SiteClient> {
   return client;
 }
 
-const G = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+const { g } = secp256k1Vectors;
+const { seed } = devAccounts;
 const paar = { a: "2", b: "2", p: "17" };
-const SEED = "fac7959dbfe72f052e5a0c3c8d6530f202b02fd8f9f5ca3580ec8deb7797479e";
 
-/** Calls that cover a plain answer, a refusal of the library, a schema miss and an unknown tool. */
+/** Calls that cover a plain answer, a refusal of the library and a schema miss. */
 const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
   [
     "curves_compute",
@@ -56,11 +58,10 @@ const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
   ],
   ["curves_compute", { ...paar, operation: "double", point: { x: "5", y: "2" } }],
   ["curves_compute", { ...paar, operation: "count", scalre: "3" }],
-  ["curves_secp256k1_compute", { operation: "lift", x: G.slice(2) }],
-  ["curves_secp256k1_compute", { operation: "subtract", point: G, other: G }],
-  ["curves_sr25519_compute", { operation: "keypair", seed: SEED }],
-  ["curves_sr25519_compute", { operation: "derive", publicKey: SEED, chainCode: SEED, hard: true }],
-  ["curves_nope", {}],
+  ["curves_secp256k1_compute", { operation: "lift", x: g.slice(2) }],
+  ["curves_secp256k1_compute", { operation: "subtract", point: g, other: g }],
+  ["curves_sr25519_compute", { operation: "keypair", seed }],
+  ["curves_sr25519_compute", { operation: "derive", publicKey: seed, chainCode: seed, hard: true }],
 ];
 
 describe("docs MCP tools", () => {
@@ -77,30 +78,22 @@ describe("docs MCP tools", () => {
     }
   });
 
-  it("lists and answers exactly as the stdio server does", async () => {
+  it("answer like stdio, built from what stdio lists, bare calls too", async () => {
+    const site = await siteClient();
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = createMcpServer();
-    const client = new Client({ name: "curves-docs-test", version: "1.0.0" });
-    openConnections.push(client, server);
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const stdio = new Client({ name: "curves-docs-test", version: "1.0.0" });
+    openConnections.push(stdio, server);
+    await Promise.all([server.connect(serverTransport), stdio.connect(clientTransport)]);
 
-    const { tools } = await client.listTools();
-    expect(toolListings).toEqual(tools);
+    expect((await stdio.listTools()).tools).toEqual(toolListings);
     for (const [name, args] of CALLS) {
-      const viaServer = await client.callTool({ name, arguments: args });
-      expect(await callTool(name, args), name).toEqual(viaServer);
-    }
-  });
-
-  it("answers through the site's tools as stdio does, a call without arguments included", async () => {
-    const client = await siteClient();
-    for (const [name, args] of CALLS.filter(([name]) => name !== "curves_nope")) {
-      expect(await client.callTool({ name, arguments: args }), name).toEqual(
-        await callTool(name, args),
+      expect(await site.callTool({ name, arguments: args }), name).toEqual(
+        await stdio.callTool({ name, arguments: args }),
       );
     }
-    const bare = await client.callTool({ name: "curves_compute" });
+    const bare = await site.callTool({ name: "curves_compute" });
     expect(bare.isError).toBe(true);
-    expect(bare.content).toEqual((await callTool("curves_compute", {})).content);
+    expect(bare).toEqual(await stdio.callTool({ name: "curves_compute" }));
   });
 });

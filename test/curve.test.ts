@@ -12,9 +12,6 @@ import {
   multiplyPoint,
   negatePoint,
   pointOrder,
-  MAX_COUNTED_PRIME,
-  MAX_FILTERED_PRIME,
-  MAX_ORDER_PRIME,
   type AffinePoint,
   type CurvePoint,
 } from "../src/index.ts";
@@ -299,9 +296,8 @@ describe("Curve group", () => {
     expect(discreteLog(wide, point, multiplyPoint(wide, point, wideScalar))).toBe(wideScalar);
     const primeOrder = { x: 6n, y: 6770422436n };
     const lonely = defineCurve({ a: 2n, b: 2n, p: 1099511627563n });
-    expect(isPrime(pointOrder(lonely, primeOrder))).toBe(true);
     expect(() => discreteLog(lonely, primeOrder, primeOrder)).toThrow(
-      "the prime factor 1099512267719, above the",
+      "order 1099512267719 with the prime factor 1099512267719, above the 68719476736",
     );
     const narrow = defineCurve({ a: 2n, b: 3n, p: 4294967291n });
     const generator = { x: 2n, y: 1005604009n };
@@ -310,20 +306,16 @@ describe("Curve group", () => {
   });
 
   it("refuses fields and orders past the limits instead of running for ever", () => {
-    const large = defineCurve({ a: 2n, b: 3n, p: 1048583n });
-    expect(large.p > MAX_COUNTED_PRIME).toBe(true);
-    expect(() => countPoints(large)).toThrow(`takes p up to ${MAX_COUNTED_PRIME}`);
-    const filtered = defineCurve({ a: 2n, b: 3n, p: 65537n });
-    expect(filtered.p > MAX_FILTERED_PRIME).toBe(true);
-    expect(() => listPoints(filtered, { order: 2n })).toThrow(
-      `takes p up to ${MAX_FILTERED_PRIME}`,
+    expect(() => countPoints(defineCurve({ a: 2n, b: 3n, p: 1048583n }))).toThrow(
+      "Counting and listing points takes p up to 1048576",
+    );
+    expect(() => listPoints(defineCurve({ a: 2n, b: 3n, p: 65537n }), { order: 2n })).toThrow(
+      "Listing the points of one order takes p up to 65536",
     );
     const curve = defineCurve(secp256k1);
-    expect(curve.p > MAX_ORDER_PRIME).toBe(true);
-    expect(() => pointOrder(curve, secp256k1.g)).toThrow(`takes p up to ${MAX_ORDER_PRIME}`);
-    expect(() => discreteLog(curve, secp256k1.g, secp256k1.threeG)).toThrow(
-      `takes p up to ${MAX_ORDER_PRIME}`,
-    );
+    const orderLimit = "The order of a point takes p up to 281474976710656";
+    expect(() => pointOrder(curve, secp256k1.g)).toThrow(orderLimit);
+    expect(() => discreteLog(curve, secp256k1.g, secp256k1.threeG)).toThrow(orderLimit);
     expect(() => listPoints(paarCurve, { order: 0n })).toThrow("1 or more");
   });
 });

@@ -88,6 +88,14 @@ export const secp256k1Vectors = {
   inverseOfTwo: "7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a1",
   /** No point of the curve has x = 5. */
   xWithoutPoint: "0000000000000000000000000000000000000000000000000000000000000005",
+  /** x = 1, so x + p still fits 32 bytes and only the range check can refuse it. */
+  xOne:
+    "040000000000000000000000000000000000000000000000000000000000000001" +
+    "4218f20ae6c646b363db68605822fb14264ca8d2587fdd6fbc750d587e76a7ee",
+  /** y = 1, the same trick for y. @noble/curves 2.4.0 takes both points. */
+  yOne:
+    "041fe1e5ef3fceb5c135ab7741333ce5a6e80d68167653f6b2b24bcbcfaaaff507" +
+    "0000000000000000000000000000000000000000000000000000000000000001",
 } as const;
 
 /**

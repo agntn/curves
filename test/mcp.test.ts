@@ -3,7 +3,6 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createMcpServer } from "../src/mcp.ts";
 import { serverInfo } from "../src/server-info.ts";
-import { getPublicKey } from "../src/sr25519.ts";
 import { computeCurve, computeSecp256k1, computeSr25519 } from "../src/tool-operations.ts";
 import { devAccounts, scureVectors } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
@@ -233,7 +232,7 @@ describe("curves MCP server", () => {
       operation: "derive",
       hard: true,
       secret: scureVectors.hard,
-      publicKey: getPublicKey(scureVectors.hard),
+      publicKey: scureVectors.hardPublic,
     });
     expect(
       failure(
