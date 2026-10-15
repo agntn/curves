@@ -32,8 +32,8 @@
   },
   "files": [
     "dist",
-    "packages/omp/extensions",
-    "packages/pi/extensions"
+    "extensions/omp",
+    "extensions/pi"
   ],
   "type": "module",
   "sideEffects": false,
@@ -123,12 +123,12 @@
   "packageManager": "pnpm@11.22.0",
   "omp": {
     "extensions": [
-      "./packages/omp/extensions/curves.ts"
+      "./extensions/omp/curves.ts"
     ]
   },
   "pi": {
     "extensions": [
-      "./packages/pi/extensions/curves.ts"
+      "./extensions/pi/curves.ts"
     ]
   }
 }

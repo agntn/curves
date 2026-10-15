@@ -7,9 +7,7 @@ import { computeTool, secp256k1ComputeTool, sr25519ComputeTool } from "../src/to
 import { loadPiExtension } from "./fixtures/pi-host.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
-const extensionPath = fileURLToPath(
-  new URL("../packages/pi/extensions/curves.ts", import.meta.url),
-);
+const extensionPath = fileURLToPath(new URL("../extensions/pi/curves.ts", import.meta.url));
 
 describe("pi curves extension", () => {
   it("registers every tool with the shared schemas and nothing else", async () => {

@@ -4,12 +4,12 @@ import { fileURLToPath } from "node:url";
 import { registerOmpTools, type OmpResultView } from "@agntn/tools/omp";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 
-import type * as CurvesTools from "../../../dist/tools.d.mts";
+import type * as CurvesTools from "../../dist/tools.d.mts";
 
 /** Longest argument on the status line, cut before `sanitizeLine`, which is slow on long escapes. */
 const PREVIEW_LENGTH = 100;
 
-const sourceModulePath = fileURLToPath(new URL("../../../src/tools.ts", import.meta.url));
+const sourceModulePath = fileURLToPath(new URL("../../src/tools.ts", import.meta.url));
 
 /**
  * Both specifiers stay literal: compiled OMP resolves bare imports only where it sees them.
@@ -18,9 +18,7 @@ const sourceModulePath = fileURLToPath(new URL("../../../src/tools.ts", import.m
  */
 function loadTools(): Promise<typeof CurvesTools> {
   return (
-    existsSync(sourceModulePath)
-      ? import("../../../src/tools.ts")
-      : import("../../../dist/tools.mjs")
+    existsSync(sourceModulePath) ? import("../../src/tools.ts") : import("../../dist/tools.mjs")
   ) as Promise<typeof CurvesTools>;
 }
 
