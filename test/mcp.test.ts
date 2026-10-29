@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createMcpServer } from "../src/mcp.ts";
 import { serverInfo } from "../src/server-info.ts";
 import { computeCurve, computeSecp256k1, computeSr25519 } from "../src/tool-operations.ts";
+import { highS, nobleSignatures } from "./fixtures/ecdsa.ts";
 import { devAccounts, keyringPairs, scureVectors, subkeySeeds } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
@@ -54,6 +55,8 @@ function failure(response: unknown): string {
 
 const paar = { a: "2", b: "2", p: "17" };
 const { g, twoG, threeG, minusG } = secp256k1Vectors;
+const [signed] = nobleSignatures;
+if (signed === undefined) throw new Error("The noble fixture lost its first signature");
 
 describe("curves MCP server", () => {
   it("introduces itself with a description and icons the site serves", async () => {
@@ -236,6 +239,39 @@ describe("curves MCP server", () => {
         }),
       ),
     ).toContain("point at infinity");
+  });
+
+  it("verifies an ECDSA signature on secp256k1 and recovers the key behind it", async () => {
+    const client = await connectTestClient();
+    const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+      answer(await client.callTool({ name: "curves_secp256k1_compute", arguments: args }));
+    const refused = async (args: Readonly<Record<string, unknown>>): Promise<string> =>
+      failure(await client.callTool({ name: "curves_secp256k1_compute", arguments: args }));
+    const { digest, signature, recovery, publicKey } = signed;
+
+    expect(await call({ operation: "verify", point: publicKey, digest, signature })).toEqual({
+      operation: "verify",
+      valid: true,
+    });
+    const high = { operation: "verify", point: publicKey, digest, signature: highS.signature };
+    expect(await call(high)).toEqual({ operation: "verify", valid: true });
+    expect(await call({ ...high, lowS: true })).toEqual({ operation: "verify", valid: false });
+    expect(await call({ operation: "recover", digest, signature, recovery })).toEqual({
+      operation: "recover",
+      point: publicKey,
+    });
+    expect(await refused({ operation: "recover", digest, signature })).toContain(
+      "recover needs recovery, from 0 to 3",
+    );
+    expect(await refused({ operation: "recover", digest, signature, recovery: 4 })).toContain(
+      "Invalid arguments at /recovery",
+    );
+    expect(
+      await refused({ operation: "verify", point: publicKey, digest, signature, recovery }),
+    ).toContain("verify does not take recovery");
+    expect(
+      await refused({ operation: "verify", point: `02${"00".repeat(32)}`, digest, signature }),
+    ).toContain("point is not a SEC1 point of secp256k1");
   });
 
   it("makes, signs with and derives sr25519 keys", async () => {

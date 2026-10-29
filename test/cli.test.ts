@@ -17,6 +17,10 @@ import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { describe, expect, it } from "vite-plus/test";
 import pkg from "../package.json" with { type: "json" };
 import { serverInfo } from "../src/server-info.ts";
+import { highS, nobleSignatures } from "./fixtures/ecdsa.ts";
+
+const [signed] = nobleSignatures;
+if (signed === undefined) throw new Error("The noble fixture lost its first signature");
 
 const switches = new Set([
   "CI",
@@ -82,6 +86,27 @@ describe("curves CLI", () => {
       point:
         "0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798" +
         "b7c52588d95c3b9aa25b0403f1eef75702e84bb7597aabe663b82f6f04ef2777",
+    });
+  });
+
+  it("verifies an ECDSA signature and recovers its key from flags", () => {
+    const { digest, signature, recovery, publicKey } = signed;
+    const signedDigest = ["--digest", digest, "--signature", signature];
+    expect(run("secp256k1", "verify", "--point", publicKey, ...signedDigest)).toMatchObject({
+      code: 0,
+      stdout: '{"operation":"verify","valid":true}\n',
+    });
+    const high = ["--point", publicKey, "--digest", digest, "--signature", highS.signature];
+    expect(run("secp256k1", "verify", ...high, "--low-s")).toMatchObject({
+      code: 0,
+      stdout: '{"operation":"verify","valid":false}\n',
+    });
+    expect(
+      run("secp256k1", "recover", ...signedDigest, "--recovery", String(recovery)),
+    ).toMatchObject({ code: 0, stdout: `{"operation":"recover","point":"${publicKey}"}\n` });
+    expect(run("secp256k1", "recover", ...signedDigest, "--recovery", "2")).toMatchObject({
+      code: 1,
+      stderr: "No point of secp256k1 has x = r + n, so recovery 2 fails\n",
     });
   });
 

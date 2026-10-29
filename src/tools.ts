@@ -13,6 +13,7 @@ import {
   CURVE_INTEGER_PATTERN,
   CURVE_OPERATIONS,
   DEFAULT_CURVE_POINTS_SHOWN,
+  DIGEST_PATTERN,
   MAX_COUNTED_PRIME,
   MAX_CURVE_INTEGER_LENGTH,
   MAX_CONTEXT_LENGTH,
@@ -166,9 +167,11 @@ export const secp256k1ComputeSchema = Type.Object(
     operation: Type.String({
       enum: [...SECP256K1_OPERATIONS],
       description:
-        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve",
+        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, verify takes point as the public key with digest and signature, recover takes digest, signature and recovery and gives the public key",
     }),
-    point: sec1Point("Every operation but lift, required there"),
+    point: sec1Point(
+      "Every operation but lift and recover, required there; the public key for verify",
+    ),
     other: sec1Point(
       "add and subtract only, required there: the point added to point or subtracted from it",
     ),
@@ -188,9 +191,40 @@ export const secp256k1ComputeSchema = Type.Object(
           "lift only, required there: x coordinate as 64 hex digits. The even point is the full key of a BIP340 x-only key",
       }),
     ),
+    signature: Type.Optional(
+      Type.String({
+        maxLength: 128,
+        pattern: "^(?:[0-9A-Fa-f]{128})?$",
+        description:
+          "verify and recover only, required there: the ECDSA signature as r then s, 128 hex digits without 0x. Unpack a DER signature first",
+      }),
+    ),
+    digest: Type.Optional(
+      Type.String({
+        maxLength: 128,
+        pattern: `^(?:${DIGEST_PATTERN})?$`,
+        description:
+          "verify and recover only, required there: the hash of the signed message, 1 to 64 bytes as hex without 0x. Hash the message first; past 32 bytes only the leftmost 256 bits count",
+      }),
+    ),
+    recovery: Type.Optional(
+      Type.Integer({
+        minimum: 0,
+        maximum: 3,
+        description:
+          "recover only, required there: the recovery id, from 0 to 3. Bit 0 is the parity of y of R, bit 1 is set when the x of R is r + n. Ethereum's v of 27 or 28 is 27 plus it",
+      }),
+    ),
+    lowS: Type.Optional(
+      Type.Boolean({
+        description:
+          "verify only: refuse s above n / 2, as Bitcoin's BIP 62 and BIP 146 do. Default: false, since SEC 1 takes either",
+      }),
+    ),
     compressed: Type.Optional(
       Type.Boolean({
-        description: "Output SEC1 encoding, for every operation but check. Default: true",
+        description:
+          "Output SEC1 encoding, for every operation but check and verify. Default: true",
       }),
     ),
   },
@@ -201,18 +235,21 @@ export const secp256k1ComputeTool = defineTool({
   name: "curves_secp256k1_compute",
   title: "Compute on secp256k1",
   description:
-    "Do curve math on public secp256k1 points: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. The scalar enters the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks or disposable keys.",
-  snippet: "Use for split key vanity addresses, offsets between known public keys and x-only keys.",
+    "Do curve math on public secp256k1 points: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Verify an ECDSA signature over a digest, or recover the public key behind one. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. The scalar enters the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks or disposable keys.",
+  snippet:
+    "Use for split key vanity addresses, offsets between known public keys, x-only keys, and the key behind an ECDSA signature.",
   guidelines: [
     "add and subtract take point and other; negate takes point",
     "multiply takes point and scalar, hex from 1 to n - 1",
     "lift takes x and returns the even and the odd point; the even one is the BIP340 key",
     "check takes point and answers onCurve true or false",
+    "verify takes point, digest and signature and answers valid true or false; lowS refuses a high s",
+    "recover takes digest, signature and recovery and returns the point; with the id unknown, try 0 to 3 and compare with the key you expect",
   ],
   effect: "read",
   cli: {
     command: "secp256k1",
-    description: "Point math on secp256k1 with SEC1 hex points",
+    description: "Point math on secp256k1 with SEC1 hex points, and ECDSA verify and recover",
     positional: ["operation"],
   },
   input: secp256k1ComputeSchema,

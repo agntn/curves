@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { invertScalar, multiplyGenerator } from "@agntn/curves/secp256k1";
 import type { CurvePointText, Sr25519Details } from "#tool-operations";
-import { SR25519_OPERATIONS } from "../../utils/contract";
 import { CURVES, pointArgument } from "../../utils/curves";
 import { shellArg } from "../../utils/format";
+import { BLOCK_170 } from "../../utils/secp";
 import { ALICE, ALICE_HELLO, ALICE_JUNCTION, DEV_SECRET, DEV_SEED, flipBit } from "../../utils/sr25519";
 import { jsonTokens, shellTokens } from "../../utils/tokens";
 import { runTool, type ToolDetails, type ToolName } from "../../utils/tools";
@@ -25,6 +25,9 @@ type Field =
   | "message"
   | "encoding"
   | "signature"
+  | "digest"
+  | "recovery"
+  | "lowS"
   | "chainCode"
   | "hard";
 
@@ -65,6 +68,8 @@ const OPERATIONS: readonly Operation[] = [
   { key: "secp256k1:multiply", tool: "curves_secp256k1_compute", op: "multiply", takes: ["point", "scalar", "compressed"], about: "A point times a scalar from 1 to n - 1. G times a private key is its public key." },
   { key: "secp256k1:lift", tool: "curves_secp256k1_compute", op: "lift", takes: ["x", "compressed"], about: "Both points above an x. The even one is what a BIP340 key stands for." },
   { key: "secp256k1:check", tool: "curves_secp256k1_compute", op: "check", takes: ["point"], about: "Whether a SEC1 point lies on secp256k1." },
+  { key: "secp256k1:verify", tool: "curves_secp256k1_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "Check whether a key signed a digest. G didn't. The block 170 chip loads Satoshi's key, which did." },
+  { key: "secp256k1:recover", tool: "curves_secp256k1_compute", op: "recover", takes: ["digest", "signature", "recovery", "compressed"], about: "Recover a verifying key from a digest, signature and id. For block 170, ids 0 and 1 both verify, but only 1 is Satoshi's." },
   { key: "sr25519:keypair", tool: "curves_sr25519_compute", op: "keypair", takes: ["source"], sources: ["seed", "secret"], about: "A 32-byte seed grows into a secret and a public key. A secret alone gives back its public key." },
   { key: "sr25519:sign", tool: "curves_sr25519_compute", op: "sign", takes: ["secret", "message", "encoding"], about: "Sign under the substrate context. Fresh randomness each time, so the bytes change and both still verify." },
   { key: "sr25519:verify", tool: "curves_sr25519_compute", op: "verify", takes: ["publicKey", "message", "encoding", "signature"], about: "Whether the key signed these bytes. A wrong signature is a plain false, not an error." },
@@ -74,6 +79,8 @@ const OPERATIONS: readonly Operation[] = [
 const G = multiplyGenerator("1");
 const TWO_G = multiplyGenerator("2");
 const HALF = invertScalar(2n);
+/** The ids `recover` takes: bit 0 is the parity of y of R, bit 1 says its x is r + n. */
+const RECOVERY_IDS = [0, 1, 2, 3] as const;
 
 const route = useRoute();
 const router = useRouter();
@@ -92,6 +99,12 @@ const secpPoint = ref(G);
 const secpOther = ref(TWO_G);
 const secpScalar = ref("3");
 const x = ref(G.slice(2));
+const secpDigest = ref<string>(BLOCK_170.digest);
+const secpSignature = ref<string>(BLOCK_170.signature);
+const recovery = ref<number>(BLOCK_170.recovery);
+const lowS = ref(false);
+/** The secp256k1 fields that are text, by the argument each one fills. */
+const SECP_FIELDS = { point: secpPoint, other: secpOther, scalar: secpScalar, x, digest: secpDigest, signature: secpSignature } as const;
 const uncompressed = ref(false);
 const seed = ref(DEV_SEED);
 const secret = ref(DEV_SECRET);
@@ -157,8 +170,12 @@ const toolArgs = computed(() => {
       if (uncompressed.value) args.compressed = false;
     } else if (field === "limit") {
       if (limit.value.trim() !== "") args.limit = Number(limit.value);
+    } else if (field === "recovery") {
+      args.recovery = recovery.value;
+    } else if (field === "lowS") {
+      if (lowS.value) args.lowS = true;
     } else if (secp.value) {
-      const value = { point: secpPoint, other: secpOther, scalar: secpScalar, x }[field as "point" | "other" | "scalar" | "x"].value.trim();
+      const value = SECP_FIELDS[field as keyof typeof SECP_FIELDS].value.trim();
       if (value !== "") args[field] = value;
     } else if (field === "point" || field === "other") {
       const value = (field === "point" ? point : other).value.trim();
@@ -228,6 +245,7 @@ const cliLine = computed(() => {
     .map(([name, value]) => {
       if (name === "compressed") return " --no-compressed";
       if (name === "hard") return " --hard";
+      if (name === "lowS") return " --low-s";
       const text = typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
       return ` --${name.replaceAll(/[A-Z]/gu, (upper) => `-${upper.toLowerCase()}`)} ${shellArg(text)}`;
     })
@@ -259,16 +277,28 @@ function hexRow(label: string, value: string, accent = false): Row {
   return { label, value: shortHex(value), full: value, accent };
 }
 
-const SR_OPERATIONS = new Set<string>(SR25519_OPERATIONS);
-
 /**
- * Whether the details came from the sr25519 tool, whose operation names no other tool uses.
+ * Whether the details carry an sr25519 key. Its `verify` has secp256k1's shape and goes with it.
  *
  * @param {ToolDetails} details - Any tool's details.
- * @returns {boolean} True for sr25519.
+ * @returns {boolean} True for an sr25519 key pair, signature or child.
  */
-function isSr25519(details: ToolDetails): details is Sr25519Details {
-  return SR_OPERATIONS.has(details.operation);
+function isSr25519Key(details: ToolDetails): details is Exclude<Sr25519Details, { operation: "verify" }> {
+  return "publicKey" in details;
+}
+
+/**
+ * A verdict as the response band shows it, the same for both tools that verify.
+ *
+ * @param {boolean} valid - What `verify` answered.
+ * @returns {{ icon: string; heading: string; rows: Row[] }} The subject band.
+ */
+function verdictView(valid: boolean): { icon: string; heading: string; rows: Row[] } {
+  return {
+    icon: valid ? "i-lucide-circle-check" : "i-lucide-circle-x",
+    heading: valid ? "Signed by this key" : "Doesn't verify",
+    rows: [{ label: "valid", value: String(valid), accent: true }],
+  };
 }
 
 /**
@@ -278,13 +308,7 @@ function isSr25519(details: ToolDetails): details is Sr25519Details {
  * @returns {{ icon: string; heading: string; rows: Row[] }} The subject band.
  */
 function srView(details: Sr25519Details): { icon: string; heading: string; rows: Row[] } {
-  if (details.operation === "verify") {
-    return {
-      icon: details.valid ? "i-lucide-circle-check" : "i-lucide-circle-x",
-      heading: details.valid ? "Signed by this key" : "Doesn't verify",
-      rows: [{ label: "valid", value: String(details.valid), accent: true }],
-    };
-  }
+  if (details.operation === "verify") return verdictView(details.valid);
   if (details.operation === "sign") {
     return {
       icon: "i-lucide-signature",
@@ -307,9 +331,8 @@ const view = computed(() => {
     return { icon: "i-lucide-circle-alert", label, heading: "Refused", about: result.error ?? "", rows: [], points: [] };
   }
   const details = result.details;
-  if (isSr25519(details)) {
-    return { ...srView(details), label, about: answered.value.about, points: [] };
-  }
+  if ("valid" in details) return { ...verdictView(details.valid), label, about: answered.value.about, points: [] };
+  if (isSr25519Key(details)) return { ...srView(details), label, about: answered.value.about, points: [] };
   const rows: Row[] = [];
   let heading = "";
   let icon = "i-lucide-spline";
@@ -378,6 +401,15 @@ const SECP_SAMPLES = [
   { label: "half of G", load: () => ((secpPoint.value = G), (secpScalar.value = HALF)) },
   { label: "x of G", load: () => (x.value = G.slice(2)) },
   { label: "x = 5", load: () => ((x.value = "5".padStart(64, "0")), (secpPoint.value = `02${"5".padStart(64, "0")}`)) },
+  {
+    label: "block 170",
+    load: () => {
+      secpPoint.value = BLOCK_170.key;
+      secpDigest.value = BLOCK_170.digest;
+      secpSignature.value = BLOCK_170.signature;
+      recovery.value = BLOCK_170.recovery;
+    },
+  },
 ] as const;
 
 /** sr25519 samples: the dev seed with `//Alice`, and her signature one bit off. */
@@ -402,7 +434,6 @@ const { copied, copy } = useCopied();
 
 /** The query keys a link may carry, each with the field it sets. */
 const FIELDS = { a, b, p, point, other, scalar, order, limit, x: curveX } as const;
-const SECP_FIELDS = { point: secpPoint, other: secpOther, scalar: secpScalar, x } as const;
 const SR_FIELDS = { ...SR_KEYS, message } as const;
 
 /**
@@ -431,6 +462,8 @@ function readQuery(query: Readonly<Record<string, unknown>>) {
     if (typeof query[name] === "string") field.value = query[name];
   }
   if (typeof query.uncompressed === "string") uncompressed.value = query.uncompressed === "true";
+  if (onSecp && op.takes.includes("lowS")) lowS.value = query.lowS === "true";
+  if (typeof query.recovery === "string" && /^[0-3]$/u.test(query.recovery)) recovery.value = Number(query.recovery);
   request.value = { operation: current.value, args: toolArgs.value };
 }
 
@@ -582,6 +615,32 @@ const shareLink = computed(() => {
                 <dt><label for="playground-x">x</label></dt>
                 <dd><UInput id="playground-x" v-model="x" variant="none" placeholder="64 hex digits" class="w-full" spellcheck="false" /></dd>
               </div>
+              <div v-if="current.takes.includes('digest')">
+                <dt><label for="playground-digest">digest</label></dt>
+                <dd><UInput id="playground-digest" v-model="secpDigest" variant="none" placeholder="digest hex, 1 to 64 bytes" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('signature')">
+                <dt><label for="playground-secp-signature">signature</label></dt>
+                <dd><UInput id="playground-secp-signature" v-model="secpSignature" variant="none" placeholder="r then s, 128 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('recovery')">
+                <dt>recovery</dt>
+                <dd class="playground-sources" role="group" aria-label="Recovery id, 0 to 3">
+                  <UButton
+                    v-for="id in RECOVERY_IDS"
+                    :key="id"
+                    variant="chip"
+                    :color="recovery === id ? 'primary' : 'neutral'"
+                    :aria-pressed="recovery === id"
+                    :label="String(id)"
+                    @click="recovery = id"
+                  />
+                </dd>
+              </div>
+              <div v-if="current.takes.includes('lowS')">
+                <dt><label for="playground-low-s">s</label></dt>
+                <dd><UCheckbox id="playground-low-s" v-model="lowS" label="low s, Bitcoin's stricter rule" /></dd>
+              </div>
               <div v-if="current.takes.includes('compressed')">
                 <dt><label for="playground-uncompressed">output</label></dt>
                 <dd><UCheckbox id="playground-uncompressed" v-model="uncompressed" label="uncompressed, 65 bytes" /></dd>
@@ -660,8 +719,8 @@ const shareLink = computed(() => {
               can sign as Alice. Your own secret would land in the address bar, so maybe don't.</template
             >
             <template v-else-if="secp"
-              >Points are SEC1 hex, 33 or 65 bytes. The scalar is hex without 0x. It lands in the
-              address bar, so keep real keys out of it.</template
+              >Points are SEC1 hex, 33 or 65 bytes. Digests and signatures are hex without 0x. Every
+              field lands in the address bar, so keep private scalars out of it.</template
             >
             <template v-else
               >A chip loads one of the landing's curves with its base and target. Points go in as

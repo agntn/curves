@@ -69,6 +69,8 @@ async function stdioClient(): Promise<Client> {
 const { g } = secp256k1Vectors;
 const { seed } = devAccounts;
 const paar = { a: "2", b: "2", p: "17" };
+/** r = 1 and s = 1: false under G as the key, while recover still lifts x = 1 to some key. */
+const SIGNATURE = `${"1".padStart(64, "0")}${"1".padStart(64, "0")}`;
 
 /** Calls that cover a plain answer, a refusal of the library and a schema miss. */
 const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
@@ -80,6 +82,14 @@ const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
   ["curves_compute", { ...paar, operation: "count", scalre: "3" }],
   ["curves_secp256k1_compute", { operation: "lift", x: g.slice(2) }],
   ["curves_secp256k1_compute", { operation: "subtract", point: g, other: g }],
+  [
+    "curves_secp256k1_compute",
+    { operation: "verify", point: g, digest: "01", signature: SIGNATURE },
+  ],
+  [
+    "curves_secp256k1_compute",
+    { operation: "recover", digest: "01", signature: SIGNATURE, recovery: 1 },
+  ],
   ["curves_sr25519_compute", { operation: "keypair", seed }],
   ["curves_sr25519_compute", { operation: "derive", publicKey: seed, chainCode: seed, hard: true }],
 ];

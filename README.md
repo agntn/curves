@@ -25,6 +25,7 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 - 📏 **Point orders.** Baby step giant step over the Hasse interval, fields up to 2⁴⁸.
 - 🕵️ **Discrete logs.** The smallest k, one prime of the order at a time. A 40-bit order made of small primes? About 20 ms. Only a prime above 2³⁶ stops it. No k? You get `undefined`, not a guess.
 - 🔑 **secp256k1 with SEC1 points.** Add, subtract, multiply, lift an x, convert between 33 and 65 bytes.
+- 🔍 **ECDSA verification and recovery.** The block 170 signature that paid Hal Finney 10 BTC? Checks out. Recovery hands back Satoshi's key.
 - 🟣 **sr25519 for Polkadot.** Keys from a seed, signatures, `//hard` and `/soft` children. `//Alice` comes out right.
 - 🟠 **ed25519 for Monero.** Add, multiply, reduce a scalar like `sc_reduce32`. A point of order 8 decodes fine, and `isTorsionFree` still says no.
 - 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1, RFC 9496 for ristretto255, RFC 8032 for ed25519. No `@noble/curves`.
@@ -70,7 +71,7 @@ The scalar is the inverse of 2 mod n. Look at all those zeros in x. Funny, right
 | Command                        | Does                                                                  |
 | ------------------------------ | --------------------------------------------------------------------- |
 | `curves compute <operation>`   | add, double, negate, multiply, lift, check, order, count, points, log |
-| `curves secp256k1 <operation>` | add, subtract, negate, multiply, lift, check                          |
+| `curves secp256k1 <operation>` | add, subtract, negate, multiply, lift, check, verify, recover         |
 | `curves sr25519 <operation>`   | keypair, sign, verify, derive                                         |
 | `curves mcp`                   | MCP server over stdio                                                 |
 
@@ -112,7 +113,7 @@ Three tools: `curves_compute`, `curves_secp256k1_compute` and `curves_sr25519_co
 
 ## 🚫 What this does not do
 
-Mnemonics, addresses and secp256k1 signatures. That's [@agntn/keys](https://github.com/agntn/keys). secp256k1 and your own curves don't run in constant time. And a log over a real 256-bit group? Not happening, here or anywhere else.
+Signing, mnemonics and addresses. That's [@agntn/keys](https://github.com/agntn/keys). secp256k1 and your own curves don't run in constant time. And a log over a real 256-bit group? Not happening, here or anywhere else.
 
 ## 🛠️ Development
 
@@ -120,7 +121,7 @@ Mnemonics, addresses and secp256k1 signatures. That's [@agntn/keys](https://gith
 pnpm install
 pnpm --dir docs install   # the /mcp test borrows Zod, the toolkit and the SDK from here
 pnpm build       # dist/, the CLI and the secp256k1, ristretto255, sr25519 and ed25519 subpaths
-pnpm test        # textbook curves, brute force oracles, RFC 9496 and RFC 8032, frozen secp256k1 and sr25519 vectors
+pnpm test        # textbook curves, brute force oracles, Wycheproof, RFC 9496 and RFC 8032, frozen secp256k1 and sr25519 vectors
 pnpm lint        # vp lint and vp fmt --check
 pnpm typecheck   # src, the extensions and the tests
 ```

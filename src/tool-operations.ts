@@ -73,9 +73,10 @@ export type CurveDetails =
 
 /** What the secp256k1 tool computes, by operation. */
 export type Secp256k1Details =
-  | { operation: Exclude<Secp256k1Operation, "lift" | "check">; point: string }
+  | { operation: Exclude<Secp256k1Operation, "lift" | "check" | "verify">; point: string }
   | { operation: "lift"; even: string; odd: string }
-  | { operation: "check"; onCurve: boolean };
+  | { operation: "check"; onCurve: boolean }
+  | { operation: "verify"; valid: boolean };
 
 /** What the sr25519 tool computes, by operation. A secret or a seed comes back only when new. */
 export type Sr25519Details =
@@ -391,6 +392,8 @@ const SECP256K1_ARGUMENTS: Readonly<Record<Secp256k1Operation, readonly string[]
   multiply: ["point", "scalar", "compressed"],
   lift: ["x", "compressed"],
   check: ["point"],
+  verify: ["point", "digest", "signature", "lowS"],
+  recover: ["digest", "signature", "recovery", "compressed"],
 };
 
 /** Every optional argument of the secp256k1 tool. */
@@ -431,8 +434,84 @@ function namingPoints<Value>(
   }
 }
 
+/** The secp256k1 tool's arguments, read for one operation. */
+interface Secp256k1Input {
+  readonly args: Readonly<Record<string, unknown>>;
+  readonly text: (name: string) => string;
+  readonly encoding: { readonly compressed: boolean };
+}
+
 /**
- * Add, subtract, negate or multiply public secp256k1 points, lift an x or check a point.
+ * Read lowS, false when missing.
+ * @param value - Raw argument
+ * @returns {boolean} Whether to refuse a high s
+ */
+function lowS(value: unknown): boolean {
+  const flag = value ?? false;
+  if (typeof flag !== "boolean") throw new TypeError("lowS must be a boolean");
+  return flag;
+}
+
+/**
+ * Read the recovery id. The library checks the range and says so in its own words.
+ * @param value - Raw argument
+ * @returns {number} The id as given
+ */
+function recoveryId(value: unknown): number {
+  if (typeof value !== "number") throw new TypeError("recover needs recovery, from 0 to 3");
+  return value;
+}
+
+/** How each operation turns the arguments into its result. */
+const SECP256K1_COMPUTATIONS: Readonly<
+  Record<Secp256k1Operation, (input: Secp256k1Input) => Secp256k1Details>
+> = {
+  add: ({ args, text, encoding }) => ({
+    operation: "add",
+    point: namingPoints(args, ["point", "other"], () =>
+      secp256k1.addPoints(text("point"), text("other"), encoding),
+    ),
+  }),
+  subtract: ({ args, text, encoding }) => ({
+    operation: "subtract",
+    point: namingPoints(args, ["point", "other"], () =>
+      secp256k1.subtractPoints(text("point"), text("other"), encoding),
+    ),
+  }),
+  negate: ({ args, text, encoding }) => ({
+    operation: "negate",
+    point: namingPoints(args, ["point"], () => secp256k1.negatePoint(text("point"), encoding)),
+  }),
+  multiply: ({ args, text, encoding }) => ({
+    operation: "multiply",
+    point: namingPoints(args, ["point"], () =>
+      secp256k1.multiplyPoint(text("point"), text("scalar"), encoding),
+    ),
+  }),
+  lift: ({ text, encoding }) => ({ operation: "lift", ...secp256k1.liftX(text("x"), encoding) }),
+  check: ({ text }) => ({ operation: "check", onCurve: secp256k1.isOnCurve(text("point")) }),
+  verify: ({ args, text }) => ({
+    operation: "verify",
+    valid: namingPoints(args, ["point"], () =>
+      secp256k1.verify(text("signature"), {
+        digest: text("digest"),
+        publicKey: text("point"),
+        lowS: lowS(args["lowS"]),
+      }),
+    ),
+  }),
+  recover: ({ args, text, encoding }) => ({
+    operation: "recover",
+    point: secp256k1.recoverPublicKey(text("signature"), {
+      digest: text("digest"),
+      recovery: recoveryId(args["recovery"]),
+      ...encoding,
+    }),
+  }),
+};
+
+/**
+ * Do math on public secp256k1 points, or verify an ECDSA signature and recover its key.
  * @param args - Tool arguments, the operation and the ones it takes
  * @returns {ToolResult<Secp256k1Details>} The resulting point, both lifted points or the verdict
  */
@@ -441,35 +520,13 @@ export function computeSecp256k1(
 ): ToolResult<Secp256k1Details> {
   const operation = oneOf(args["operation"], "operation", SECP256K1_OPERATIONS);
   refuseForeign(args, operation, SECP256K1_OPTIONAL, SECP256K1_ARGUMENTS[operation]);
-  const argument = (name: string): string => {
+  const text = (name: string): string => {
     if (isUnset(args[name])) throw new TypeError(`${operation} needs ${name}`);
     return requiredString(args[name], name);
   };
   const compressed = args["compressed"] ?? true;
   if (typeof compressed !== "boolean") throw new TypeError("Compressed must be a boolean");
-  const options = { compressed };
-  if (operation === "check") {
-    return result({ operation, onCurve: secp256k1.isOnCurve(argument("point")) });
-  }
-  if (operation === "lift")
-    return result({ operation, ...secp256k1.liftX(argument("x"), options) });
-  if (operation === "negate") {
-    const point = namingPoints(args, ["point"], () =>
-      secp256k1.negatePoint(argument("point"), options),
-    );
-    return result({ operation, point });
-  }
-  if (operation === "multiply") {
-    const point = namingPoints(args, ["point"], () =>
-      secp256k1.multiplyPoint(argument("point"), argument("scalar"), options),
-    );
-    return result({ operation, point });
-  }
-  const compute = operation === "add" ? secp256k1.addPoints : secp256k1.subtractPoints;
-  const point = namingPoints(args, ["point", "other"], () =>
-    compute(argument("point"), argument("other"), options),
-  );
-  return result({ operation, point });
+  return result(SECP256K1_COMPUTATIONS[operation]({ args, text, encoding: { compressed } }));
 }
 
 /** The arguments each sr25519 operation takes. */
