@@ -21,7 +21,8 @@ function loadTools(): Promise<typeof CurvesTools> {
 }
 
 /**
- * Registers the curve tools; the executors load on the first call.
+ * Registers the curve tools; the executors load on the first call. Failures keep the default
+ * `throw`: Pi up to 0.98 counts any returned value as a success, and the peers reach back to 0.87.
  *
  * @param pi - Pi extension API.
  */

@@ -1,5 +1,6 @@
 /** The curve tools, declared once for every surface. Executors load on the first call. */
 
+/** `Type` comes from here. OMP rewrites a bare `typebox` import to a facade that checks nothing. */
 import {
   defineTool,
   Type,

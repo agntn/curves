@@ -2,7 +2,8 @@
  * secp256k1 from SEC 2 v2, section 2.4.1: y^2 = x^3 + 7 over the prime field of p, cofactor 1.
  * Points travel as SEC1 hex (SEC 1 v2, sections 2.3.3 and 2.3.4) and multiply in Jacobian
  * coordinates, so a product costs one inversion instead of one per step. Nothing here runs in
- * constant time.
+ * constant time. The messages are the ones @agntn/keys threw: keys re-exports these functions,
+ * and its tests read the words.
  */
 
 import type { AffinePoint } from "./arithmetic.ts";

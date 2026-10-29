@@ -125,6 +125,8 @@ pnpm lint        # vp lint and vp fmt --check
 pnpm typecheck   # src, the extensions and the tests
 ```
 
+The math takes its orders from the specs, and the rest of the house rules live in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## 💛 Thanks
 
 Made with a lot of help from [Claude for Open Source](https://claude.com/contact-sales/claude-for-oss) and [Codex for Open Source](https://developers.openai.com/community/codex-for-oss). Small packages like this one exist because of them. Thank you.
