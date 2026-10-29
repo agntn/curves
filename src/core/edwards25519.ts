@@ -2,7 +2,7 @@
  * edwards25519, -x^2 + y^2 = 1 + d x^2 y^2 over the field of p = 2^255 - 19 (RFC 7748, section
  * 4.1), with the group law in extended coordinates (RFC 8032, section 5.1.4). ristretto255 and
  * ed25519 both stand on it and differ only in how a point travels. A multiply runs the same
- * additions and doublings for every scalar and never adds the identity, so its time doesn't
+ * additions and doublings for every scalar, and no digit stands for zero, so its time doesn't
  * follow the scalar's bits. The bigint arithmetic underneath is the JavaScript engine's, and it
  * promises nothing about time.
  */
@@ -142,7 +142,7 @@ function timesSixteen(point: Extended): Extended {
 }
 
 /**
- * The 64 digits a multiply walks, lowest first. Digit d picks d + 1, never the identity.
+ * The 64 digits a multiply walks, lowest first. Digit d picks d + 1 times the point, never 0.
  * @param scalar - Zero or more
  * @returns {number[]} From 0 to 15, base 16 digits of the scalar minus {@link ONES}, mod 8l
  */
