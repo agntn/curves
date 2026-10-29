@@ -12,7 +12,7 @@ const rows = computed(() => {
   const { params, details } = sample.value;
   const input = Object.entries(params)
     .filter(([name]) => name !== "operation")
-    .map(([name, value]) => ({ label: name, value: shortPoint(value), full: value, accent: false }));
+    .map(([name, value]) => ({ label: name, value: shortPoint(String(value)), full: String(value), accent: false }));
   const output =
     details.operation === "lift"
       ? [
@@ -21,7 +21,9 @@ const rows = computed(() => {
         ]
       : details.operation === "check"
         ? [{ label: "onCurve", value: String(details.onCurve), full: String(details.onCurve), accent: true }]
-        : [{ label: "point", value: shortPoint(details.point), full: details.point, accent: true }];
+        : details.operation === "verify"
+          ? [{ label: "valid", value: String(details.valid), full: String(details.valid), accent: true }]
+          : [{ label: "point", value: shortPoint(details.point), full: details.point, accent: true }];
   return [...input, ...output];
 });
 </script>

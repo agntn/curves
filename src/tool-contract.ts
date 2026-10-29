@@ -23,7 +23,7 @@ export const CURVE_OPERATIONS = [
 
 export type CurveOperation = (typeof CURVE_OPERATIONS)[number];
 
-/** What `curves_secp256k1_compute` does with public points. */
+/** What `curves_secp256k1_compute` does with public points and ECDSA signatures. */
 export const SECP256K1_OPERATIONS = [
   "add",
   "subtract",
@@ -31,6 +31,8 @@ export const SECP256K1_OPERATIONS = [
   "multiply",
   "lift",
   "check",
+  "verify",
+  "recover",
 ] as const;
 
 export type Secp256k1Operation = (typeof SECP256K1_OPERATIONS)[number];
@@ -62,6 +64,9 @@ export const DEFAULT_CURVE_POINTS_SHOWN = 100;
 
 /** An integer as decimal or 0x hex, with an optional minus sign. */
 export const CURVE_INTEGER_PATTERN = "-?(?:0[xX][0-9A-Fa-f]+|[0-9]+)";
+
+/** An ECDSA digest: 1 to 64 bytes as hex. */
+export const DIGEST_PATTERN = "(?:[0-9A-Fa-f]{2}){1,64}";
 
 /** A compressed or uncompressed SEC1 point. */
 export const SEC1_PATTERN = "0[23][0-9A-Fa-f]{64}|04[0-9A-Fa-f]{128}";

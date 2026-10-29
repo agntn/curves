@@ -1,9 +1,10 @@
 /**
  * secp256k1 from SEC 2 v2, section 2.4.1: y^2 = x^3 + 7 over the prime field of p, cofactor 1.
  * Points travel as SEC1 hex (SEC 1 v2, sections 2.3.3 and 2.3.4) and multiply in Jacobian
- * coordinates, so a product costs one inversion instead of one per step. Nothing here runs in
- * constant time. The messages are the ones @agntn/keys threw: keys re-exports these functions,
- * and its tests read the words.
+ * coordinates, so a product costs one inversion instead of one per step. ECDSA verification and
+ * public key recovery follow SEC 1 v2, sections 4.1.4 and 4.1.6. Nothing here runs in constant
+ * time. The messages are the ones @agntn/keys threw: keys re-exports these functions, and its
+ * tests read the words.
  */
 
 import type { AffinePoint } from "./arithmetic.ts";
@@ -466,4 +467,163 @@ export function isOnCurve(point: string): boolean {
 export function convertPoint(point: string, options: PointEncodingOptions = {}): string {
   const compressed = compression(options);
   return encodeAffine(decodePoint(point), compressed);
+}
+
+/** The largest s a low-S signature may carry, as BIP 62 and BIP 146 count it. */
+const HALF_N = N >> 1n;
+
+const SIGNATURE = /^[0-9a-f]{128}$/iu;
+const DIGEST = /^(?:[0-9a-f]{2}){1,64}$/iu;
+
+/** What {@link verify} checks a signature against. */
+export interface VerifyOptions {
+  /** The message digest as hex, 1 to 64 bytes. Past 32 bytes only the leftmost 256 bits count. */
+  readonly digest: string;
+  /** The signer's key, compressed or uncompressed SEC1 hex. */
+  readonly publicKey: string;
+  /** Refuse s above n / 2, as BIP 62 and BIP 146 do. Default: false, SEC 1 takes either. */
+  readonly lowS?: boolean;
+}
+
+/** What {@link recoverPublicKey} needs besides the signature, and how to write the key. */
+export interface RecoverOptions extends PointEncodingOptions {
+  /** The message digest as hex, 1 to 64 bytes, read as {@link verify} reads it. */
+  readonly digest: string;
+  /** 0 to 3: bit 0 is the parity of y of R, bit 1 says the x of R is r + n. */
+  readonly recovery: number;
+}
+
+/** r and s as the signature carries them, before any range check. */
+interface SignatureParts {
+  readonly r: bigint;
+  readonly s: bigint;
+}
+
+/**
+ * Read a compact signature: r, then s, 32 bytes each, big-endian.
+ * @param value - The caller's value
+ * @returns {SignatureParts} r and s, not yet checked against n
+ * @throws {RangeError} When the value is no 128 hex digits
+ */
+function readSignature(value: unknown): SignatureParts {
+  if (typeof value !== "string" || !SIGNATURE.test(value)) {
+    throw new RangeError("Signature must be 128 hex digits without 0x, r then s");
+  }
+  return { r: BigInt(`0x${value.slice(0, 64)}`), s: BigInt(`0x${value.slice(64)}`) };
+}
+
+/**
+ * Refuse options that are no object, so a call in another library's shape fails loudly.
+ * @param options - The caller's value
+ * @param shape - The call as it should read, for the error
+ * @throws {TypeError} When options is not an object
+ */
+function requireOptions(options: unknown, shape: string): void {
+  if (typeof options !== "object" || options === null) throw new TypeError(`Call it as ${shape}`);
+}
+
+/**
+ * Turn a digest into e as SEC 1 v2 section 4.1.4 step 3 does: its leftmost 256 bits, n's length.
+ * @param value - Hex without 0x, 1 to 64 bytes
+ * @returns {bigint} e, not reduced mod n
+ * @throws {RangeError} When the value is no hex of whole bytes, or longer than 64
+ */
+function readDigest(value: unknown): bigint {
+  if (typeof value !== "string" || !DIGEST.test(value)) {
+    throw new RangeError("Digest must be hex without 0x, 1 to 64 bytes");
+  }
+  const extra = value.length * 4 - 256;
+  const e = BigInt(`0x${value}`);
+  return extra > 0 ? e >> BigInt(extra) : e;
+}
+
+function isScalar(value: bigint): boolean {
+  return value > 0n && value < N;
+}
+
+/**
+ * a times G plus b times a point, the sum both verification and recovery end on.
+ * @param a - Zero to n minus 1
+ * @param b - Zero to n minus 1
+ * @param point - A finite point
+ * @returns {Jacobian} The sum
+ */
+function combine(a: bigint, b: bigint, point: Affine): Jacobian {
+  return add(multiplyBase(a), multiply(toJacobian(point), b));
+}
+
+/**
+ * Verify an ECDSA signature over a digest, SEC 1 v2 section 4.1.4.
+ * @param signature - 128 hex digits, r then s
+ * @param options - The digest, the public key and the low-S rule
+ * @returns {boolean} Whether the key signed the digest, false for r or s outside 1 to n minus 1 too
+ * @throws {RangeError} When the signature or the digest is no hex of its length
+ * @throws {Error} When the public key is no SEC1 point of the curve
+ */
+export function verify(signature: string, options: VerifyOptions): boolean {
+  const { r, s } = readSignature(signature);
+  requireOptions(options, "verify(signature, { digest, publicKey })");
+  const e = readDigest(options.digest);
+  const key = decodePoint(options.publicKey);
+  const lowS = options.lowS ?? false;
+  if (typeof lowS !== "boolean") throw new TypeError("lowS must be a boolean");
+  if (!isScalar(r) || !isScalar(s) || (lowS && s > HALF_N)) return false;
+  const inverse = invert(s, N);
+  const commitment = toAffine(combine(mod(e * inverse, N), (r * inverse) % N, key));
+  return commitment !== undefined && commitment.x % N === r;
+}
+
+/**
+ * Rebuild R from r and the recovery id, SEC 1 v2 section 4.1.6 steps 1.1 to 1.3.
+ * @param r - From 1 to n minus 1
+ * @param recovery - From 0 to 3
+ * @returns {Affine} The point R the signer committed to
+ * @throws {RangeError} When no point has that x
+ */
+function liftCommitment(r: bigint, recovery: number): Affine {
+  const x = recovery >= 2 ? r + N : r;
+  const y = x < P ? liftY(x, recovery % 2 === 1) : undefined;
+  if (y === undefined) {
+    const named = recovery >= 2 ? "r + n" : "r";
+    throw new RangeError(`No point of secp256k1 has x = ${named}, so recovery ${recovery} fails`);
+  }
+  return { x, y };
+}
+
+/**
+ * Read a recovery id.
+ * @param value - The caller's value
+ * @returns {number} From 0 to 3
+ * @throws {RangeError} When the value is no integer from 0 to 3
+ */
+function readRecovery(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 3) {
+    throw new RangeError("Recovery must be an integer from 0 to 3");
+  }
+  return value;
+}
+
+/**
+ * Recover the key behind an ECDSA signature, SEC 1 v2 section 4.1.6. Compare it with yours.
+ * @param signature - 128 hex digits, r then s
+ * @param options - The digest, the recovery id and the output encoding, compressed by default
+ * @returns {string} The public key as SEC1 hex, one the signature verifies under whatever it is
+ * @throws {RangeError} When an argument is malformed, r or s is out of range, or R does not exist
+ */
+export function recoverPublicKey(signature: string, options: RecoverOptions): string {
+  const { r, s } = readSignature(signature);
+  requireOptions(options, "recoverPublicKey(signature, { digest, recovery })");
+  const e = readDigest(options.digest);
+  const recovery = readRecovery(options.recovery);
+  const compressed = compression(options);
+  if (!isScalar(r) || !isScalar(s)) {
+    throw new RangeError("r and s must both be from 1 to the curve order minus 1");
+  }
+  const inverse = invert(r, N);
+  const commitment = liftCommitment(r, recovery);
+  const key = toAffine(combine(mod(-e * inverse, N), (s * inverse) % N, commitment));
+  if (key === undefined) {
+    throw new RangeError("This signature recovers the point at infinity, which is no public key");
+  }
+  return encodeAffine(key, compressed);
 }

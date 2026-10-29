@@ -46,9 +46,11 @@ describe("@agntn/curves", () => {
       "multiplyPoint",
       "multiplyScalars",
       "negatePoint",
+      "recoverPublicKey",
       "secp256k1",
       "subtractPoints",
       "subtractScalars",
+      "verify",
     ]);
   });
 
