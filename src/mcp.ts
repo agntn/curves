@@ -11,9 +11,9 @@ import { curvesTools } from "./tools.ts";
 
 const restart = "src/ changed under this server, restart it to load the new code";
 
-/** Taken as `src/` loads, so a server built later can't adopt a pull its cached modules missed. */
+/** Measured from the process start, so a pull landing while this file's imports load counts too. */
 const changed = import.meta.url.endsWith(".ts")
-  ? sourceChangeCheck(import.meta.dirname)
+  ? sourceChangeCheck(import.meta.dirname, performance.timeOrigin)
   : undefined;
 
 /** The `tools/list` entries `curves mcp` answers with. */
@@ -49,8 +49,8 @@ export function callTool(
 
 /**
  * Creates an unconnected MCP server exposing the curve tools. Run from `src/`, it answers a call
- * with a restart line once that tree changed, checked before the name and the schema and again when
- * the tool fails. A call that succeeds while a pull lands keeps its answer; the next one refuses.
+ * with a restart line once that tree changed, checked before the name and the schema and again
+ * after the tool answers. A success isn't spared: it may come from pulled and cached modules mixed.
  *
  * @returns {Server} Unconnected MCP server.
  */
@@ -63,7 +63,7 @@ export function createMcpServer(): Server {
     const result = await callTool(request.params.name, request.params.arguments, {
       signal: ctx.mcpReq.signal,
     });
-    return result.isError === true && changed() ? errorResult(restart) : result;
+    return changed() ? errorResult(restart) : result;
   });
   return server;
 }
