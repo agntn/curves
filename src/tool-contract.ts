@@ -37,6 +37,11 @@ export const SECP256K1_OPERATIONS = [
 
 export type Secp256k1Operation = (typeof SECP256K1_OPERATIONS)[number];
 
+/** What `curves_bip340_compute` does with BIP340 Schnorr signatures. */
+export const BIP340_OPERATIONS = ["verify"] as const;
+
+export type Bip340Operation = (typeof BIP340_OPERATIONS)[number];
+
 /** What `curves_sr25519_compute` does with sr25519 keys and signatures. */
 export const SR25519_OPERATIONS = ["keypair", "sign", "verify", "derive"] as const;
 
@@ -47,7 +52,7 @@ export const MESSAGE_ENCODINGS = ["utf8", "hex"] as const;
 
 export type MessageEncoding = (typeof MESSAGE_ENCODINGS)[number];
 
-/** Longest message `curves_sr25519_compute` reads, in characters. */
+/** Longest message `curves_bip340_compute` and `curves_sr25519_compute` read, in characters. */
 export const MAX_MESSAGE_LENGTH = 8192;
 
 /** Longest signing context `curves_sr25519_compute` reads, in characters. */

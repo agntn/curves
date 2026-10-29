@@ -90,6 +90,10 @@ const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
     "curves_secp256k1_compute",
     { operation: "recover", digest: "01", signature: SIGNATURE, recovery: 1 },
   ],
+  [
+    "curves_bip340_compute",
+    { operation: "verify", publicKey: seed, message: "", signature: SIGNATURE },
+  ],
   ["curves_sr25519_compute", { operation: "keypair", seed }],
   ["curves_sr25519_compute", { operation: "derive", publicKey: seed, chainCode: seed, hard: true }],
 ];

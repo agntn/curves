@@ -8,7 +8,12 @@ vi.mock("@oh-my-pi/pi-coding-agent/tui", () => {
 });
 
 import curvesExtension from "../extensions/omp/curves.ts";
-import { computeTool, secp256k1ComputeTool, sr25519ComputeTool } from "../src/tools.ts";
+import {
+  bip340ComputeTool,
+  computeTool,
+  secp256k1ComputeTool,
+  sr25519ComputeTool,
+} from "../src/tools.ts";
 import {
   ompTestTheme as theme,
   ompToolContext,
@@ -34,6 +39,7 @@ describe("omp curves extension", () => {
     expect([...host.tools.keys()]).toEqual([
       "curves_compute",
       "curves_secp256k1_compute",
+      "curves_bip340_compute",
       "curves_sr25519_compute",
     ]);
     expect(host.labels).toEqual(["Curves"]);
@@ -44,6 +50,8 @@ describe("omp curves extension", () => {
     expect(host.tool("curves_secp256k1_compute").parameters).toEqual(
       wireSchema(secp256k1ComputeTool),
     );
+    expect(host.tool("curves_bip340_compute").approval).toBe("read");
+    expect(host.tool("curves_bip340_compute").parameters).toEqual(wireSchema(bip340ComputeTool));
     expect(host.tool("curves_sr25519_compute").approval).toBe("read");
     expect(host.tool("curves_sr25519_compute").parameters).toEqual(wireSchema(sr25519ComputeTool));
   });

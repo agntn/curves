@@ -3,7 +3,13 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createMcpServer } from "../src/mcp.ts";
 import { serverInfo } from "../src/server-info.ts";
-import { computeCurve, computeSecp256k1, computeSr25519 } from "../src/tool-operations.ts";
+import {
+  computeBip340,
+  computeCurve,
+  computeSecp256k1,
+  computeSr25519,
+} from "../src/tool-operations.ts";
+import { nobleSignatures as schnorrSignatures } from "./fixtures/bip340.ts";
 import { highS, nobleSignatures } from "./fixtures/ecdsa.ts";
 import { devAccounts, keyringPairs, scureVectors, subkeySeeds } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
@@ -77,6 +83,7 @@ describe("curves MCP server", () => {
     expect(response.tools.map((tool) => tool.name)).toEqual([
       "curves_compute",
       "curves_secp256k1_compute",
+      "curves_bip340_compute",
       "curves_sr25519_compute",
     ]);
     for (const tool of response.tools) {
@@ -274,6 +281,39 @@ describe("curves MCP server", () => {
     ).toContain("point is not a SEC1 point of secp256k1");
   });
 
+  it("verifies a BIP340 signature, over an empty message too", async () => {
+    const client = await connectTestClient();
+    const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+      answer(await client.callTool({ name: "curves_bip340_compute", arguments: args }));
+    const refused = async (args: Readonly<Record<string, unknown>>): Promise<string> =>
+      failure(await client.callTool({ name: "curves_bip340_compute", arguments: args }));
+    const [first, , empty] = schnorrSignatures;
+    if (first === undefined || empty === undefined) throw new Error("The BIP340 fixture shrank");
+    const { message, signature, publicKey } = first;
+
+    expect(await call({ operation: "verify", publicKey, message, signature })).toEqual({
+      operation: "verify",
+      valid: true,
+    });
+    const { valid: _valid, ...emptyMessage } = empty;
+    expect(await call({ operation: "verify", ...emptyMessage })).toEqual({
+      operation: "verify",
+      valid: true,
+    });
+    expect(
+      await call({ operation: "verify", publicKey: empty.publicKey, message, signature }),
+    ).toEqual({ operation: "verify", valid: false });
+    expect(await refused({ operation: "verify", publicKey, signature })).toContain(
+      "verify needs message",
+    );
+    expect(await refused({ operation: "verify", publicKey, message: "abc", signature })).toContain(
+      "Invalid arguments at /message",
+    );
+    expect(
+      await refused({ operation: "verify", publicKey: `02${publicKey}`, message, signature }),
+    ).toContain("Invalid arguments at /publicKey");
+  });
+
   it("makes, signs with and derives sr25519 keys", async () => {
     const client = await connectTestClient();
     const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
@@ -456,6 +496,37 @@ describe("curve executors", () => {
     );
     expect(() => computeSecp256k1({ operation: "negate", point: g, compressed: "yes" })).toThrow(
       "Compressed must be a boolean",
+    );
+  });
+});
+
+describe("BIP340 executor", () => {
+  const [signedMessage] = schnorrSignatures;
+  if (signedMessage === undefined) throw new Error("The BIP340 fixture lost its first signature");
+  const { message, signature, publicKey } = signedMessage;
+
+  it("reads a blank message as the empty one and a blank key as missing", () => {
+    const empty = { operation: "verify", publicKey, message: "", signature };
+    expect(computeBip340(empty).details).toEqual({ operation: "verify", valid: false });
+    expect(() => computeBip340({ operation: "verify", publicKey: "", message, signature })).toThrow(
+      "verify needs publicKey",
+    );
+    expect(() => computeBip340({ operation: "verify", publicKey, message })).toThrow(
+      "verify needs signature",
+    );
+  });
+
+  it("guards the contract even when a host skips schema validation", () => {
+    const call = { operation: "verify", publicKey, message, signature };
+    expect(() => computeBip340({ ...call, operation: "sign" })).toThrow(
+      "operation must be one of verify",
+    );
+    expect(() => computeBip340({ ...call, message: 7 })).toThrow("message must be a string");
+    expect(() => computeBip340({ ...call, message: "00".repeat(4097) })).toThrow(
+      "message must be at most 8192 characters",
+    );
+    expect(() => computeBip340({ ...call, message: "0x00" })).toThrow(
+      "Message must be hex without 0x",
     );
   });
 });

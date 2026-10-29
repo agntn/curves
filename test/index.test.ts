@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import * as bip340 from "../src/bip340.ts";
 import * as ed25519 from "../src/ed25519.ts";
 import * as root from "../src/index.ts";
 import * as ristretto255 from "../src/ristretto255.ts";
@@ -52,6 +53,10 @@ describe("@agntn/curves", () => {
       "subtractScalars",
       "verify",
     ]);
+  });
+
+  it("keeps BIP340 in its own entry", () => {
+    expect(Object.keys(bip340)).toEqual(["verify"]);
   });
 
   it("keeps ed25519 in its own entry", () => {
