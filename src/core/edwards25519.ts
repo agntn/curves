@@ -133,6 +133,15 @@ export function negate(point: Extended): Extended {
 }
 
 /**
+ * Multiply by the cofactor with three doublings, which leaves only the part of order l.
+ * @param point - Any point
+ * @returns {Extended} 8 times the point
+ */
+export function clearCofactor(point: Extended): Extended {
+  return double(double(double(point)));
+}
+
+/**
  * Multiply by 16 with four doublings.
  * @param point - Any point
  * @returns {Extended} 16 times the point

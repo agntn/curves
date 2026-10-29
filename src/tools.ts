@@ -15,6 +15,7 @@ import {
   CURVE_OPERATIONS,
   DEFAULT_CURVE_POINTS_SHOWN,
   DIGEST_PATTERN,
+  ED25519_OPERATIONS,
   MAX_COUNTED_PRIME,
   MAX_CURVE_INTEGER_LENGTH,
   MAX_CONTEXT_LENGTH,
@@ -258,7 +259,7 @@ export const secp256k1ComputeTool = defineTool({
 });
 
 /**
- * Hex argument of one byte length, a key or a signature of the BIP340 or sr25519 tool.
+ * Hex argument of one byte length, a key or a signature of the BIP340, Ed25519 or sr25519 tool.
  * @param bytes - The byte count
  * @param description - What it is and which operations take it
  * @returns {TOptional<TString>} The optional argument
@@ -394,9 +395,61 @@ export const sr25519ComputeTool = defineTool({
   execute: async (params) => (await loadOperations()).computeSr25519(params),
 });
 
+export const ed25519ComputeSchema = Type.Object(
+  {
+    operation: Type.String({
+      enum: [...ED25519_OPERATIONS],
+      description: "verify takes publicKey, message and signature, and zip215 to pick the rules",
+    }),
+    publicKey: hexBytes(
+      32,
+      "verify only, required there: the signer's key as RFC 8032 writes it, y with the sign of x in the top bit",
+    ),
+    message: Type.Optional(
+      Type.String({
+        maxLength: MAX_MESSAGE_LENGTH,
+        pattern: "^(?:[0-9A-Fa-f]{2})*$",
+        description:
+          "verify only, required there: the exact bytes that were signed, as hex without 0x, any length, empty too. Ed25519 hashes them itself, so pass them as they are",
+      }),
+    ),
+    signature: hexBytes(64, "verify only, required there: R, then S"),
+    zip215: Type.Optional(
+      Type.Boolean({
+        description:
+          "verify only: ZIP 215's rules, which take non-canonical encodings of R and the key and a key of small order, as Zcash and @noble/curves do. Set it false to keep both encodings canonical and refuse a key of small order, as OpenPGP asks. Default: true",
+      }),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const ed25519ComputeTool = defineTool({
+  name: "curves_ed25519_compute",
+  title: "Compute with Ed25519",
+  description:
+    "Verify an Ed25519 signature, the kind Solana, Stellar, XRPL, SSH and OpenPGP keys make. The key is 32 bytes as RFC 8032 encodes it, the message is hex of any length, empty included, and the signature is 64 bytes. The cofactored equation of RFC 8032 decides, under ZIP 215's rules unless zip215 is false. An R or a key that doesn't decode fails like any bad signature.",
+  snippet:
+    "Use for Ed25519 signatures from Solana, Stellar, XRPL, SSH or OpenPGP, once you have the signed bytes.",
+  guidelines: [
+    "verify takes publicKey, message and signature and answers valid true or false",
+    "message is the signed bytes as hex, not text: Ed25519 hashes them itself",
+    "zip215 false refuses non-canonical encodings and keys of small order, as OpenPGP asks",
+  ],
+  effect: "read",
+  cli: {
+    command: "ed25519",
+    description: "Ed25519 signatures, checked by ZIP 215's rules or strict ones",
+    positional: ["operation"],
+  },
+  input: ed25519ComputeSchema,
+  execute: async (params) => (await loadOperations()).computeEd25519(params),
+});
+
 export const curvesTools: readonly ToolDefinition[] = [
   computeTool,
   secp256k1ComputeTool,
   bip340ComputeTool,
   sr25519ComputeTool,
+  ed25519ComputeTool,
 ];

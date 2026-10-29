@@ -42,6 +42,11 @@ export const BIP340_OPERATIONS = ["verify"] as const;
 
 export type Bip340Operation = (typeof BIP340_OPERATIONS)[number];
 
+/** What `curves_ed25519_compute` does with Ed25519 signatures. */
+export const ED25519_OPERATIONS = ["verify"] as const;
+
+export type Ed25519Operation = (typeof ED25519_OPERATIONS)[number];
+
 /** What `curves_sr25519_compute` does with sr25519 keys and signatures. */
 export const SR25519_OPERATIONS = ["keypair", "sign", "verify", "derive"] as const;
 
@@ -52,7 +57,7 @@ export const MESSAGE_ENCODINGS = ["utf8", "hex"] as const;
 
 export type MessageEncoding = (typeof MESSAGE_ENCODINGS)[number];
 
-/** Longest message `curves_bip340_compute` and `curves_sr25519_compute` read, in characters. */
+/** Longest message the BIP340, Ed25519 and sr25519 tools read, in characters. */
 export const MAX_MESSAGE_LENGTH = 8192;
 
 /** Longest signing context `curves_sr25519_compute` reads, in characters. */

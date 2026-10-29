@@ -6,11 +6,13 @@ import { serverInfo } from "../src/server-info.ts";
 import {
   computeBip340,
   computeCurve,
+  computeEd25519,
   computeSecp256k1,
   computeSr25519,
 } from "../src/tool-operations.ts";
 import { nobleSignatures as schnorrSignatures } from "./fixtures/bip340.ts";
 import { highS, nobleSignatures } from "./fixtures/ecdsa.ts";
+import { rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 import { devAccounts, keyringPairs, scureVectors, subkeySeeds } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
@@ -85,6 +87,7 @@ describe("curves MCP server", () => {
       "curves_secp256k1_compute",
       "curves_bip340_compute",
       "curves_sr25519_compute",
+      "curves_ed25519_compute",
     ]);
     for (const tool of response.tools) {
       expect(tool.annotations).toMatchObject({
@@ -314,6 +317,40 @@ describe("curves MCP server", () => {
     ).toContain("Invalid arguments at /publicKey");
   });
 
+  it("verifies an Ed25519 signature under ZIP 215, or the strict rules on request", async () => {
+    const client = await connectTestClient();
+    const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+      answer(await client.callTool({ name: "curves_ed25519_compute", arguments: args }));
+    const refused = async (args: Readonly<Record<string, unknown>>): Promise<string> =>
+      failure(await client.callTool({ name: "curves_ed25519_compute", arguments: args }));
+    const [empty] = rfc8032Signatures;
+    const [smallOrder] = speccheck;
+    if (empty === undefined || smallOrder === undefined) throw new Error("A fixture shrank");
+    const { message, signature, publicKey } = smallOrder;
+
+    const rfc = { publicKey: empty.publicKey, message: empty.message, signature: empty.signature };
+    expect(await call({ operation: "verify", ...rfc })).toEqual({
+      operation: "verify",
+      valid: true,
+    });
+    expect(await call({ operation: "verify", publicKey, message, signature })).toEqual({
+      operation: "verify",
+      valid: true,
+    });
+    expect(
+      await call({ operation: "verify", publicKey, message, signature, zip215: false }),
+    ).toEqual({ operation: "verify", valid: false });
+    expect(await refused({ operation: "verify", publicKey, signature })).toContain(
+      "verify needs message",
+    );
+    expect(
+      await refused({ operation: "verify", publicKey, message, signature, zip215: "no" }),
+    ).toContain("Invalid arguments at /zip215");
+    expect(
+      await refused({ operation: "verify", publicKey: `00${publicKey}`, message, signature }),
+    ).toContain("Invalid arguments at /publicKey");
+  });
+
   it("makes, signs with and derives sr25519 keys", async () => {
     const client = await connectTestClient();
     const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
@@ -526,6 +563,44 @@ describe("BIP340 executor", () => {
       "message must be at most 8192 characters",
     );
     expect(() => computeBip340({ ...call, message: "0x00" })).toThrow(
+      "Message must be hex without 0x",
+    );
+  });
+});
+
+describe("Ed25519 executor", () => {
+  const [signed] = rfc8032Signatures;
+  if (signed === undefined) throw new Error("The RFC 8032 fixture lost test 1");
+  const { publicKey, message, signature } = signed;
+  const call = { operation: "verify", publicKey, message, signature };
+
+  it("reads a blank message as the empty one, and a null zip215 as the default", () => {
+    expect(computeEd25519({ ...call, message: "" }).details).toEqual({
+      operation: "verify",
+      valid: true,
+    });
+    const [smallOrder] = speccheck;
+    if (smallOrder === undefined) throw new Error("The speccheck fixture lost case 0");
+    const order8 = {
+      operation: "verify",
+      publicKey: smallOrder.publicKey,
+      message: smallOrder.message,
+      signature: smallOrder.signature,
+    };
+    expect(computeEd25519({ ...order8, zip215: null }).details.valid).toBe(true);
+    expect(computeEd25519({ ...order8, zip215: false }).details.valid).toBe(false);
+    expect(() => computeEd25519({ ...call, publicKey: "" })).toThrow("verify needs publicKey");
+  });
+
+  it("guards the contract even when a host skips schema validation", () => {
+    expect(() => computeEd25519({ ...call, operation: "sign" })).toThrow(
+      "operation must be one of verify",
+    );
+    expect(() => computeEd25519({ ...call, zip215: "false" })).toThrow("zip215 must be a boolean");
+    expect(() => computeEd25519({ ...call, message: "00".repeat(4097) })).toThrow(
+      "message must be at most 8192 characters",
+    );
+    expect(() => computeEd25519({ ...call, message: "0x00" })).toThrow(
       "Message must be hex without 0x",
     );
   });

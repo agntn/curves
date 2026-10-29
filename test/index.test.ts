@@ -72,6 +72,7 @@ describe("@agntn/curves", () => {
       "negatePoint",
       "reduceScalar",
       "subtractPoints",
+      "verify",
     ]);
   });
 

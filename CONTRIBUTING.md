@@ -12,9 +12,9 @@ Plain Node runs `src/` as it is, so relative imports end in `.ts` and `erasableS
 
 ## Math
 
-- The math is written here from its specs. That's SEC 2 v2 and SEC 1 v2 for secp256k1, RFC 9496 for ristretto255, RFC 8032 for ed25519, and schnorrkel 0.11 for sr25519 on Substrate.
+- The math is written here from its specs. That's SEC 2 v2 and SEC 1 v2 for secp256k1, RFC 9496 for ristretto255, RFC 8032 and ZIP 215 for ed25519, and schnorrkel 0.11 for sr25519 on Substrate.
 - There's no `@noble/curves` dependency. That's the point. Merlin has its own Keccak-f[1600] in `src/core/merlin.ts` because `@agntn/hashes` keeps its permutation private.
-- The runtime imports are `@agntn/hashes/sha2` for sr25519's SHA-512, `@agntn/tools` and the MCP server SDK.
+- The runtime imports are `@agntn/hashes/sha2` for SHA-512 in sr25519 and Ed25519 and SHA-256 in BIP340, `@agntn/tools` and the MCP server SDK.
 - edwards25519 multiplication takes the same steps for every scalar, and `test/edwards25519.test.ts` times it. Keep it that way. secp256k1 and generic curves don't run in constant time. Nothing's audited, so keep that warning up front in the README. Right answers aren't an audit.
 - A new operation gets a spec vector. If another implementation exists, freeze its output in `test/fixtures/` with its name and version, as with `@noble/curves` 2.4.0 and `@scure/sr25519` 2.4.0.
 - Every refusal is an `Error` with a message written for the caller. The CLI prints one line, and the MCP server sanitizes the message.

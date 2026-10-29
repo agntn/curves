@@ -19,6 +19,7 @@ import pkg from "../package.json" with { type: "json" };
 import { serverInfo } from "../src/server-info.ts";
 import { nobleSignatures as schnorrSignatures } from "./fixtures/bip340.ts";
 import { highS, nobleSignatures } from "./fixtures/ecdsa.ts";
+import { rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 
 const [signed] = nobleSignatures;
 if (signed === undefined) throw new Error("The noble fixture lost its first signature");
@@ -54,6 +55,7 @@ describe("curves CLI", () => {
     expect(help.stdout).toMatch(/^ {2}secp256k1 {2}Point math/m);
     expect(help.stdout).toMatch(/^ {2}bip340 {5}BIP340 Schnorr/m);
     expect(help.stdout).toMatch(/^ {2}sr25519 {4}sr25519 keys/m);
+    expect(help.stdout).toMatch(/^ {2}ed25519 {4}Ed25519 signatures/m);
     expect(usage.stdout).toContain("USAGE curves compute [OPTIONS] <OPERATION>");
     expect(unknown).toMatchObject({
       code: 1,
@@ -120,6 +122,24 @@ describe("curves CLI", () => {
         stdout: '{"operation":"verify","valid":true}\n',
       });
     }
+  });
+
+  it("verifies an Ed25519 signature from flags, and --no-zip215 turns the rules strict", () => {
+    for (const { message, signature, publicKey } of rfc8032Signatures.slice(0, 3)) {
+      const flags = ["--public-key", publicKey, "--message", message, "--signature", signature];
+      expect(run("ed25519", "verify", ...flags), message).toMatchObject({
+        code: 0,
+        stdout: '{"operation":"verify","valid":true}\n',
+      });
+    }
+    const [smallOrder] = speccheck;
+    if (smallOrder === undefined) throw new Error("The speccheck fixture lost case 0");
+    const { message, signature, publicKey } = smallOrder;
+    const flags = ["--public-key", publicKey, "--message", message, "--signature", signature];
+    expect(run("ed25519", "verify", ...flags).stdout).toBe('{"operation":"verify","valid":true}\n');
+    expect(run("ed25519", "verify", ...flags, "--no-zip215").stdout).toBe(
+      '{"operation":"verify","valid":false}\n',
+    );
   });
 
   it("makes an sr25519 key pair and verifies a hex message", () => {

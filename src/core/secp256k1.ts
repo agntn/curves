@@ -7,6 +7,7 @@
  * tests read the words.
  */
 
+import { requireOptions } from "./arguments.ts";
 import type { AffinePoint } from "./arithmetic.ts";
 import { invert, mod, power } from "./field.ts";
 
@@ -510,16 +511,6 @@ function readSignature(value: unknown): SignatureParts {
     throw new RangeError("Signature must be 128 hex digits without 0x, r then s");
   }
   return { r: BigInt(`0x${value.slice(0, 64)}`), s: BigInt(`0x${value.slice(64)}`) };
-}
-
-/**
- * Refuse options that are no object, so a call in another library's shape fails loudly.
- * @param options - The caller's value
- * @param shape - The call as it should read, for the error
- * @throws {TypeError} When options is not an object
- */
-export function requireOptions(options: unknown, shape: string): void {
-  if (typeof options !== "object" || options === null) throw new TypeError(`Call it as ${shape}`);
 }
 
 /**

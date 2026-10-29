@@ -6,6 +6,7 @@ import { McpServer } from "../docs/node_modules/@modelcontextprotocol/sdk/dist/e
 import type { CallToolResult } from "../docs/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createMcpServer, toolListings } from "../src/mcp.ts";
+import { speccheck } from "./fixtures/ed25519.ts";
 import { devAccounts } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
@@ -71,6 +72,14 @@ const { seed } = devAccounts;
 const paar = { a: "2", b: "2", p: "17" };
 /** r = 1 and s = 1: false under G as the key, while recover still lifts x = 1 to some key. */
 const SIGNATURE = `${"1".padStart(64, "0")}${"1".padStart(64, "0")}`;
+const [caseZero] = speccheck;
+if (caseZero === undefined) throw new Error("The speccheck fixture lost case 0");
+/** Speccheck case 0, a key of order 8: true under ZIP 215, false once zip215 is false. */
+const smallOrder = {
+  publicKey: caseZero.publicKey,
+  message: caseZero.message,
+  signature: caseZero.signature,
+};
 
 /** Calls that cover a plain answer, a refusal of the library and a schema miss. */
 const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
@@ -96,6 +105,8 @@ const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
   ],
   ["curves_sr25519_compute", { operation: "keypair", seed }],
   ["curves_sr25519_compute", { operation: "derive", publicKey: seed, chainCode: seed, hard: true }],
+  ["curves_ed25519_compute", { operation: "verify", ...smallOrder, zip215: false }],
+  ["curves_ed25519_compute", { operation: "verify", ...smallOrder, signature: "00" }],
 ];
 
 describe("docs MCP tools", () => {

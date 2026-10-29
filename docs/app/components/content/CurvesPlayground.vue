@@ -3,6 +3,7 @@ import { invertScalar, multiplyGenerator } from "@agntn/curves/secp256k1";
 import type { CurvePointText, Sr25519Details } from "#tool-operations";
 import { EMPTY_VECTOR, PI_VECTOR } from "../../utils/bip340";
 import { CURVES, pointArgument } from "../../utils/curves";
+import { ORDER_EIGHT, RFC_TEST_1 } from "../../utils/ed25519";
 import { shellArg } from "../../utils/format";
 import { BLOCK_170 } from "../../utils/secp";
 import { ALICE, ALICE_HELLO, ALICE_JUNCTION, DEV_SECRET, DEV_SEED, flipBit } from "../../utils/sr25519";
@@ -30,7 +31,8 @@ type Field =
   | "recovery"
   | "lowS"
   | "chainCode"
-  | "hard";
+  | "hard"
+  | "zip215";
 
 interface Operation {
   /** `compute:log`, `secp256k1:lift` or `sr25519:sign`, unique across the tools. */
@@ -50,6 +52,7 @@ const COMMANDS: Record<ToolName, string> = {
   curves_secp256k1_compute: "secp256k1",
   curves_bip340_compute: "bip340",
   curves_sr25519_compute: "sr25519",
+  curves_ed25519_compute: "ed25519",
 };
 
 /** Every operation of every tool, in the order the tools list them. */
@@ -77,6 +80,7 @@ const OPERATIONS: readonly Operation[] = [
   { key: "sr25519:sign", tool: "curves_sr25519_compute", op: "sign", takes: ["secret", "message", "encoding"], about: "Sign under the substrate context. Fresh randomness each time, so the bytes change and both still verify." },
   { key: "sr25519:verify", tool: "curves_sr25519_compute", op: "verify", takes: ["publicKey", "message", "encoding", "signature"], about: "Whether the key signed these bytes. A wrong signature is a plain false, not an error." },
   { key: "sr25519:derive", tool: "curves_sr25519_compute", op: "derive", takes: ["source", "chainCode", "hard"], sources: ["seed", "secret", "publicKey"], about: "A child as Substrate HDKD makes it. Hard needs the seed or secret. Soft follows from the public key too." },
+  { key: "ed25519:verify", tool: "curves_ed25519_compute", op: "verify", takes: ["publicKey", "message", "signature", "zip215"], about: "Check an Ed25519 signature. An order 8 key can pass ZIP 215. Tick strict and watch it fail." },
 ];
 
 const G = multiplyGenerator("1");
@@ -123,6 +127,13 @@ const signature = ref(ALICE_HELLO);
 const chainCode = ref(ALICE_JUNCTION);
 const hard = ref(true);
 const from = ref<KeySource>("seed");
+const edKey = ref<string>(RFC_TEST_1.publicKey);
+const edMessage = ref<string>(RFC_TEST_1.message);
+const edSignature = ref<string>(RFC_TEST_1.signature);
+/** Ticked, the call goes out with `zip215: false`. */
+const strict = ref(false);
+/** The Ed25519 fields that are text, by the argument each one fills. */
+const ED_FIELDS = { publicKey: edKey, message: edMessage, signature: edSignature } as const;
 
 const current = computed(() => OPERATIONS.find((row) => row.key === key.value) ?? OPERATIONS[0]!);
 const position = computed(() => OPERATIONS.indexOf(current.value) + 1);
@@ -130,6 +141,7 @@ const curve = computed(() => current.value.tool === "curves_compute");
 const secp = computed(() => current.value.tool === "curves_secp256k1_compute");
 const schnorr = computed(() => current.value.tool === "curves_bip340_compute");
 const sr = computed(() => current.value.tool === "curves_sr25519_compute");
+const edwards = computed(() => current.value.tool === "curves_ed25519_compute");
 /** The key the operation on screen starts from: the one picked, when this operation takes it. */
 const source = computed(() => {
   const options = current.value.sources ?? [];
@@ -176,6 +188,23 @@ function schnorrArgs(): Record<string, unknown> {
 }
 
 /**
+ * The Ed25519 arguments on screen. The message always goes along, so blank verifies the empty one.
+ *
+ * @returns {Record<string, unknown>} The arguments, operation included.
+ */
+function edArgs(): Record<string, unknown> {
+  const key = edKey.value.trim();
+  const signature = edSignature.value.trim();
+  return {
+    operation: current.value.op,
+    ...(key === "" ? {} : { publicKey: key }),
+    message: edMessage.value.trim(),
+    ...(signature === "" ? {} : { signature }),
+    ...(strict.value ? { zip215: false } : {}),
+  };
+}
+
+/**
  * A point typed as `x,y`, as the tool takes it, or the text as typed when it has no comma.
  *
  * @param text - The field.
@@ -190,6 +219,7 @@ function pointValue(text: string): { x: string; y: string } | string {
 const toolArgs = computed(() => {
   if (sr.value) return srArgs();
   if (schnorr.value) return schnorrArgs();
+  if (edwards.value) return edArgs();
   const args: Record<string, unknown> = { operation: current.value.op };
   if (!secp.value) Object.assign(args, { a: a.value.trim(), b: b.value.trim(), p: p.value.trim() });
   for (const field of current.value.takes) {
@@ -273,6 +303,7 @@ const cliLine = computed(() => {
       if (name === "compressed") return " --no-compressed";
       if (name === "hard") return " --hard";
       if (name === "lowS") return " --low-s";
+      if (name === "zip215") return " --no-zip215";
       const text = typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
       return ` --${name.replaceAll(/[A-Z]/gu, (upper) => `-${upper.toLowerCase()}`)} ${shellArg(text)}`;
     })
@@ -452,6 +483,19 @@ const SCHNORR_SAMPLES = [
   { label: "one bit off", load: () => (schnorrSignature.value = flipBit(schnorrSignature.value)) },
 ] as const;
 
+/** Ed25519 samples: RFC 8032's empty message, a key of order 8, and either one bit off. */
+const ED_SAMPLES = [
+  {
+    label: "RFC 8032 test 1",
+    load: () => ((edKey.value = RFC_TEST_1.publicKey), (edMessage.value = RFC_TEST_1.message), (edSignature.value = RFC_TEST_1.signature)),
+  },
+  {
+    label: "order 8 key",
+    load: () => ((edKey.value = ORDER_EIGHT.publicKey), (edMessage.value = ORDER_EIGHT.message), (edSignature.value = ORDER_EIGHT.signature)),
+  },
+  { label: "one bit off", load: () => (edSignature.value = flipBit(edSignature.value)) },
+] as const;
+
 /** sr25519 samples: the dev seed with `//Alice`, and her signature one bit off. */
 const SR_SAMPLES = [
   {
@@ -501,6 +545,12 @@ function readQuery(query: Readonly<Record<string, unknown>>) {
     for (const [name, field] of Object.entries(SCHNORR_FIELDS)) {
       if (typeof query[name] === "string") field.value = query[name];
     }
+  }
+  if (op?.tool === "curves_ed25519_compute") {
+    for (const [name, field] of Object.entries(ED_FIELDS)) {
+      if (typeof query[name] === "string") field.value = query[name];
+    }
+    strict.value = query.zip215 === "false";
   }
   const onSecp = op?.tool === "curves_secp256k1_compute";
   for (const [name, field] of Object.entries(onSecp ? { ...FIELDS, ...SECP_FIELDS } : FIELDS)) {
@@ -705,6 +755,24 @@ const shareLink = computed(() => {
                 <dd><UInput id="playground-schnorr-signature" v-model="schnorrSignature" variant="none" placeholder="x of R then s, 128 hex digits" class="w-full" spellcheck="false" /></dd>
               </div>
             </dl>
+            <dl v-else-if="edwards" class="console-readout-rows">
+              <div>
+                <dt><label for="playground-ed-key">publicKey</label></dt>
+                <dd><UInput id="playground-ed-key" v-model="edKey" variant="none" placeholder="public key, 64 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div>
+                <dt><label for="playground-ed-message">message</label></dt>
+                <dd><UInput id="playground-ed-message" v-model="edMessage" variant="none" placeholder="hex, empty is fine" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div>
+                <dt><label for="playground-ed-signature">signature</label></dt>
+                <dd><UInput id="playground-ed-signature" v-model="edSignature" variant="none" placeholder="R then S, 128 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div>
+                <dt><label for="playground-strict">rules</label></dt>
+                <dd><UCheckbox id="playground-strict" v-model="strict" label="strict rules, zip215 false" /></dd>
+              </div>
+            </dl>
             <dl v-else class="console-readout-rows">
               <div v-if="current.sources">
                 <dt>from</dt>
@@ -771,6 +839,9 @@ const shareLink = computed(() => {
           <div v-else-if="schnorr" class="playground-chips" role="group" aria-label="BIP340 test vectors">
             <UButton v-for="sample in SCHNORR_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
+          <div v-else-if="edwards" class="playground-chips" role="group" aria-label="Ed25519 test vectors">
+            <UButton v-for="sample in ED_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
+          </div>
           <div v-else class="playground-chips" role="group" aria-label="Sample keys">
             <UButton v-for="sample in SR_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
@@ -779,6 +850,9 @@ const shareLink = computed(() => {
             <template v-if="sr"
               >Keys and signatures are hex without 0x. The dev seed is public on purpose, so anyone
               can sign as Alice. Your own secret would land in the address bar, so maybe don't.</template
+            >
+            <template v-else-if="edwards"
+              >Keys, messages and signatures are hex without 0x. Empty messages are fine. The samples are public, and every field lands in the address bar.</template
             >
             <template v-else-if="schnorr"
               >Keys and signatures are hex without 0x. The key is just the x coordinate, with even y

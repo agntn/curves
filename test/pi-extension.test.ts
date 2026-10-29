@@ -6,6 +6,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   bip340ComputeTool,
   computeTool,
+  ed25519ComputeTool,
   secp256k1ComputeTool,
   sr25519ComputeTool,
 } from "../src/tools.ts";
@@ -23,6 +24,7 @@ describe("pi curves extension", () => {
       "curves_secp256k1_compute",
       "curves_bip340_compute",
       "curves_sr25519_compute",
+      "curves_ed25519_compute",
     ]);
     expect(host.tool("curves_compute").parameters).toEqual(wireSchema(computeTool));
     expect(host.tool("curves_secp256k1_compute").parameters).toEqual(
@@ -30,6 +32,7 @@ describe("pi curves extension", () => {
     );
     expect(host.tool("curves_bip340_compute").parameters).toEqual(wireSchema(bip340ComputeTool));
     expect(host.tool("curves_sr25519_compute").parameters).toEqual(wireSchema(sr25519ComputeTool));
+    expect(host.tool("curves_ed25519_compute").parameters).toEqual(wireSchema(ed25519ComputeTool));
   });
 
   it("executes through the shared executor and returns structured details", async () => {
