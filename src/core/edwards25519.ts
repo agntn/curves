@@ -1,8 +1,10 @@
 /**
  * edwards25519, -x^2 + y^2 = 1 + d x^2 y^2 over the field of p = 2^255 - 19 (RFC 7748, section
  * 4.1), with the group law in extended coordinates (RFC 8032, section 5.1.4). ristretto255 and
- * ed25519 both stand on it and differ only in how a point travels. Nothing here runs in constant
- * time.
+ * ed25519 both stand on it and differ only in how a point travels. A multiply runs the same
+ * additions and doublings for every scalar, and no digit stands for zero, so its time doesn't
+ * follow the scalar's bits. The bigint arithmetic underneath is the JavaScript engine's, and it
+ * promises nothing about time.
  */
 
 import { invert, mod, power } from "./field.ts";
@@ -31,6 +33,15 @@ export const IDENTITY: Extended = { x: 0n, y: 1n, z: 1n, t: 0n };
 
 /** The base point in extended coordinates. */
 export const BASE: Extended = { x: G.x, y: G.y, z: 1n, t: mod(G.x * G.y, P) };
+
+/** The order of the whole group, cofactor included: any point times it is the identity. */
+const ORDER = 8n * L;
+
+/** 1 + 16 + ... + 16^63. Taken off a scalar first, it comes back as one more in every digit. */
+const ONES = ((1n << 256n) - 1n) / 15n;
+
+/** A bit above the top digit, so every scalar shifts as a bigint of the same length. */
+const PAD = 1n << 256n;
 
 /**
  * Reduce mod p.
@@ -122,16 +133,89 @@ export function negate(point: Extended): Extended {
 }
 
 /**
- * Multiply by double and add from the top bit down.
+ * Multiply by 16 with four doublings.
+ * @param point - Any point
+ * @returns {Extended} 16 times the point
+ */
+function timesSixteen(point: Extended): Extended {
+  return double(double(double(double(point))));
+}
+
+/**
+ * The 64 digits a multiply walks, lowest first. Digit d picks d + 1 times the point, never 0.
+ * @param scalar - Zero or more
+ * @returns {number[]} From 0 to 15, base 16 digits of the scalar minus {@link ONES}, mod 8l
+ */
+function digitsOf(scalar: bigint): number[] {
+  const padded = mod(scalar - ONES, ORDER) | PAD;
+  return Array.from({ length: 64 }, (_, index) => Number((padded >> BigInt(4 * index)) & 15n));
+}
+
+/**
+ * The table a digit picks from.
+ * @param point - Any point
+ * @returns {Extended[]} 1 to 16 times the point, so digit d picks entry d
+ */
+function multiplesOf(point: Extended): Extended[] {
+  const multiples = [point];
+  let multiple = point;
+  for (let count = 2; count <= 16; count++) {
+    multiple = add(multiple, point);
+    multiples.push(multiple);
+  }
+  return multiples;
+}
+
+/**
+ * Multiply digit by digit from the top, four doublings and one table addition each.
  * @param point - Any point
  * @param scalar - Zero or more
  * @returns {Extended} The product
  */
 export function multiply(point: Extended, scalar: bigint): Extended {
+  const multiples = multiplesOf(point);
+  return digitsOf(scalar)
+    .toReversed()
+    .reduce((result, digit) => add(timesSixteen(result), multiples[digit] ?? IDENTITY), IDENTITY);
+}
+
+/** Comb rows. A row per digit skips the doublings, but then a repeated scalar runs faster. */
+const ROWS = 4;
+
+/** How far apart the digits one step of the comb picks are. */
+const SPACING = 64 / ROWS;
+
+/** Row r holds 1 to 16 times 16^(16r) times the base point. */
+let baseTable: readonly (readonly Extended[])[] | undefined;
+
+/**
+ * Build the comb's rows, 64 points in all.
+ * @returns {Extended[][]} The rows, lowest first
+ */
+function buildBaseTable(): Extended[][] {
+  let base = BASE;
+  return Array.from({ length: ROWS }, () => {
+    const row = multiplesOf(base);
+    for (let step = 0; step < SPACING; step++) base = timesSixteen(base);
+    return row;
+  });
+}
+
+/**
+ * Multiply the base point with a comb of 16 steps, building its table on the first call.
+ * @param scalar - Zero or more
+ * @returns {Extended} The product
+ */
+export function multiplyBase(scalar: bigint): Extended {
+  baseTable ??= buildBaseTable();
+  const table = baseTable;
+  const digits = digitsOf(scalar);
   let result = IDENTITY;
-  for (const bit of scalar.toString(2)) {
-    result = double(result);
-    if (bit === "1") result = add(result, point);
+  for (let step = SPACING - 1; step >= 0; step--) {
+    result = timesSixteen(result);
+    for (const [row, multiples] of table.entries()) {
+      result = add(result, multiples[digits[row * SPACING + step] ?? 0] ?? IDENTITY);
+    }
   }
   return result;
 }

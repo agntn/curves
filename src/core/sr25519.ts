@@ -2,14 +2,15 @@
  * sr25519: Schnorr signatures over ristretto255 with Merlin transcripts, as schnorrkel 0.11 signs
  * for Substrate and Polkadot, with its hard and soft HDKD. A secret is 64 bytes: the key as
  * schnorrkel writes it for ed25519 (the scalar times 8, little-endian), then the 32-byte nonce.
- * Nothing here runs in constant time.
+ * Multiplying by the secret scalar or a signature's witness takes the same steps whatever their
+ * values. The scalar arithmetic mod l is plain bigint and promises nothing about time.
  */
 
 import { sha512 } from "@agntn/hashes/sha2";
 import { bytesToHex, bytesToNumberLE, concatBytes, hexToBytes, numberToBytesLE } from "./bytes.ts";
 import { mod } from "./field.ts";
 import { Transcript } from "./merlin.ts";
-import { BASE, IDENTITY, L, add, multiply, negate, type Extended } from "./edwards25519.ts";
+import { IDENTITY, L, add, multiply, multiplyBase, negate, type Extended } from "./edwards25519.ts";
 import { decode, encode, equals } from "./ristretto255.ts";
 
 /** The signing context Substrate signs under. */
@@ -182,7 +183,7 @@ export function expandSeed(seed: string): string {
  * @returns {string} The ristretto255 encoding as 64 hex digits
  */
 export function getPublicKey(secret: string): string {
-  return bytesToHex(encode(multiply(BASE, readSecret(secret).scalar)));
+  return bytesToHex(encode(multiplyBase(readSecret(secret).scalar)));
 }
 
 /**
@@ -201,10 +202,10 @@ export function sign(
   const bytes = readMessage(message);
   const { scalar, nonce } = readSecret(secret);
   const transcript = signingTranscript(readContext(options), bytes);
-  transcript.appendMessage("sign:pk", encode(multiply(BASE, scalar)));
+  transcript.appendMessage("sign:pk", encode(multiplyBase(scalar)));
   const witness = transcript.witnessBytes("signing", 64, [nonce], readRandom(options));
   const r = wideScalar(witness);
-  const commitment = encode(multiply(BASE, r));
+  const commitment = encode(multiplyBase(r));
   transcript.appendMessage("sign:R", commitment);
   const s = mod(wideScalar(transcript.challengeBytes("sign:c", 64)) * scalar + r, L);
   const signature = concatBytes(commitment, numberToBytesLE(s, 32));
@@ -239,7 +240,7 @@ export function verify(
   transcript.appendMessage("sign:pk", encode(key));
   transcript.appendMessage("sign:R", bytes.subarray(0, 32));
   const k = wideScalar(transcript.challengeBytes("sign:c", 64));
-  return equals(add(multiply(BASE, s), multiply(negate(key), k)), commitment);
+  return equals(add(multiplyBase(s), multiply(negate(key), k)), commitment);
 }
 
 /**
@@ -301,7 +302,7 @@ function softTweak(key: Extended, chainCode: unknown): { transcript: Transcript;
  */
 export function deriveSoft(secret: string, chainCode: string, options: RandomOptions = {}): string {
   const { scalar, nonce } = readSecret(secret);
-  const { transcript, tweak } = softTweak(multiply(BASE, scalar), chainCode);
+  const { transcript, tweak } = softTweak(multiplyBase(scalar), chainCode);
   const seed = concatBytes(numberToBytesLE(scalar, 32), nonce);
   const childNonce = transcript.witnessBytes("HDKD-nonce", 32, [nonce, seed], readRandom(options));
   return writeSecret(mod(scalar + tweak, L), childNonce);
@@ -317,5 +318,5 @@ export function deriveSoft(secret: string, chainCode: string, options: RandomOpt
 export function derivePublic(publicKey: string, chainCode: string): string {
   const key = readPublicKey(publicKey);
   const { tweak } = softTweak(key, chainCode);
-  return bytesToHex(encode(add(key, multiply(BASE, tweak))));
+  return bytesToHex(encode(add(key, multiplyBase(tweak))));
 }
