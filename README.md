@@ -112,7 +112,7 @@ Three tools: `curves_compute`, `curves_secp256k1_compute` and `curves_sr25519_co
 
 ## 🚫 What this does not do
 
-Mnemonics, addresses and secp256k1 signatures. That's [@agntn/keys](https://github.com/agntn/keys). Nothing here runs in constant time either. And a log over a real 256-bit group? Not happening, here or anywhere else.
+Mnemonics, addresses and secp256k1 signatures. That's [@agntn/keys](https://github.com/agntn/keys). secp256k1 and your own curves don't run in constant time. And a log over a real 256-bit group? Not happening, here or anywhere else.
 
 ## 🛠️ Development
 

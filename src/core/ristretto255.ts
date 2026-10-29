@@ -1,12 +1,11 @@
 /**
  * ristretto255 from RFC 9496: the prime order group of order l built over edwards25519. Points
- * travel as the 32-byte ristretto255 encoding, which hides the cofactor 8 of the curve. Nothing
- * here runs in constant time.
+ * travel as the 32-byte ristretto255 encoding, which hides the cofactor 8 of the curve.
+ * Multiplying takes the same steps for every scalar, the way edwards25519 does.
  */
 
 import { bytesToHex, hexToBytes, bytesToNumberLE, numberToBytesLE } from "./bytes.ts";
 import {
-  BASE,
   D,
   G,
   L,
@@ -18,6 +17,7 @@ import {
   fe,
   isNegative,
   multiply,
+  multiplyBase,
   negate,
   sqrtRatioM1,
   type Extended,
@@ -156,7 +156,7 @@ export function multiplyPoint(point: string, scalar: bigint): string {
  * @returns {string} The product, encoded
  */
 export function multiplyGenerator(scalar: bigint): string {
-  return encodePoint(multiply(BASE, decodeScalar(scalar, SCALAR_RANGE)));
+  return encodePoint(multiplyBase(decodeScalar(scalar, SCALAR_RANGE)));
 }
 
 /**

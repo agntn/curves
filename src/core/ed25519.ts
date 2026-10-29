@@ -1,12 +1,11 @@
 /**
  * ed25519 points as RFC 8032 writes them: edwards25519 with its cofactor 8 in plain sight, so a
  * point of small order decodes like any other and only `isTorsionFree` tells them apart. Monero
- * keys live here. Nothing here runs in constant time.
+ * keys live here. Multiplying takes the same steps for every scalar, the way edwards25519 does.
  */
 
 import { bytesToHex, bytesToNumberLE, hexToBytes, numberToBytesLE } from "./bytes.ts";
 import {
-  BASE,
   D,
   G,
   L,
@@ -15,11 +14,12 @@ import {
   decodeScalar,
   fe,
   multiply,
+  multiplyBase,
   negate,
   sqrtRatioM1,
   type Extended,
 } from "./edwards25519.ts";
-import { invert, mod } from "./field.ts";
+import { mod, power } from "./field.ts";
 
 /** The domain parameters: p, d, the base point order l, the cofactor h and the base point. */
 export const ed25519 = Object.freeze({ p: P, d: D, l: L, h: 8n, g: G });
@@ -52,12 +52,12 @@ function decode(bytes: ArrayLike<number>): Extended | undefined {
 }
 
 /**
- * Encoding of RFC 8032, section 5.1.2.
+ * Encoding of RFC 8032, section 5.1.2. Z^(p - 2) inverts Z, since Euclid's step count leaks it.
  * @param point - Any point
  * @returns {Uint8Array} 32 bytes
  */
 function encode(point: Extended): Uint8Array {
-  const zInverse = invert(point.z, P);
+  const zInverse = power(point.z, P - 2n, P);
   const x = fe(point.x * zInverse);
   const y = fe(point.y * zInverse);
   return numberToBytesLE(y | ((x & 1n) << 255n), 32);
@@ -139,7 +139,7 @@ export function multiplyPoint(point: string, scalar: bigint): string {
  * @returns {string} The product, encoded
  */
 export function multiplyGenerator(scalar: bigint): string {
-  return encodePoint(multiply(BASE, decodeScalar(scalar, SCALAR_RANGE)));
+  return encodePoint(multiplyBase(decodeScalar(scalar, SCALAR_RANGE)));
 }
 
 /**
