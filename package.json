@@ -9,6 +9,7 @@
     "discrete-log",
     "ecc",
     "ed25519",
+    "eddsa",
     "elliptic-curve",
     "mcp",
     "monero",

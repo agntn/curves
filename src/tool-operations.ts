@@ -29,6 +29,7 @@ import {
 } from "./core/group.ts";
 import * as bip340 from "./core/bip340.ts";
 import { hexToBytes } from "./core/bytes.ts";
+import * as ed25519 from "./core/ed25519.ts";
 import * as secp256k1 from "./core/secp256k1.ts";
 import * as sr25519 from "./core/sr25519.ts";
 import {
@@ -36,6 +37,7 @@ import {
   CURVE_INTEGER_PATTERN,
   CURVE_OPERATIONS,
   DEFAULT_CURVE_POINTS_SHOWN,
+  ED25519_OPERATIONS,
   MAX_CURVE_INTEGER_LENGTH,
   MAX_CURVE_POINTS_SHOWN,
   MAX_CONTEXT_LENGTH,
@@ -45,6 +47,7 @@ import {
   SR25519_OPERATIONS,
   type Bip340Operation,
   type CurveOperation,
+  type Ed25519Operation,
   type Secp256k1Operation,
   type Sr25519Operation,
 } from "./tool-contract.ts";
@@ -83,6 +86,9 @@ export type Secp256k1Details =
 
 /** What the BIP340 tool computes, by operation. */
 export type Bip340Details = { operation: "verify"; valid: boolean };
+
+/** What the Ed25519 tool computes, by operation. */
+export type Ed25519Details = { operation: "verify"; valid: boolean };
 
 /** What the sr25519 tool computes, by operation. A secret or a seed comes back only when new. */
 export type Sr25519Details =
@@ -544,7 +550,22 @@ const BIP340_ARGUMENTS: Readonly<Record<Bip340Operation, readonly string[]>> = {
 const BIP340_OPTIONAL = [...new Set(Object.values(BIP340_ARGUMENTS).flat())];
 
 /**
- * Verify a BIP340 signature. A blank message is the empty one BIP340 signs, not a missing one.
+ * Read the hex message a BIP340 or Ed25519 signature covers. Blank is the empty one, not missing.
+ * @param args - Tool arguments
+ * @param operation - The operation, for the refusal
+ * @returns {string} The message as given
+ */
+function signedMessage(args: Readonly<Record<string, unknown>>, operation: string): string {
+  if (args["message"] === undefined) throw new TypeError(`${operation} needs message`);
+  const message = requiredString(args["message"], "message");
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    throw new RangeError(`message must be at most ${MAX_MESSAGE_LENGTH} characters`);
+  }
+  return message;
+}
+
+/**
+ * Verify a BIP340 signature.
  * @param args - Tool arguments, the operation and the ones it takes
  * @returns {ToolResult<Bip340Details>} The verdict
  */
@@ -555,13 +576,49 @@ export function computeBip340(args: Readonly<Record<string, unknown>>): ToolResu
     if (isUnset(args[name])) throw new TypeError(`${operation} needs ${name}`);
     return requiredString(args[name], name);
   };
-  if (args["message"] === undefined) throw new TypeError(`${operation} needs message`);
-  const message = requiredString(args["message"], "message");
-  if (message.length > MAX_MESSAGE_LENGTH) {
-    throw new RangeError(`message must be at most ${MAX_MESSAGE_LENGTH} characters`);
-  }
+  const message = signedMessage(args, operation);
   const publicKey = text("publicKey");
   const valid = bip340.verify(text("signature"), { message, publicKey });
+  return result({ operation, valid });
+}
+
+/** The arguments each Ed25519 operation takes. */
+const ED25519_ARGUMENTS: Readonly<Record<Ed25519Operation, readonly string[]>> = {
+  verify: ["publicKey", "message", "signature", "zip215"],
+};
+
+/** Every optional argument of the Ed25519 tool. */
+const ED25519_OPTIONAL = [...new Set(Object.values(ED25519_ARGUMENTS).flat())];
+
+/**
+ * Read zip215, true when missing.
+ * @param value - Raw argument
+ * @returns {boolean} Whether ZIP 215's rules apply
+ */
+function zip215(value: unknown): boolean {
+  const flag = value ?? true;
+  if (typeof flag !== "boolean") throw new TypeError("zip215 must be a boolean");
+  return flag;
+}
+
+/**
+ * Verify an Ed25519 signature under ZIP 215's rules, or the strict ones when zip215 is false.
+ * @param args - Tool arguments, the operation and the ones it takes
+ * @returns {ToolResult<Ed25519Details>} The verdict
+ */
+export function computeEd25519(
+  args: Readonly<Record<string, unknown>>,
+): ToolResult<Ed25519Details> {
+  const operation = oneOf(args["operation"], "operation", ED25519_OPERATIONS);
+  refuseForeign(args, operation, ED25519_OPTIONAL, ED25519_ARGUMENTS[operation]);
+  const text = (name: string): string => {
+    if (isUnset(args[name])) throw new TypeError(`${operation} needs ${name}`);
+    return requiredString(args[name], name);
+  };
+  const message = signedMessage(args, operation);
+  const publicKey = text("publicKey");
+  const rules = zip215(args["zip215"]);
+  const valid = ed25519.verify(text("signature"), { message, publicKey, zip215: rules });
   return result({ operation, valid });
 }
 

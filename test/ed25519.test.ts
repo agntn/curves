@@ -14,12 +14,25 @@ import {
   negatePoint,
   reduceScalar,
   subtractPoints,
+  verify,
 } from "../src/ed25519.ts";
-import { invalidEncodings, monero, orderEight, rfc8032Keys } from "./fixtures/ed25519.ts";
+import {
+  invalidEncodings,
+  monero,
+  orderEight,
+  rfc8032Keys,
+  rfc8032Signatures,
+  speccheck,
+  unreducedR,
+} from "./fixtures/ed25519.ts";
+import wycheproof from "./fixtures/wycheproof-ed25519.json" with { type: "json" };
 
 const identity = `01${"0".repeat(62)}`;
 const base = "58".padEnd(64, "6");
 const scalarRange = "Scalar must be a bigint from 0 to l, the order of the base point, minus 1";
+
+/* Wycheproof tcId 151: an R of y = 1 with the sign bit set on x = 0, which only ZIP 215 decodes. */
+const SIGNED_ZERO = 151;
 
 /**
  * Hash a secret and clamp the low half, as RFC 8032, section 5.1.5, makes the secret scalar.
@@ -97,5 +110,134 @@ describe("ed25519", () => {
       expect(() => multiplyGenerator(scalar)).toThrow(scalarRange);
       expect(() => multiplyPoint(base, scalar)).toThrow(scalarRange);
     }
+  });
+});
+
+describe("Ed25519 verify", () => {
+  const [first] = rfc8032Signatures;
+  if (first === undefined) throw new Error("The RFC 8032 fixture lost test 1");
+
+  it("verifies the five signatures of RFC 8032, section 7.1, under both rules", () => {
+    for (const { name, publicKey, message, signature } of rfc8032Signatures) {
+      for (const zip215 of [true, false]) {
+        expect(verify(signature, { message, publicKey, zip215 }), `TEST ${name}`).toBe(true);
+        const upper = { message: message.toUpperCase(), publicKey: publicKey.toUpperCase() };
+        expect(verify(signature.toUpperCase(), { ...upper, zip215 }), `TEST ${name}`).toBe(true);
+        const other = { message: `${message}00`, publicKey, zip215 };
+        expect(verify(signature, other), `TEST ${name}`).toBe(false);
+      }
+    }
+    expect(rfc8032Signatures.map(({ message }) => message.length / 2)).toEqual([0, 1, 2, 1023, 64]);
+  });
+
+  it("answers every Wycheproof vector, acceptable ones by the rules in force", () => {
+    let count = 0;
+    for (const { publicKey, tests } of wycheproof.groups) {
+      for (const { tcId, msg: message, sig, result, flags } of tests) {
+        const strict =
+          result === "valid" || (result === "acceptable" && !flags.includes("SmallOrderPublicKey"));
+        const zip215 = result !== "invalid" || tcId === SIGNED_ZERO;
+        if (sig.length === 128) {
+          expect(verify(sig, { message, publicKey }), `tcId ${tcId}`).toBe(zip215);
+          expect(verify(sig, { message, publicKey, zip215: false }), `tcId ${tcId}`).toBe(strict);
+        } else {
+          expect(result, `tcId ${tcId}`).toBe("invalid");
+          expect(() => verify(sig, { message, publicKey }), `tcId ${tcId}`).toThrow(RangeError);
+        }
+        count++;
+      }
+    }
+    expect(count).toBe(210);
+  });
+
+  it("agrees with @noble/curves 2.4.0 on the twelve speccheck cases, under both rules", () => {
+    for (const [index, { publicKey, message, signature, zip215, strict }] of speccheck.entries()) {
+      expect(verify(signature, { message, publicKey }), `case ${index}`).toBe(zip215);
+      expect(verify(signature, { message, publicKey, zip215: false }), `case ${index}`).toBe(
+        strict,
+      );
+    }
+    expect(speccheck.map(({ zip215 }) => zip215)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+    ]);
+    expect(speccheck.map(({ strict }) => strict)).toEqual([
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
+
+  it("reads a y from p up mod p under ZIP 215, and hashes R as it was written", () => {
+    const { publicKey, message, signature } = unreducedR;
+    expect(verify(signature, { message, publicKey })).toBe(true);
+    expect(verify(signature, { message, publicKey, zip215: false })).toBe(false);
+  });
+
+  it("fails an R or a key that doesn't decode, and an S from l up, instead of throwing", () => {
+    const { publicKey, message, signature } = first;
+    for (const encoding of invalidEncodings.filter(
+      (text) => text.length === 64 && !text.startsWith("zz"),
+    )) {
+      for (const zip215 of [true, false]) {
+        expect(verify(signature, { message, publicKey: encoding, zip215 }), encoding).toBe(false);
+        const r = `${encoding}${signature.slice(64)}`;
+        expect(verify(r, { message, publicKey, zip215 }), encoding).toBe(false);
+      }
+    }
+    const l = "edd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010";
+    expect(verify(`${signature.slice(0, 64)}${l}`, { message, publicKey })).toBe(false);
+  });
+
+  it("refuses arguments in another shape, in the caller's words", () => {
+    const { publicKey, message, signature } = first;
+    for (const malformed of [signature.slice(2), `0x${signature.slice(2)}`, null, 7]) {
+      expect(() => {
+        Reflect.apply(verify, undefined, [malformed, { message, publicKey }]);
+      }).toThrow("Signature must be 128 hex digits without 0x, R then S");
+    }
+    for (const malformed of ["0", "0x00", "zz", null, 7]) {
+      expect(() => {
+        Reflect.apply(verify, undefined, [signature, { message: malformed, publicKey }]);
+      }).toThrow("Message must be hex without 0x");
+    }
+    for (const malformed of [`00${publicKey}`, `0x${publicKey.slice(2)}`, publicKey.slice(2)]) {
+      expect(() => verify(signature, { message, publicKey: malformed })).toThrow(
+        "Public key must be 64 hex digits without 0x",
+      );
+    }
+    for (const zip215 of ["false", 0, null]) {
+      expect(() => {
+        Reflect.apply(verify, undefined, [signature, { message, publicKey, zip215 }]);
+      }).toThrow("zip215 must be a boolean");
+    }
+    for (const options of [undefined, null, message]) {
+      expect(() => {
+        Reflect.apply(verify, undefined, [signature, options]);
+      }).toThrow("Call it as verify(signature, { message, publicKey })");
+    }
+    const nobleShape = [Buffer.from(signature, "hex"), Buffer.from(message, "hex"), publicKey];
+    expect(() => {
+      Reflect.apply(verify, undefined, nobleShape);
+    }).toThrow("Signature must be 128 hex digits without 0x, R then S");
   });
 });

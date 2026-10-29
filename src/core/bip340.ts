@@ -6,9 +6,10 @@
  */
 
 import { sha256 } from "@agntn/hashes/sha2";
-import { bytesToHex, concatBytes, hexToBytes } from "./bytes.ts";
+import { readHex, requireOptions } from "./arguments.ts";
+import { bytesToHex, concatBytes } from "./bytes.ts";
 import { mod } from "./field.ts";
-import { combine, liftY, requireOptions, secp256k1 } from "./secp256k1.ts";
+import { combine, liftY, secp256k1 } from "./secp256k1.ts";
 
 const { p: P, n: N } = secp256k1;
 
@@ -22,20 +23,6 @@ export interface VerifyOptions {
 
 /** SHA-256 of the tag, written twice: every challenge hash starts with it. */
 let challengePrefix: Uint8Array | undefined;
-
-/**
- * Read hex without 0x, or refuse it in the caller's words.
- * @param value - The caller's value
- * @param length - The byte count, or undefined for any
- * @param refusal - The error message
- * @returns {Uint8Array} The bytes
- * @throws {RangeError} When the value is no hex of that length
- */
-function readHex(value: unknown, length: number | undefined, refusal: string): Uint8Array {
-  const bytes = typeof value === "string" ? hexToBytes(value, length) : undefined;
-  if (bytes === undefined) throw new RangeError(refusal);
-  return bytes;
-}
 
 /**
  * Read bytes as a big-endian number, BIP340's int(x).

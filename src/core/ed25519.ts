@@ -2,15 +2,19 @@
  * ed25519 points as RFC 8032 writes them: edwards25519 with its cofactor 8 in plain sight, so a
  * point of small order decodes like any other and only `isTorsionFree` tells them apart. Monero
  * keys live here. Multiplying takes the same steps for every scalar, the way edwards25519 does.
+ * Signatures pass by the cofactored equation of RFC 8032, under ZIP 215's rules or strict ones.
  */
 
-import { bytesToHex, bytesToNumberLE, hexToBytes, numberToBytesLE } from "./bytes.ts";
+import { sha512 } from "@agntn/hashes/sha2";
+import { readHex, requireOptions } from "./arguments.ts";
+import { bytesToHex, bytesToNumberLE, concatBytes, hexToBytes, numberToBytesLE } from "./bytes.ts";
 import {
   D,
   G,
   L,
   P,
   add,
+  clearCofactor,
   decodeScalar,
   fe,
   multiply,
@@ -36,17 +40,20 @@ const Y_MASK = (1n << 255n) - 1n;
 /**
  * Decoding of RFC 8032, section 5.1.3: y little-endian, the sign of x in the top bit.
  * @param bytes - 32 bytes
- * @returns {Extended | undefined} The point, or undefined for y at or above p, a y with no x, or
- * the sign bit set on x = 0
+ * @param zip215 - Whether to also take the two encodings ZIP 215 lets through: y from p up, read
+ * mod p, and the sign bit set on x = 0
+ * @returns {Extended | undefined} The point, or undefined for a y with no x, and without zip215
+ * for those two encodings too
  */
-function decode(bytes: ArrayLike<number>): Extended | undefined {
+function decode(bytes: ArrayLike<number>, zip215: boolean): Extended | undefined {
   const value = bytesToNumberLE(bytes);
-  const y = value & Y_MASK;
+  const encoded = value & Y_MASK;
   const odd = value >> 255n === 1n;
-  if (bytes.length !== 32 || y >= P) return undefined;
+  if (bytes.length !== 32 || (encoded >= P && !zip215)) return undefined;
+  const y = fe(encoded);
   const yy = fe(y * y);
   const { square, root } = sqrtRatioM1(fe(yy - 1n), fe(D * yy + 1n));
-  if (!square || (root === 0n && odd)) return undefined;
+  if (!square || (root === 0n && odd && !zip215)) return undefined;
   const x = odd ? fe(-root) : root;
   return { x, y, z: 1n, t: fe(x * y) };
 }
@@ -80,7 +87,7 @@ function isNeutral(point: Extended): boolean {
  */
 function decodePoint(text: unknown): Extended {
   const bytes = typeof text === "string" ? hexToBytes(text, 32) : undefined;
-  const point = bytes === undefined ? undefined : decode(bytes);
+  const point = bytes === undefined ? undefined : decode(bytes, false);
   if (point === undefined) throw new Error(INVALID_POINT);
   return point;
 }
@@ -184,4 +191,52 @@ export function reduceScalar(text: string): bigint {
   const bytes = typeof text === "string" ? hexToBytes(text) : undefined;
   if (bytes?.length !== 32 && bytes?.length !== 64) throw new RangeError(REDUCE_LENGTH);
   return mod(bytesToNumberLE(bytes), L);
+}
+
+/** What {@link verify} checks a signature against, and by which rules. */
+export interface VerifyOptions {
+  /** The signed bytes as hex, any length, empty too. */
+  readonly message: string;
+  /** The signer's key, 64 hex digits. */
+  readonly publicKey: string;
+  /** ZIP 215's rules, the default. False wants both encodings canonical and no small order key. */
+  readonly zip215?: boolean;
+}
+
+/**
+ * Read zip215, true when missing.
+ * @param value - The caller's value
+ * @returns {boolean} Whether ZIP 215's rules apply
+ * @throws {TypeError} When the value is no boolean
+ */
+function readZip215(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (typeof value !== "boolean") throw new TypeError("zip215 must be a boolean");
+  return value;
+}
+
+/**
+ * Verify plain Ed25519 by RFC 8032, section 5.1.7, without Ed25519ctx or Ed25519ph: 8SB = 8R + 8kA.
+ * @param signature - 128 hex digits, R then S
+ * @param options - The message, the key and the rules
+ * @returns {boolean} Whether the key signed the message, false too for an R or a key that doesn't
+ * decode, an S at or above l, and a key of small order unless zip215 holds
+ * @throws {RangeError} When the signature, the message or the key is no hex of its length
+ * @throws {TypeError} When options is not an object, or zip215 no boolean
+ */
+export function verify(signature: string, options: VerifyOptions): boolean {
+  const bytes = readHex(signature, 64, "Signature must be 128 hex digits without 0x, R then S");
+  requireOptions(options, "verify(signature, { message, publicKey })");
+  const message = readHex(options.message, undefined, "Message must be hex without 0x");
+  const key = readHex(options.publicKey, 32, "Public key must be 64 hex digits without 0x");
+  const zip215 = readZip215(options.zip215);
+  const encodedR = bytes.subarray(0, 32);
+  const s = bytesToNumberLE(bytes.subarray(32));
+  const a = decode(key, zip215);
+  const r = decode(encodedR, zip215);
+  if (a === undefined || r === undefined || s >= L) return false;
+  if (!zip215 && isNeutral(clearCofactor(a))) return false;
+  const k = mod(bytesToNumberLE(sha512(concatBytes(encodedR, key, message))), L);
+  const difference = add(add(r, multiply(a, k)), negate(multiplyBase(s)));
+  return isNeutral(clearCofactor(difference));
 }
