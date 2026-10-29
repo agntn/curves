@@ -242,6 +242,18 @@ export function verify(
 }
 
 /**
+ * Schnorrkel's `hard_derive_mini_secret_key`: the child mini secret from the parent scalar.
+ * @param scalar - The parent scalar
+ * @param chainCode - 64 hex digits
+ * @returns {string} The child mini secret as 64 hex digits
+ */
+function hardSeed(scalar: bigint, chainCode: unknown): string {
+  const transcript = derivationTranscript(readHex(chainCode, 32, "Chain code"));
+  transcript.appendMessage("secret-key", numberToBytesLE(scalar, 32));
+  return bytesToHex(transcript.challengeBytes("HDKD-hard", 32));
+}
+
+/**
  * Derive a hard child, which needs the secret: the child's mini secret comes out of a transcript
  * over the chain code and the parent scalar, then expands as {@link expandSeed} does.
  * @param secret - 128 hex digits: the key, then the nonce
@@ -249,10 +261,19 @@ export function verify(
  * @returns {string} The child secret as 128 hex digits
  */
 export function deriveHard(secret: string, chainCode: string): string {
-  const { scalar } = readSecret(secret);
-  const transcript = derivationTranscript(readHex(chainCode, 32, "Chain code"));
-  transcript.appendMessage("secret-key", numberToBytesLE(scalar, 32));
-  return expandSeed(bytesToHex(transcript.challengeBytes("HDKD-hard", 32)));
+  return expandSeed(hardSeed(readSecret(secret).scalar, chainCode));
+}
+
+/**
+ * The seed of a hard child, as subkey keeps it down `//hard` junctions. Its {@link expandSeed} is
+ * {@link deriveHard} of the expanded parent.
+ * @param seed - 64 hex digits, the parent mini secret
+ * @param chainCode - 64 hex digits, as Substrate builds it from a `//hard` junction
+ * @returns {string} The child mini secret as 64 hex digits
+ * @throws {RangeError} When the seed or the chain code is no 64 hex digits
+ */
+export function deriveHardSeed(seed: string, chainCode: string): string {
+  return hardSeed(readSecret(expandSeed(seed)).scalar, chainCode);
 }
 
 /**

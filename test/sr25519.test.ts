@@ -3,6 +3,7 @@ import { Transcript } from "../src/core/merlin.ts";
 import { multiplyGenerator, ristretto255 } from "../src/ristretto255.ts";
 import {
   deriveHard,
+  deriveHardSeed,
   derivePublic,
   deriveSoft,
   expandSeed,
@@ -11,7 +12,13 @@ import {
   sign,
   verify,
 } from "../src/sr25519.ts";
-import { devAccounts, merlinVector, scureVectors } from "./fixtures/sr25519.ts";
+import {
+  devAccounts,
+  keyringPairs,
+  merlinVector,
+  scureVectors,
+  subkeySeeds,
+} from "./fixtures/sr25519.ts";
 
 const { secret, publicKey, random, chainCode } = scureVectors;
 const message = new TextEncoder().encode(scureVectors.message);
@@ -174,8 +181,37 @@ describe("sr25519 HDKD", () => {
     expect(getPublicKey(deriveSoft(secret, chainCode))).toBe(scureVectors.softPublic);
   });
 
+  it("keeps the seed subkey prints for //Alice and //Bob", () => {
+    expect(deriveHardSeed(devAccounts.seed, junction("Alice"))).toBe(subkeySeeds.alice);
+    expect(deriveHardSeed(devAccounts.seed, junction("Bob"))).toBe(subkeySeeds.bob);
+  });
+
+  it("keeps a seed down //Alice//stash that expands into the polkadot-js keyring pair", () => {
+    const alice = deriveHardSeed(devAccounts.seed, junction("Alice"));
+    expect(expandSeed(alice)).toBe(keyringPairs.alice.secret);
+    const stash = expandSeed(deriveHardSeed(alice, junction("stash")));
+    expect(stash).toBe(keyringPairs.aliceStash.secret);
+    expect(getPublicKey(stash)).toBe(keyringPairs.aliceStash.publicKey);
+    const root = expandSeed(devAccounts.seed);
+    expect(deriveHard(deriveHard(root, junction("Alice")), junction("stash"))).toBe(stash);
+  });
+
+  it("expands a hard child seed into the secret @scure/sr25519 derives", () => {
+    expect(expandSeed(deriveHardSeed(scureVectors.seed, chainCode))).toBe(scureVectors.hard);
+  });
+
+  it("refuses seeds of the wrong length for a hard child seed", () => {
+    const refusal = "Seed must be 64 hex digits without 0x";
+    expect(() => deriveHardSeed(scureVectors.seed.slice(2), chainCode)).toThrow(refusal);
+    expect(() => deriveHardSeed(secret, chainCode)).toThrow(refusal);
+    expect(() => deriveHardSeed(new Uint8Array(32) as unknown as string, chainCode)).toThrow(
+      refusal,
+    );
+  });
+
   it("refuses chain codes of the wrong length", () => {
     const refusal = "Chain code must be 64 hex digits without 0x";
+    expect(() => deriveHardSeed(scureVectors.seed, chainCode.slice(2))).toThrow(refusal);
     expect(() => deriveHard(secret, chainCode.slice(2))).toThrow(refusal);
     expect(() => deriveSoft(secret, `${chainCode}00`)).toThrow(refusal);
     expect(() => derivePublic(publicKey, "")).toThrow(refusal);

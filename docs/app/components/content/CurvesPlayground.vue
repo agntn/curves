@@ -68,7 +68,7 @@ const OPERATIONS: readonly Operation[] = [
   { key: "sr25519:keypair", tool: "curves_sr25519_compute", op: "keypair", takes: ["source"], sources: ["seed", "secret"], about: "A 32-byte seed grows into a secret and a public key. A secret alone gives back its public key." },
   { key: "sr25519:sign", tool: "curves_sr25519_compute", op: "sign", takes: ["secret", "message", "encoding"], about: "Sign under the substrate context. Fresh randomness each time, so the bytes change and both still verify." },
   { key: "sr25519:verify", tool: "curves_sr25519_compute", op: "verify", takes: ["publicKey", "message", "encoding", "signature"], about: "Whether the key signed these bytes. A wrong signature is a plain false, not an error." },
-  { key: "sr25519:derive", tool: "curves_sr25519_compute", op: "derive", takes: ["source", "chainCode", "hard"], sources: ["secret", "publicKey"], about: "A child as Substrate HDKD makes it. Hard needs the secret, soft follows from the public key too." },
+  { key: "sr25519:derive", tool: "curves_sr25519_compute", op: "derive", takes: ["source", "chainCode", "hard"], sources: ["seed", "secret", "publicKey"], about: "A child as Substrate HDKD makes it. Hard needs the seed or secret. Soft follows from the public key too." },
 ];
 
 const G = multiplyGenerator("1");
@@ -293,6 +293,7 @@ function srView(details: Sr25519Details): { icon: string; heading: string; rows:
     };
   }
   const rows = [hexRow("publicKey", details.publicKey, true)];
+  if (details.operation === "derive" && details.seed !== undefined) rows.push(hexRow("seed", details.seed));
   if (details.secret !== undefined) rows.push(hexRow("secret", details.secret));
   if (details.operation === "derive") rows.push({ label: "child", value: details.hard ? "hard, //" : "soft, /" });
   return { icon: details.operation === "derive" ? "i-lucide-git-branch" : "i-lucide-key-round", heading: shortHex(details.publicKey), rows };

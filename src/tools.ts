@@ -239,11 +239,11 @@ export const sr25519ComputeSchema = Type.Object(
     operation: Type.String({
       enum: [...SR25519_OPERATIONS],
       description:
-        "keypair takes seed or secret, sign takes secret and message, verify takes publicKey, message and signature, derive takes chainCode with secret or publicKey",
+        "keypair takes seed or secret, sign takes secret and message, verify takes publicKey, message and signature, derive takes chainCode with seed, secret or publicKey",
     }),
     seed: sr25519Hex(
       32,
-      "keypair only: the 32-byte mini secret Substrate keeps, which expands into a secret",
+      "keypair and derive: the 32-byte mini secret Substrate keeps, which expands into a secret. A hard child of a seed comes back with its own seed",
     ),
     secret: sr25519Hex(
       64,
@@ -276,7 +276,8 @@ export const sr25519ComputeSchema = Type.Object(
     ),
     hard: Type.Optional(
       Type.Boolean({
-        description: "derive only: a hard child, which needs secret. Default: false, a soft child",
+        description:
+          "derive only: a hard child, which needs seed or secret. Default: false, a soft child",
       }),
     ),
     random: sr25519Hex(
@@ -296,7 +297,8 @@ export const sr25519ComputeTool = defineTool({
   guidelines: [
     "keypair takes seed and returns secret and publicKey, or takes secret and returns publicKey",
     "sign takes secret and message and returns signature; verify takes publicKey, message and signature",
-    "derive takes chainCode with secret, or with publicKey for a soft child; hard needs secret",
+    "derive takes chainCode with seed or secret, or with publicKey for a soft child; hard needs seed or secret",
+    "a hard child of a seed has a seed too, as subkey keeps it down //hard junctions; a soft child has none",
     "message is utf8 text unless encoding is hex; the context defaults to substrate",
   ],
   effect: "read",

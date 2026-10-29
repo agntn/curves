@@ -83,6 +83,7 @@ describe("@agntn/curves", () => {
       "INVALID_PUBLIC_KEY",
       "SIGNING_CONTEXT",
       "deriveHard",
+      "deriveHardSeed",
       "derivePublic",
       "deriveSoft",
       "expandSeed",

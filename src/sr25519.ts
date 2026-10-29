@@ -2,6 +2,7 @@
 
 export {
   deriveHard,
+  deriveHardSeed,
   derivePublic,
   deriveSoft,
   expandSeed,

@@ -73,6 +73,26 @@ export const devAccounts = {
   bob: "8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48",
 } as const;
 
+/** The secret seeds `subkey inspect //Alice` and `subkey inspect //Bob` print. */
+export const subkeySeeds = {
+  alice: "e5be9a5092b81bca64be81d212e7f2f9eba183bb7a90954f7b76361f6edb5c0a",
+  bob: "398f0c28f98885e046333d4a41c19cee4c37368a9832c6502f6cfd182e2aef89",
+} as const;
+
+/** `//Alice` and `//Alice//stash` from the test pairs of the polkadot-js keyring. */
+export const keyringPairs = {
+  alice: {
+    secret:
+      "98319d4ff8a9508c4bb0cf0b5a78d760a0b2082c02775e6e82370816fedfff48925a225d97aa00682d6a59b95b18780c10d7032336e88f3442b42361f4a66011",
+    publicKey: "d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d",
+  },
+  aliceStash: {
+    secret:
+      "e8da6c9d810e020f5e3c7f5af2dea314cbeaa0d72bc6421e92c0808a0c584a6046ab28e97c3ffc77fe12b5a4d37e8cd4afbfebbf2391ffc7cb07c0f38c023efd",
+    publicKey: "be5ddb1579b72e84524fc29e78609e3caf42e85aa118ebfe0b0ad404b5bdd25f",
+  },
+} as const;
+
 /** Frozen from @scure/sr25519 2.4.0. signature and soft took random, randomSignature did not. */
 export const scureVectors = {
   seed: "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
