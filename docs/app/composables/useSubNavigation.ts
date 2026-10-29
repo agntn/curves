@@ -1,5 +1,6 @@
 import type { ContentNavigationItem } from "@nuxt/content";
 
+/** Sidebar icons by path. They beat a page's frontmatter `icon`, so a new page goes here too. */
 const NAV_ICONS: Record<string, string> = {
   "/guide": "i-lucide-book-open",
   "/guide/cli": "i-lucide-terminal",

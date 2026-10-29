@@ -57,7 +57,8 @@ function readHex(value: unknown, length: number, name: string, extra = ""): Uint
 }
 
 /**
- * Read a secret whose key is canonical, 8 times a scalar from 1 to l minus 1.
+ * Read a secret whose key is canonical, 8 times a scalar from 1 to l minus 1. Anything looser
+ * lets two secrets share one key and still derive different children, or sign for the identity.
  * @param secret - 128 hex digits
  * @returns {SecretParts} The scalar, the key divided by 8, and the nonce
  * @throws {RangeError} When the secret is no 128 hex digits, or its key isn't canonical
