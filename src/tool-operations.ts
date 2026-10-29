@@ -77,12 +77,12 @@ export type Secp256k1Details =
   | { operation: "lift"; even: string; odd: string }
   | { operation: "check"; onCurve: boolean };
 
-/** What the sr25519 tool computes, by operation. A secret comes back only when it is new. */
+/** What the sr25519 tool computes, by operation. A secret or a seed comes back only when new. */
 export type Sr25519Details =
   | { operation: "keypair"; secret?: string; publicKey: string }
   | { operation: "sign"; signature: string; publicKey: string }
   | { operation: "verify"; valid: boolean }
-  | { operation: "derive"; hard: boolean; secret?: string; publicKey: string };
+  | { operation: "derive"; hard: boolean; seed?: string; secret?: string; publicKey: string };
 
 /**
  * Wraps details as the one JSON text every surface returns.
@@ -477,11 +477,14 @@ const SR25519_ARGUMENTS: Readonly<Record<Sr25519Operation, readonly string[]>> =
   keypair: ["seed", "secret"],
   sign: ["secret", "message", "encoding", "context", "random"],
   verify: ["publicKey", "message", "encoding", "signature", "context"],
-  derive: ["secret", "publicKey", "chainCode", "hard", "random"],
+  derive: ["seed", "secret", "publicKey", "chainCode", "hard", "random"],
 };
 
 /** Every optional argument of the sr25519 tool. */
 const SR25519_OPTIONAL = [...new Set(Object.values(SR25519_ARGUMENTS).flat())];
+
+/** The keys derive starts from, exactly one a call. */
+const DERIVE_SOURCES = ["seed", "secret", "publicKey"] as const;
 
 /** The sr25519 tool's arguments, read for one operation. */
 interface Sr25519Arguments {
@@ -563,29 +566,58 @@ function sr25519Keypair(input: Sr25519Arguments): Sr25519Details {
   return { operation: "keypair", secret, publicKey: sr25519.getPublicKey(secret) };
 }
 
+/** One derive call: its readers, the kind of child and the chain code. */
+interface DeriveCall {
+  readonly input: Sr25519Arguments;
+  readonly hard: boolean;
+  readonly chainCode: string;
+}
+
 /**
  * Derive the soft child of a public key, the one kind of child a public key has.
- * @param input - The readers of the operation
- * @param hard - Whether the caller asked for a hard child
- * @param chainCode - 64 hex digits
+ * @param call - The derive call
  * @returns {Sr25519Details} The child public key
  */
-function derivePublicChild(
-  input: Sr25519Arguments,
-  hard: boolean,
-  chainCode: string,
-): Sr25519Details {
-  if (hard) throw new RangeError("A hard child needs the secret, not the public key");
+function derivePublicChild(call: DeriveCall): Sr25519Details {
+  const { input, hard, chainCode } = call;
+  if (hard) throw new RangeError("A hard child needs the seed or the secret, not the public key");
   if (input.has("random")) throw new RangeError("derive from publicKey does not take random");
   const publicKey = sr25519.derivePublic(input.text("publicKey"), chainCode);
   return { operation: "derive", hard, publicKey };
 }
 
 /**
- * Derive a child of a secret, or the soft child of a public key.
+ * Derive a child of a secret.
+ * @param call - The derive call
+ * @param parent - The parent secret
+ * @returns {Sr25519Details} The child secret and public key
+ */
+function deriveSecretChild(call: DeriveCall, parent: string): Sr25519Details {
+  const { input, hard, chainCode } = call;
+  const secret = hard
+    ? sr25519.deriveHard(parent, chainCode)
+    : sr25519.deriveSoft(parent, chainCode, sr25519Options(input));
+  return { operation: "derive", hard, secret, publicKey: sr25519.getPublicKey(secret) };
+}
+
+/**
+ * Derive a child of a seed: a hard one keeps a seed, as in subkey, a soft one has none.
+ * @param call - The derive call
+ * @returns {Sr25519Details} The child seed when hard, its secret and public key
+ */
+function deriveSeedChild(call: DeriveCall): Sr25519Details {
+  const parent = call.input.text("seed");
+  if (!call.hard) return deriveSecretChild(call, sr25519.expandSeed(parent));
+  const seed = sr25519.deriveHardSeed(parent, call.chainCode);
+  const secret = sr25519.expandSeed(seed);
+  return { operation: "derive", hard: true, seed, secret, publicKey: sr25519.getPublicKey(secret) };
+}
+
+/**
+ * Derive a child of a seed or a secret, or the soft child of a public key.
  * @param args - Tool arguments
  * @param input - The readers of the operation
- * @returns {Sr25519Details} The child secret and public key, or the public key alone
+ * @returns {Sr25519Details} The child keys, or the public key alone
  */
 function sr25519Derive(
   args: Readonly<Record<string, unknown>>,
@@ -593,16 +625,14 @@ function sr25519Derive(
 ): Sr25519Details {
   const hard = args["hard"] ?? false;
   if (typeof hard !== "boolean") throw new TypeError("hard must be a boolean");
-  if (input.has("secret") === input.has("publicKey")) {
-    throw new TypeError("derive needs secret or publicKey, one of them");
+  if (DERIVE_SOURCES.filter((name) => input.has(name)).length !== 1) {
+    throw new TypeError("derive needs seed, secret or publicKey, one of them");
   }
-  const chainCode = input.text("chainCode");
-  if (input.has("publicKey")) return derivePublicChild(input, hard, chainCode);
+  const call = { input, hard, chainCode: input.text("chainCode") };
+  if (input.has("publicKey")) return derivePublicChild(call);
   if (hard && input.has("random")) throw new RangeError("A hard child takes no random");
-  const secret = hard
-    ? sr25519.deriveHard(input.text("secret"), chainCode)
-    : sr25519.deriveSoft(input.text("secret"), chainCode, sr25519Options(input));
-  return { operation: "derive", hard, secret, publicKey: sr25519.getPublicKey(secret) };
+  if (input.has("seed")) return deriveSeedChild(call);
+  return deriveSecretChild(call, input.text("secret"));
 }
 
 /**

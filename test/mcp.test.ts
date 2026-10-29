@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createMcpServer } from "../src/mcp.ts";
 import { serverInfo } from "../src/server-info.ts";
 import { computeCurve, computeSecp256k1, computeSr25519 } from "../src/tool-operations.ts";
-import { devAccounts, scureVectors } from "./fixtures/sr25519.ts";
+import { devAccounts, keyringPairs, scureVectors, subkeySeeds } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
 const openConnections: Array<{ close(): Promise<void> }> = [];
@@ -269,6 +269,22 @@ describe("curves MCP server", () => {
       secret: scureVectors.hard,
       publicKey: scureVectors.hardPublic,
     });
+    const alice = "14416c696365".padEnd(64, "0");
+    expect(
+      await call({ operation: "derive", seed: devAccounts.seed, chainCode: alice, hard: true }),
+    ).toEqual({
+      operation: "derive",
+      hard: true,
+      seed: subkeySeeds.alice,
+      secret: keyringPairs.alice.secret,
+      publicKey: devAccounts.alice,
+    });
+    expect(await call({ operation: "derive", seed, chainCode, random })).toEqual({
+      operation: "derive",
+      hard: false,
+      secret: scureVectors.soft,
+      publicKey: scureVectors.softPublic,
+    });
     expect(
       failure(
         await client.callTool({
@@ -276,7 +292,7 @@ describe("curves MCP server", () => {
           arguments: { operation: "derive", publicKey: devAccounts.alice, chainCode, hard: true },
         }),
       ),
-    ).toContain("A hard child needs the secret, not the public key");
+    ).toContain("A hard child needs the seed or the secret, not the public key");
   });
 
   it("rejects arguments that miss the schema", async () => {
@@ -417,6 +433,13 @@ describe("sr25519 executor", () => {
       secret,
       publicKey,
     });
+    const derive = { operation: "derive", seed: "", secret, publicKey: "", chainCode, hard: true };
+    expect(computeSr25519(derive).details).toEqual({
+      operation: "derive",
+      hard: true,
+      secret: scureVectors.hard,
+      publicKey: scureVectors.hardPublic,
+    });
   });
 
   it("signs an empty or blank message instead of reading it as missing", () => {
@@ -448,9 +471,11 @@ describe("sr25519 executor", () => {
     expect(() => computeSr25519({ operation: "sign", secret, message: "x".repeat(8193) })).toThrow(
       "message must be at most 8192 characters",
     );
-    expect(() => computeSr25519({ operation: "derive", secret, publicKey, chainCode })).toThrow(
-      "derive needs secret or publicKey, one of them",
-    );
+    for (const keys of [{}, { seed, secret }, { secret, publicKey }, { seed, publicKey }]) {
+      expect(() => computeSr25519({ operation: "derive", ...keys, chainCode })).toThrow(
+        "derive needs seed, secret or publicKey, one of them",
+      );
+    }
     expect(() => computeSr25519({ operation: "derive", secret, chainCode, hard: "yes" })).toThrow(
       "hard must be a boolean",
     );
@@ -459,6 +484,9 @@ describe("sr25519 executor", () => {
     ).toThrow("derive from publicKey does not take random");
     expect(() =>
       computeSr25519({ operation: "derive", secret, chainCode, hard: true, random: chainCode }),
+    ).toThrow("A hard child takes no random");
+    expect(() =>
+      computeSr25519({ operation: "derive", seed, chainCode, hard: true, random: chainCode }),
     ).toThrow("A hard child takes no random");
     expect(() =>
       computeSr25519({ operation: "sign", secret, message: "x", context: "c".repeat(257) }),
