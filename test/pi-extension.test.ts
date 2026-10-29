@@ -3,7 +3,12 @@ import { fileURLToPath } from "node:url";
 import { wireSchema } from "@agntn/tools";
 import { describe, expect, it } from "vite-plus/test";
 
-import { computeTool, secp256k1ComputeTool, sr25519ComputeTool } from "../src/tools.ts";
+import {
+  bip340ComputeTool,
+  computeTool,
+  secp256k1ComputeTool,
+  sr25519ComputeTool,
+} from "../src/tools.ts";
 import { loadPiExtension } from "./fixtures/pi-host.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
@@ -16,12 +21,14 @@ describe("pi curves extension", () => {
     expect([...host.tools.keys()]).toEqual([
       "curves_compute",
       "curves_secp256k1_compute",
+      "curves_bip340_compute",
       "curves_sr25519_compute",
     ]);
     expect(host.tool("curves_compute").parameters).toEqual(wireSchema(computeTool));
     expect(host.tool("curves_secp256k1_compute").parameters).toEqual(
       wireSchema(secp256k1ComputeTool),
     );
+    expect(host.tool("curves_bip340_compute").parameters).toEqual(wireSchema(bip340ComputeTool));
     expect(host.tool("curves_sr25519_compute").parameters).toEqual(wireSchema(sr25519ComputeTool));
   });
 

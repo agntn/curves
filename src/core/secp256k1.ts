@@ -79,7 +79,7 @@ function rightSide(x: bigint): bigint {
  * @param odd - Whether y should be odd
  * @returns {bigint | undefined} y, or undefined when x^3 + 7 is no square
  */
-function liftY(x: bigint, odd: boolean): bigint | undefined {
+export function liftY(x: bigint, odd: boolean): bigint | undefined {
   const square = rightSide(x);
   const root = power(square, ROOT_EXPONENT, P);
   if ((root * root) % P !== square) return undefined;
@@ -518,7 +518,7 @@ function readSignature(value: unknown): SignatureParts {
  * @param shape - The call as it should read, for the error
  * @throws {TypeError} When options is not an object
  */
-function requireOptions(options: unknown, shape: string): void {
+export function requireOptions(options: unknown, shape: string): void {
   if (typeof options !== "object" || options === null) throw new TypeError(`Call it as ${shape}`);
 }
 
@@ -542,14 +542,14 @@ function isScalar(value: bigint): boolean {
 }
 
 /**
- * a times G plus b times a point, the sum both verification and recovery end on.
+ * a times G plus b times a point, the sum ECDSA and BIP340 verification and recovery end on.
  * @param a - Zero to n minus 1
  * @param b - Zero to n minus 1
  * @param point - A finite point
- * @returns {Jacobian} The sum
+ * @returns {Affine | undefined} The sum, undefined for the point at infinity
  */
-function combine(a: bigint, b: bigint, point: Affine): Jacobian {
-  return add(multiplyBase(a), multiply(toJacobian(point), b));
+export function combine(a: bigint, b: bigint, point: Affine): Affine | undefined {
+  return toAffine(add(multiplyBase(a), multiply(toJacobian(point), b)));
 }
 
 /**
@@ -569,7 +569,7 @@ export function verify(signature: string, options: VerifyOptions): boolean {
   if (typeof lowS !== "boolean") throw new TypeError("lowS must be a boolean");
   if (!isScalar(r) || !isScalar(s) || (lowS && s > HALF_N)) return false;
   const inverse = invert(s, N);
-  const commitment = toAffine(combine(mod(e * inverse, N), (r * inverse) % N, key));
+  const commitment = combine(mod(e * inverse, N), (r * inverse) % N, key);
   return commitment !== undefined && commitment.x % N === r;
 }
 
@@ -621,7 +621,7 @@ export function recoverPublicKey(signature: string, options: RecoverOptions): st
   }
   const inverse = invert(r, N);
   const commitment = liftCommitment(r, recovery);
-  const key = toAffine(combine(mod(-e * inverse, N), (s * inverse) % N, commitment));
+  const key = combine(mod(-e * inverse, N), (s * inverse) % N, commitment);
   if (key === undefined) {
     throw new RangeError("This signature recovers the point at infinity, which is no public key");
   }

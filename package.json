@@ -4,6 +4,7 @@
   "description": "Arithmetic on elliptic curves you define and on secp256k1, written from the specs",
   "keywords": [
     "agent",
+    "bip340",
     "bitcoin",
     "discrete-log",
     "ecc",
@@ -13,6 +14,7 @@
     "monero",
     "polkadot",
     "ristretto255",
+    "schnorr",
     "sec1",
     "secp256k1",
     "sr25519",
@@ -47,6 +49,10 @@
     "./secp256k1": {
       "types": "./dist/secp256k1.d.mts",
       "import": "./dist/secp256k1.mjs"
+    },
+    "./bip340": {
+      "types": "./dist/bip340.d.mts",
+      "import": "./dist/bip340.mjs"
     },
     "./ed25519": {
       "types": "./dist/ed25519.d.mts",

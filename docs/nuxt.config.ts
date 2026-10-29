@@ -56,12 +56,12 @@ export default defineNuxtConfig({
       },
       {
         title: "Playground",
-        description: "All three tools, in the browser.",
+        description: "The tools, in the browser.",
         links: [
           {
             title: "Playground",
             href: "https://curves.agntn.dev/playground",
-            description: "The library running in the page: curves_compute, curves_secp256k1_compute and curves_sr25519_compute.",
+            description: "The library running in the page: curves_compute, curves_secp256k1_compute, curves_bip340_compute and curves_sr25519_compute.",
           },
         ],
       },

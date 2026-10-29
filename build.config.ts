@@ -8,6 +8,7 @@ export default defineBuildConfig({
       input: [
         "./src/index.ts",
         "./src/secp256k1.ts",
+        "./src/bip340.ts",
         "./src/ristretto255.ts",
         "./src/ed25519.ts",
         "./src/sr25519.ts",

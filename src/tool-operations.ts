@@ -27,10 +27,12 @@ import {
   samplePoints,
   type PointSample,
 } from "./core/group.ts";
+import * as bip340 from "./core/bip340.ts";
 import { hexToBytes } from "./core/bytes.ts";
 import * as secp256k1 from "./core/secp256k1.ts";
 import * as sr25519 from "./core/sr25519.ts";
 import {
+  BIP340_OPERATIONS,
   CURVE_INTEGER_PATTERN,
   CURVE_OPERATIONS,
   DEFAULT_CURVE_POINTS_SHOWN,
@@ -41,6 +43,7 @@ import {
   MESSAGE_ENCODINGS,
   SECP256K1_OPERATIONS,
   SR25519_OPERATIONS,
+  type Bip340Operation,
   type CurveOperation,
   type Secp256k1Operation,
   type Sr25519Operation,
@@ -77,6 +80,9 @@ export type Secp256k1Details =
   | { operation: "lift"; even: string; odd: string }
   | { operation: "check"; onCurve: boolean }
   | { operation: "verify"; valid: boolean };
+
+/** What the BIP340 tool computes, by operation. */
+export type Bip340Details = { operation: "verify"; valid: boolean };
 
 /** What the sr25519 tool computes, by operation. A secret or a seed comes back only when new. */
 export type Sr25519Details =
@@ -527,6 +533,36 @@ export function computeSecp256k1(
   const compressed = args["compressed"] ?? true;
   if (typeof compressed !== "boolean") throw new TypeError("Compressed must be a boolean");
   return result(SECP256K1_COMPUTATIONS[operation]({ args, text, encoding: { compressed } }));
+}
+
+/** The arguments each BIP340 operation takes. */
+const BIP340_ARGUMENTS: Readonly<Record<Bip340Operation, readonly string[]>> = {
+  verify: ["publicKey", "message", "signature"],
+};
+
+/** Every optional argument of the BIP340 tool. */
+const BIP340_OPTIONAL = [...new Set(Object.values(BIP340_ARGUMENTS).flat())];
+
+/**
+ * Verify a BIP340 signature. A blank message is the empty one BIP340 signs, not a missing one.
+ * @param args - Tool arguments, the operation and the ones it takes
+ * @returns {ToolResult<Bip340Details>} The verdict
+ */
+export function computeBip340(args: Readonly<Record<string, unknown>>): ToolResult<Bip340Details> {
+  const operation = oneOf(args["operation"], "operation", BIP340_OPERATIONS);
+  refuseForeign(args, operation, BIP340_OPTIONAL, BIP340_ARGUMENTS[operation]);
+  const text = (name: string): string => {
+    if (isUnset(args[name])) throw new TypeError(`${operation} needs ${name}`);
+    return requiredString(args[name], name);
+  };
+  if (args["message"] === undefined) throw new TypeError(`${operation} needs message`);
+  const message = requiredString(args["message"], "message");
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    throw new RangeError(`message must be at most ${MAX_MESSAGE_LENGTH} characters`);
+  }
+  const publicKey = text("publicKey");
+  const valid = bip340.verify(text("signature"), { message, publicKey });
+  return result({ operation, valid });
 }
 
 /** The arguments each sr25519 operation takes. */

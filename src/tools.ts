@@ -10,6 +10,7 @@ import {
   type ToolDefinition,
 } from "@agntn/tools";
 import {
+  BIP340_OPERATIONS,
   CURVE_INTEGER_PATTERN,
   CURVE_OPERATIONS,
   DEFAULT_CURVE_POINTS_SHOWN,
@@ -257,12 +258,12 @@ export const secp256k1ComputeTool = defineTool({
 });
 
 /**
- * Hex argument of the sr25519 tool, of one byte length.
+ * Hex argument of one byte length, a key or a signature of the BIP340 or sr25519 tool.
  * @param bytes - The byte count
  * @param description - What it is and which operations take it
  * @returns {TOptional<TString>} The optional argument
  */
-function sr25519Hex(bytes: number, description: string): TOptional<TString> {
+function hexBytes(bytes: number, description: string): TOptional<TString> {
   return Type.Optional(
     Type.String({
       maxLength: bytes * 2,
@@ -272,6 +273,50 @@ function sr25519Hex(bytes: number, description: string): TOptional<TString> {
   );
 }
 
+export const bip340ComputeSchema = Type.Object(
+  {
+    operation: Type.String({
+      enum: [...BIP340_OPERATIONS],
+      description: "verify takes publicKey, message and signature",
+    }),
+    publicKey: hexBytes(
+      32,
+      "verify only, required there: the x-only key, which is a compressed SEC1 key without its 02 or 03",
+    ),
+    message: Type.Optional(
+      Type.String({
+        maxLength: MAX_MESSAGE_LENGTH,
+        pattern: "^(?:[0-9A-Fa-f]{2})*$",
+        description:
+          "verify only, required there: the signed bytes as hex without 0x, any length, empty too. Taproot signs a 32-byte sighash, Nostr an event id",
+      }),
+    ),
+    signature: hexBytes(64, "verify only, required there: the x of R, then s"),
+  },
+  { additionalProperties: false },
+);
+
+export const bip340ComputeTool = defineTool({
+  name: "curves_bip340_compute",
+  title: "Compute with BIP340",
+  description:
+    "Verify a BIP340 Schnorr signature on secp256k1, the kind Taproot key path spends and Nostr events carry. The key is x-only, 32 bytes. The message is hex of any length, empty included, and the signature is 64 bytes. A key with no point on the curve fails like any bad signature.",
+  snippet: "Use for Taproot key path signatures and Nostr events, once you have the signed hash.",
+  guidelines: [
+    "verify takes publicKey, message and signature and answers valid true or false",
+    "publicKey is the x coordinate alone: drop the 02 or 03 of a compressed SEC1 key",
+    "message is the signed bytes as hex, not text: the sighash for Taproot, the event id for Nostr",
+  ],
+  effect: "read",
+  cli: {
+    command: "bip340",
+    description: "BIP340 Schnorr signatures on secp256k1, checked against x-only keys",
+    positional: ["operation"],
+  },
+  input: bip340ComputeSchema,
+  execute: async (params) => (await loadOperations()).computeBip340(params),
+});
+
 export const sr25519ComputeSchema = Type.Object(
   {
     operation: Type.String({
@@ -279,15 +324,15 @@ export const sr25519ComputeSchema = Type.Object(
       description:
         "keypair takes seed or secret, sign takes secret and message, verify takes publicKey, message and signature, derive takes chainCode with seed, secret or publicKey",
     }),
-    seed: sr25519Hex(
+    seed: hexBytes(
       32,
       "keypair and derive: the 32-byte mini secret Substrate keeps, which expands into a secret. A hard child of a seed comes back with its own seed",
     ),
-    secret: sr25519Hex(
+    secret: hexBytes(
       64,
       "keypair, sign and derive: the 64-byte secret, the key as schnorrkel writes it for ed25519, then the nonce",
     ),
-    publicKey: sr25519Hex(32, "verify, required there, and derive: a ristretto255 public key"),
+    publicKey: hexBytes(32, "verify, required there, and derive: a ristretto255 public key"),
     message: Type.Optional(
       Type.String({
         maxLength: MAX_MESSAGE_LENGTH,
@@ -301,14 +346,14 @@ export const sr25519ComputeSchema = Type.Object(
           "sign and verify only: utf8 reads message as text, hex as bytes. Default: utf8",
       }),
     ),
-    signature: sr25519Hex(64, "verify only, required there: the signature with its marker bit"),
+    signature: hexBytes(64, "verify only, required there: the signature with its marker bit"),
     context: Type.Optional(
       Type.String({
         maxLength: MAX_CONTEXT_LENGTH,
         description: 'sign and verify only: the schnorrkel signing context. Default: "substrate"',
       }),
     ),
-    chainCode: sr25519Hex(
+    chainCode: hexBytes(
       32,
       "derive only, required there: the chain code Substrate builds from a junction, its SCALE encoding padded or hashed to 32 bytes",
     ),
@@ -318,7 +363,7 @@ export const sr25519ComputeSchema = Type.Object(
           "derive only: a hard child, which needs seed or secret. Default: false, a soft child",
       }),
     ),
-    random: sr25519Hex(
+    random: hexBytes(
       32,
       "sign and soft derive from secret only: bytes in place of fresh randomness, for repeatable output",
     ),
@@ -352,5 +397,6 @@ export const sr25519ComputeTool = defineTool({
 export const curvesTools: readonly ToolDefinition[] = [
   computeTool,
   secp256k1ComputeTool,
+  bip340ComputeTool,
   sr25519ComputeTool,
 ];

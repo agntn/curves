@@ -17,6 +17,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { describe, expect, it } from "vite-plus/test";
 import pkg from "../package.json" with { type: "json" };
 import { serverInfo } from "../src/server-info.ts";
+import { nobleSignatures as schnorrSignatures } from "./fixtures/bip340.ts";
 import { highS, nobleSignatures } from "./fixtures/ecdsa.ts";
 
 const [signed] = nobleSignatures;
@@ -51,6 +52,7 @@ describe("curves CLI", () => {
 
     expect(help.stdout).toContain("USAGE curves <command> [OPTIONS]");
     expect(help.stdout).toMatch(/^ {2}secp256k1 {2}Point math/m);
+    expect(help.stdout).toMatch(/^ {2}bip340 {5}BIP340 Schnorr/m);
     expect(help.stdout).toMatch(/^ {2}sr25519 {4}sr25519 keys/m);
     expect(usage.stdout).toContain("USAGE curves compute [OPTIONS] <OPERATION>");
     expect(unknown).toMatchObject({
@@ -108,6 +110,16 @@ describe("curves CLI", () => {
       code: 1,
       stderr: "No point of secp256k1 has x = r + n, so recovery 2 fails\n",
     });
+  });
+
+  it("verifies a BIP340 signature from flags, over no bytes too", () => {
+    for (const { message, signature, publicKey } of schnorrSignatures.slice(0, 3)) {
+      const flags = ["--public-key", publicKey, "--message", message, "--signature", signature];
+      expect(run("bip340", "verify", ...flags), message).toMatchObject({
+        code: 0,
+        stdout: '{"operation":"verify","valid":true}\n',
+      });
+    }
   });
 
   it("makes an sr25519 key pair and verifies a hex message", () => {
