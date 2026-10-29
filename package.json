@@ -77,7 +77,7 @@
     "dev": "obuild --stub",
     "lint": "pnpm build && vp lint && vp fmt --check",
     "fmt": "pnpm build && vp lint --fix && vp fmt",
-    "typecheck": "tsc --noEmit --skipLibCheck && pnpm build && tsc -p tsconfig.extensions.json && tsc -p test/tsconfig.json",
+    "typecheck": "tsc --noEmit --skipLibCheck && pnpm build && tsc -p tsconfig.extensions.json && tsc -p test/tsconfig.json && pnpm --dir docs typecheck",
     "test": "vp test run",
     "test:watch": "vp test watch",
     "prepack": "pnpm run build",
