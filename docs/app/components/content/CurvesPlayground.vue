@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { invertScalar, multiplyGenerator } from "@agntn/curves/secp256k1";
 import type { CurvePointText, Sr25519Details } from "#tool-operations";
+import { EMPTY_VECTOR, PI_VECTOR } from "../../utils/bip340";
 import { CURVES, pointArgument } from "../../utils/curves";
 import { shellArg } from "../../utils/format";
 import { BLOCK_170 } from "../../utils/secp";
@@ -47,6 +48,7 @@ interface Operation {
 const COMMANDS: Record<ToolName, string> = {
   curves_compute: "compute",
   curves_secp256k1_compute: "secp256k1",
+  curves_bip340_compute: "bip340",
   curves_sr25519_compute: "sr25519",
 };
 
@@ -70,6 +72,7 @@ const OPERATIONS: readonly Operation[] = [
   { key: "secp256k1:check", tool: "curves_secp256k1_compute", op: "check", takes: ["point"], about: "Whether a SEC1 point lies on secp256k1." },
   { key: "secp256k1:verify", tool: "curves_secp256k1_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "Check whether a key signed a digest. G didn't. The block 170 chip loads Satoshi's key, which did." },
   { key: "secp256k1:recover", tool: "curves_secp256k1_compute", op: "recover", takes: ["digest", "signature", "recovery", "compressed"], about: "Recover a verifying key from a digest, signature and id. For block 170, ids 0 and 1 both verify, but only 1 is Satoshi's." },
+  { key: "bip340:verify", tool: "curves_bip340_compute", op: "verify", takes: ["publicKey", "message", "signature"], about: "The pi message comes with a signature. Flip a bit and see what verify says." },
   { key: "sr25519:keypair", tool: "curves_sr25519_compute", op: "keypair", takes: ["source"], sources: ["seed", "secret"], about: "A 32-byte seed grows into a secret and a public key. A secret alone gives back its public key." },
   { key: "sr25519:sign", tool: "curves_sr25519_compute", op: "sign", takes: ["secret", "message", "encoding"], about: "Sign under the substrate context. Fresh randomness each time, so the bytes change and both still verify." },
   { key: "sr25519:verify", tool: "curves_sr25519_compute", op: "verify", takes: ["publicKey", "message", "encoding", "signature"], about: "Whether the key signed these bytes. A wrong signature is a plain false, not an error." },
@@ -106,6 +109,11 @@ const lowS = ref(false);
 /** The secp256k1 fields that are text, by the argument each one fills. */
 const SECP_FIELDS = { point: secpPoint, other: secpOther, scalar: secpScalar, x, digest: secpDigest, signature: secpSignature } as const;
 const uncompressed = ref(false);
+const schnorrKey = ref<string>(PI_VECTOR.publicKey);
+const schnorrMessage = ref<string>(PI_VECTOR.message);
+const schnorrSignature = ref<string>(PI_VECTOR.signature);
+/** The BIP340 fields, by the argument each one fills. */
+const SCHNORR_FIELDS = { publicKey: schnorrKey, message: schnorrMessage, signature: schnorrSignature } as const;
 const seed = ref(DEV_SEED);
 const secret = ref(DEV_SECRET);
 const publicKey = ref(ALICE);
@@ -118,7 +126,9 @@ const from = ref<KeySource>("seed");
 
 const current = computed(() => OPERATIONS.find((row) => row.key === key.value) ?? OPERATIONS[0]!);
 const position = computed(() => OPERATIONS.indexOf(current.value) + 1);
+const curve = computed(() => current.value.tool === "curves_compute");
 const secp = computed(() => current.value.tool === "curves_secp256k1_compute");
+const schnorr = computed(() => current.value.tool === "curves_bip340_compute");
 const sr = computed(() => current.value.tool === "curves_sr25519_compute");
 /** The key the operation on screen starts from: the one picked, when this operation takes it. */
 const source = computed(() => {
@@ -150,6 +160,22 @@ function srArgs(): Record<string, unknown> {
 }
 
 /**
+ * The BIP340 arguments on screen. The message always goes along, so blank verifies the empty one.
+ *
+ * @returns {Record<string, unknown>} The arguments, operation included.
+ */
+function schnorrArgs(): Record<string, unknown> {
+  const key = schnorrKey.value.trim();
+  const signature = schnorrSignature.value.trim();
+  return {
+    operation: current.value.op,
+    ...(key === "" ? {} : { publicKey: key }),
+    message: schnorrMessage.value.trim(),
+    ...(signature === "" ? {} : { signature }),
+  };
+}
+
+/**
  * A point typed as `x,y`, as the tool takes it, or the text as typed when it has no comma.
  *
  * @param text - The field.
@@ -163,6 +189,7 @@ function pointValue(text: string): { x: string; y: string } | string {
 /** The arguments the operation on screen takes, from the fields it shows; blanks stay out. */
 const toolArgs = computed(() => {
   if (sr.value) return srArgs();
+  if (schnorr.value) return schnorrArgs();
   const args: Record<string, unknown> = { operation: current.value.op };
   if (!secp.value) Object.assign(args, { a: a.value.trim(), b: b.value.trim(), p: p.value.trim() });
   for (const field of current.value.takes) {
@@ -412,6 +439,19 @@ const SECP_SAMPLES = [
   },
 ] as const;
 
+/** BIP340 samples: the vector that signs pi, the one that signs nothing, and pi's one bit off. */
+const SCHNORR_SAMPLES = [
+  {
+    label: "pi message",
+    load: () => ((schnorrKey.value = PI_VECTOR.publicKey), (schnorrMessage.value = PI_VECTOR.message), (schnorrSignature.value = PI_VECTOR.signature)),
+  },
+  {
+    label: "empty message",
+    load: () => ((schnorrKey.value = EMPTY_VECTOR.publicKey), (schnorrMessage.value = EMPTY_VECTOR.message), (schnorrSignature.value = EMPTY_VECTOR.signature)),
+  },
+  { label: "one bit off", load: () => (schnorrSignature.value = flipBit(schnorrSignature.value)) },
+] as const;
+
 /** sr25519 samples: the dev seed with `//Alice`, and her signature one bit off. */
 const SR_SAMPLES = [
   {
@@ -457,6 +497,11 @@ function readQuery(query: Readonly<Record<string, unknown>>) {
   const op = OPERATIONS.find((row) => row.key === query.op);
   if (op) key.value = op.key;
   if (op?.tool === "curves_sr25519_compute") readSrQuery(op, query);
+  if (op?.tool === "curves_bip340_compute") {
+    for (const [name, field] of Object.entries(SCHNORR_FIELDS)) {
+      if (typeof query[name] === "string") field.value = query[name];
+    }
+  }
   const onSecp = op?.tool === "curves_secp256k1_compute";
   for (const [name, field] of Object.entries(onSecp ? { ...FIELDS, ...SECP_FIELDS } : FIELDS)) {
     if (typeof query[name] === "string") field.value = query[name];
@@ -560,7 +605,7 @@ const shareLink = computed(() => {
           </p>
 
           <div class="console-readout">
-            <dl v-if="!secp && !sr" class="console-readout-rows">
+            <dl v-if="curve" class="console-readout-rows">
               <div>
                 <dt><label for="playground-a">a</label></dt>
                 <dd><UInput id="playground-a" v-model="a" variant="none" class="w-full" spellcheck="false" /></dd>
@@ -646,6 +691,20 @@ const shareLink = computed(() => {
                 <dd><UCheckbox id="playground-uncompressed" v-model="uncompressed" label="uncompressed, 65 bytes" /></dd>
               </div>
             </dl>
+            <dl v-else-if="schnorr" class="console-readout-rows">
+              <div>
+                <dt><label for="playground-schnorr-key">publicKey</label></dt>
+                <dd><UInput id="playground-schnorr-key" v-model="schnorrKey" variant="none" placeholder="x-only key, 64 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div>
+                <dt><label for="playground-schnorr-message">message</label></dt>
+                <dd><UInput id="playground-schnorr-message" v-model="schnorrMessage" variant="none" placeholder="hex, empty is fine" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div>
+                <dt><label for="playground-schnorr-signature">signature</label></dt>
+                <dd><UInput id="playground-schnorr-signature" v-model="schnorrSignature" variant="none" placeholder="x of R then s, 128 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+            </dl>
             <dl v-else class="console-readout-rows">
               <div v-if="current.sources">
                 <dt>from</dt>
@@ -696,7 +755,7 @@ const shareLink = computed(() => {
             </dl>
           </div>
 
-          <div v-if="!secp && !sr" class="playground-chips" role="group" aria-label="Sample curves">
+          <div v-if="curve" class="playground-chips" role="group" aria-label="Sample curves">
             <UButton
               v-for="(sample, index) in CURVES"
               :key="sample.key"
@@ -709,6 +768,9 @@ const shareLink = computed(() => {
           <div v-else-if="secp" class="playground-chips" role="group" aria-label="Sample points">
             <UButton v-for="sample in SECP_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
+          <div v-else-if="schnorr" class="playground-chips" role="group" aria-label="BIP340 test vectors">
+            <UButton v-for="sample in SCHNORR_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
+          </div>
           <div v-else class="playground-chips" role="group" aria-label="Sample keys">
             <UButton v-for="sample in SR_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
@@ -717,6 +779,11 @@ const shareLink = computed(() => {
             <template v-if="sr"
               >Keys and signatures are hex without 0x. The dev seed is public on purpose, so anyone
               can sign as Alice. Your own secret would land in the address bar, so maybe don't.</template
+            >
+            <template v-else-if="schnorr"
+              >Keys and signatures are hex without 0x. The key is just the x coordinate, with even y
+              filling in the other half. Everything here is public, so the fields can sit in the address
+              bar.</template
             >
             <template v-else-if="secp"
               >Points are SEC1 hex, 33 or 65 bytes. Digests and signatures are hex without 0x. Every

@@ -26,10 +26,11 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 - 🕵️ **Discrete logs.** The smallest k, one prime of the order at a time. A 40-bit order made of small primes? About 20 ms. Only a prime above 2³⁶ stops it. No k? You get `undefined`, not a guess.
 - 🔑 **secp256k1 with SEC1 points.** Add, subtract, multiply, lift an x, convert between 33 and 65 bytes.
 - 🔍 **ECDSA verification and recovery.** The block 170 signature that paid Hal Finney 10 BTC? Checks out. Recovery hands back Satoshi's key.
+- ✍️ **BIP340 verification.** Taproot and Nostr signatures, checked against 32-byte x-only keys. It lives in `@agntn/curves/bip340`. One BIP vector signs pi's hex digits with a key made of e's. Signing isn't in yet.
 - 🟣 **sr25519 for Polkadot.** Keys from a seed, signatures, `//hard` and `/soft` children. `//Alice` comes out right.
 - 🟠 **ed25519 for Monero.** Add, multiply, reduce a scalar like `sc_reduce32`. A point of order 8 decodes fine, and `isTorsionFree` still says no.
-- 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1, RFC 9496 for ristretto255, RFC 8032 for ed25519. No `@noble/curves`.
-- 🤖 **Agent tools.** One for curves you define, one for secp256k1, one for sr25519. MCP, Pi, OMP and the AI SDK get all three.
+- 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1, BIP340 for Schnorr, RFC 9496 for ristretto255, RFC 8032 for ed25519. No `@noble/curves`.
+- 🤖 **Agent tools.** Curves you define, secp256k1, BIP340 and sr25519. MCP, Pi, OMP and the AI SDK get the lot.
 
 ## 📦 Install
 
@@ -72,6 +73,7 @@ The scalar is the inverse of 2 mod n. Look at all those zeros in x. Funny, right
 | ------------------------------ | --------------------------------------------------------------------- |
 | `curves compute <operation>`   | add, double, negate, multiply, lift, check, order, count, points, log |
 | `curves secp256k1 <operation>` | add, subtract, negate, multiply, lift, check, verify, recover         |
+| `curves bip340 <operation>`    | verify                                                                |
 | `curves sr25519 <operation>`   | keypair, sign, verify, derive                                         |
 | `curves mcp`                   | MCP server over stdio                                                 |
 
@@ -109,7 +111,7 @@ omp install @agntn/curves
 }
 ```
 
-Three tools: `curves_compute`, `curves_secp256k1_compute` and `curves_sr25519_compute`. The AI SDK versions sit in `@agntn/curves/ai`. Integers travel as decimal or `0x` strings. Infinity comes back as `"infinity"`.
+Tools: `curves_compute`, `curves_secp256k1_compute`, `curves_bip340_compute` and `curves_sr25519_compute`. The AI SDK versions sit in `@agntn/curves/ai`. Integers travel as decimal or `0x` strings. Infinity comes back as `"infinity"`.
 
 ## 🚫 What this does not do
 
@@ -120,8 +122,8 @@ Signing, mnemonics and addresses. That's [@agntn/keys](https://github.com/agntn/
 ```bash
 pnpm install
 pnpm --dir docs install   # the /mcp test borrows Zod, the toolkit and the SDK from here
-pnpm build       # dist/, the CLI and the secp256k1, ristretto255, sr25519 and ed25519 subpaths
-pnpm test        # textbook curves, brute force oracles, Wycheproof, RFC 9496 and RFC 8032, frozen secp256k1 and sr25519 vectors
+pnpm build       # dist/, the CLI and the secp256k1, bip340, ristretto255, sr25519 and ed25519 subpaths
+pnpm test        # textbook curves, brute force oracles, Wycheproof, BIP340, RFC 9496 and RFC 8032, frozen secp256k1 and sr25519 vectors
 pnpm lint        # vp lint and vp fmt --check
 pnpm typecheck   # src, the extensions, the tests and the docs app, including .vue files
 ```
