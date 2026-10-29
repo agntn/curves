@@ -123,7 +123,7 @@ pnpm --dir docs install   # the /mcp test borrows Zod, the toolkit and the SDK f
 pnpm build       # dist/, the CLI and the secp256k1, ristretto255, sr25519 and ed25519 subpaths
 pnpm test        # textbook curves, brute force oracles, Wycheproof, RFC 9496 and RFC 8032, frozen secp256k1 and sr25519 vectors
 pnpm lint        # vp lint and vp fmt --check
-pnpm typecheck   # src, the extensions and the tests
+pnpm typecheck   # src, the extensions, the tests and the docs app, including .vue files
 ```
 
 The math takes its orders from the specs, and the rest of the house rules live in [CONTRIBUTING.md](CONTRIBUTING.md).

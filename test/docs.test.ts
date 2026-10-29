@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vite-plus/test";
 
+import { triage } from "../docs/scripts/typecheck.ts";
+
 const root = fileURLToPath(new URL("..", import.meta.url));
 
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -74,5 +76,30 @@ describe("the site build", () => {
     );
 
     expect(importers.toSorted()).toEqual(["src/cli.ts", "src/source-change.ts"]);
+  });
+});
+
+describe("the docs type check", () => {
+  const docus =
+    "node_modules/.pnpm/docus@5.13.0_01fe9e8df02dfa02c398a1096df55021/node_modules/docus/app/composables/useSeo.ts(172,5): error TS2322: Type 'ComputedRef<A[]>' is not assignable to type 'B'.\n" +
+    "  Type 'ComputedRef<A[]>' is not assignable to type 'ComputedRef<C>'.\n" +
+    "    Type 'A[]' is not assignable to type 'C'.\n";
+  const site =
+    "app/components/content/CurvesPlayground.vue(362,29): error TS2339: Property 'point' does not exist on type 'Result'.\n";
+
+  it("skips Docus's own source, continuation lines and all", () => {
+    expect(triage(docus)).toEqual({ own: [], skipped: 1 });
+  });
+
+  it("keeps an error in the site's files", () => {
+    expect(triage(docus + site)).toEqual({ own: [site.trimEnd()], skipped: 1 });
+  });
+
+  /** No file means no excuse, even when the message names a Docus path. */
+  it("keeps an error that names no file", () => {
+    const missing = "error TS5058: The specified path does not exist: '.nuxt/tsconfig.app.json'.\n";
+    const named = "error TS6053: File '/docs/node_modules/docus/app/app.vue' not found.\n";
+
+    expect(triage(docus + missing + named).own).toEqual([missing.trimEnd(), named.trimEnd()]);
   });
 });

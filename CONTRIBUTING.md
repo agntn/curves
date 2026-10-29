@@ -37,6 +37,7 @@ Plain Node runs `src/` as it is, so relative imports end in `.ts` and `erasableS
 - The site makes no network request for its own work. The footer promises that, so don't make it a liar.
 - `public/favicon.svg` is the source. Cut the PNGs and the `.ico` from it with ImageMagick.
 - `test/docs.test.ts` guards frontmatter descriptions and list items that open with bold. Docus builds OG file names from those descriptions, so they're not just decoration.
+- `pnpm typecheck` checks the docs app too, `.vue` files included. Four green checks once missed a playground type error. Docus 5.13 ships TypeScript that flunks this check, so `pnpm --dir docs typecheck` skips errors in its source. Everything else fails, even an error with no file.
 
 ## Releasing
 
