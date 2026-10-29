@@ -229,11 +229,14 @@ const refused = {
 
 /**
  * Starts `mcp` from the built bin of a checkout copy and connects a client to it.
- * @param patch - Rewrites `src/tool-operations.ts` before the server starts.
+ * @param patch - Rewrites files under `src/`, keyed by name, before the server starts.
  * @param reuse - A copy made by an earlier call, served again as it stands.
  * @returns {Promise<{ checkout: string, client: Client }>} The copy and the connected client.
  */
-async function checkoutServer(patch?: (operations: string) => string, reuse?: string) {
+async function checkoutServer(
+  patch: Readonly<Record<string, (source: string) => string>> = {},
+  reuse?: string,
+) {
   const checkout = reuse ?? mkdtempSync(join(tmpdir(), "curves-cli-"));
   if (reuse === undefined) {
     for (const entry of ["dist", "src", "package.json"]) {
@@ -241,8 +244,10 @@ async function checkoutServer(patch?: (operations: string) => string, reuse?: st
     }
     symlinkSync(join(root, "node_modules"), join(checkout, "node_modules"), "dir");
   }
-  const operations = join(checkout, "src/tool-operations.ts");
-  if (patch) writeFileSync(operations, patch(readFileSync(operations, "utf8")));
+  for (const [file, rewrite] of Object.entries(patch)) {
+    const path = join(checkout, "src", file);
+    writeFileSync(path, rewrite(readFileSync(path, "utf8")));
+  }
   const client = new Client({ name: "curves-test", version: "1.0.0" });
   await client.connect(
     new StdioClientTransport({
@@ -322,25 +327,47 @@ describe.skipIf(!existsSync(join(root, "dist/cli.mjs")))("curves mcp from the bu
     }
   });
 
-  it("blames a pull that lands mid-call for the failure, not the tool", async () => {
+  it("refuses calls when a pull lands while src/ is still loading", async () => {
+    /** A module of the static graph writes into `src/` as it loads, the way a pull would. */
+    const { checkout, client } = await checkoutServer({
+      "server-info.ts": (info) =>
+        `import { writeFileSync } from "node:fs";\n` +
+        `writeFileSync(new URL("./pulled.ts", import.meta.url), "export {};\\n");\n${info}`,
+    });
+    try {
+      expect(
+        await client.callTool({
+          name: "curves_compute",
+          arguments: { operation: "count", a: "2", b: "2", p: "17" },
+        }),
+      ).toMatchObject(refused);
+    } finally {
+      await client.close();
+      rmSync(checkout, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses whatever a call returns once a pull lands mid-call", async () => {
     /** The executor writes into `src/` on every call, and p = 13 makes it throw. */
-    const { checkout, client } = await checkoutServer(
-      (operations) =>
+    const { checkout, client } = await checkoutServer({
+      "tool-operations.ts": (operations) =>
         `import { writeFileSync } from "node:fs";\n${operations.replace(
           '  const operation = oneOf(args["operation"], "operation", CURVE_OPERATIONS);',
           `  writeFileSync(new URL(\`./pulled-\${String(args["p"])}.ts\`, import.meta.url), "export {};\\n");
   if (args["p"] === "13") throw new Error("boom");
   const operation = oneOf(args["operation"], "operation", CURVE_OPERATIONS);`,
         )}`,
-    );
+    });
     try {
-      const kept = await client.callTool({
-        name: "curves_compute",
-        arguments: { operation: "count", a: "2", b: "2", p: "17" },
-      });
-      expect(kept.isError).not.toBe(true);
+      /** A lazy import may mix pulled and cached modules, so even a success is refused. */
+      expect(
+        await client.callTool({
+          name: "curves_compute",
+          arguments: { operation: "count", a: "2", b: "2", p: "17" },
+        }),
+      ).toMatchObject(refused);
 
-      const fresh = await checkoutServer(undefined, checkout);
+      const fresh = await checkoutServer({}, checkout);
       try {
         expect(
           await fresh.client.callTool({

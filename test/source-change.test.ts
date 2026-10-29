@@ -6,22 +6,24 @@ import { sourceChangeCheck } from "../src/source-change.ts";
 
 const trees: string[] = [];
 
+/** Lets the clock move on, so a change can't share the baseline's millisecond. */
+async function later() {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}
+
 /**
- * A source tree with one nested module and a check snapshotted over it.
- * @returns {{ changed: () => boolean, file: string, tree: string }} The check, the module and the root.
+ * A source tree with one nested module and a check whose baseline comes after it was written.
+ * @returns {Promise<{ changed: () => boolean, file: string, tree: string }>} The check, the module
+ * and the root.
  */
-function guarded() {
+async function guarded() {
   const tree = mkdtempSync(join(tmpdir(), "curves-source-"));
   trees.push(tree);
   mkdirSync(join(tree, "commands"));
   const file = join(tree, "commands/mcp.ts");
   writeFileSync(file, "export {};\n");
-  return { changed: sourceChangeCheck(tree), file, tree };
-}
-
-/** Lets the clock move on, so a change can't share the snapshot's ctime. */
-async function later() {
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await later();
+  return { changed: sourceChangeCheck(tree, Date.now()), file, tree };
 }
 
 afterEach(() => {
@@ -30,14 +32,14 @@ afterEach(() => {
 
 describe("sourceChangeCheck", () => {
   it("stays false while the tree stays as it was", async () => {
-    const { changed } = guarded();
+    const { changed } = await guarded();
     await later();
 
     expect(changed()).toBe(false);
   });
 
   it("turns true once a nested file changes", async () => {
-    const { changed, file } = guarded();
+    const { changed, file } = await guarded();
     await later();
     writeFileSync(file, "export const added = 1;\n");
 
@@ -45,7 +47,7 @@ describe("sourceChangeCheck", () => {
   });
 
   it("catches a change that kept its old mtime", async () => {
-    const { changed, file } = guarded();
+    const { changed, file } = await guarded();
     await later();
     writeFileSync(file, "export const added = 1;\n");
     utimesSync(file, new Date(0), new Date(0));
@@ -54,7 +56,7 @@ describe("sourceChangeCheck", () => {
   });
 
   it("turns true once a file goes away", async () => {
-    const { changed, file } = guarded();
+    const { changed, file } = await guarded();
     await later();
     rmSync(file);
 
@@ -62,14 +64,24 @@ describe("sourceChangeCheck", () => {
   });
 
   it("turns true when the whole tree goes away instead of throwing", async () => {
-    const { changed, tree } = guarded();
+    const { changed, tree } = await guarded();
     rmSync(tree, { recursive: true, force: true });
 
     expect(changed()).toBe(true);
   });
 
+  it("counts a change from before the check was built but after its baseline", async () => {
+    const tree = mkdtempSync(join(tmpdir(), "curves-source-"));
+    trees.push(tree);
+    const since = Date.now();
+    await later();
+    writeFileSync(join(tree, "pulled.ts"), "export {};\n");
+
+    expect(sourceChangeCheck(tree, since)()).toBe(true);
+  });
+
   it("turns true once a file comes in", async () => {
-    const { changed, tree } = guarded();
+    const { changed, tree } = await guarded();
     await later();
     writeFileSync(join(tree, "added.ts"), "export {};\n");
 
