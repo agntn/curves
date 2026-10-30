@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { SECP_SAMPLES, shortPoint } from "../../utils/secp";
+import { sampleIndex } from "../../composables/useLandingSample";
+import { SECP_SAMPLES, shortPoint, type SecpSample } from "../../utils/secp";
 
 const props = defineProps<{ tick: number }>();
 const emit = defineEmits<{ pause: [paused: boolean] }>();
 
-const sample = computed(() => SECP_SAMPLES[props.tick % SECP_SAMPLES.length]!);
+const sample = computed(() => SECP_SAMPLES[sampleIndex(props.tick, SECP_SAMPLES.length)]!);
 const title = computed(() => `curves_secp256k1_compute(${JSON.stringify(sample.value.params)})`);
 
 /** The arguments in, then what came out, the answer in the accent. */
-const rows = computed(() => {
-  const { params, details } = sample.value;
+function rowsOf({ params, details }: SecpSample) {
   const input = Object.entries(params)
     .filter(([name]) => name !== "operation")
     .map(([name, value]) => ({ label: name, value: shortPoint(String(value)), full: String(value), accent: false }));
@@ -30,7 +30,11 @@ const rows = computed(() => {
               ]
             : [{ label: "point", value: shortPoint(details.point), full: details.point, accent: true }];
   return [...input, ...output];
-});
+}
+
+const rows = computed(() => rowsOf(sample.value));
+/** The longest sample's row count. Every sample pads to it, so the readout never changes height. */
+const ROW_COUNT = Math.max(...SECP_SAMPLES.map((other) => rowsOf(other).length));
 </script>
 
 <template>
@@ -79,7 +83,6 @@ const rows = computed(() => {
         </div>
       </div>
       <div class="console-readout">
-        <!-- Three rows for every sample, empty ones included, so the readout never changes height. -->
         <dl :key="sample.key" class="console-readout-rows console-animate">
           <div v-for="(row, index) in rows" :key="row.label" :style="{ animationDelay: `${index * 45}ms` }">
             <dt>{{ row.label }}</dt>
@@ -89,9 +92,9 @@ const rows = computed(() => {
               </UTooltip>
             </dd>
           </div>
-          <div v-for="pad in Math.max(0, 3 - rows.length)" :key="`pad${pad}`" aria-hidden="true">
+          <div v-for="pad in ROW_COUNT - rows.length" :key="`pad${pad}`" aria-hidden="true">
             <dt>&#8203;</dt>
-            <dd />
+            <dd><span class="secp-line">&#8203;</span></dd>
           </div>
         </dl>
       </div>
