@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { multiplyGenerator as p256Generator } from "@agntn/curves/p256";
 import { invertScalar, multiplyGenerator, subtractScalars } from "@agntn/curves/secp256k1";
+import type { Ref } from "vue";
 import type { Bip340Details, CurvePointText, Ed25519Details, Secp256k1Details, Sr25519Details } from "#tool-operations";
 import { EMPTY_VECTOR, PI_VECTOR } from "../../utils/bip340";
 import { CURVES, pointArgument } from "../../utils/curves";
 import { ORDER_EIGHT, RFC_TEST_1, RFC_TEST_2 } from "../../utils/ed25519";
 import { shellArg } from "../../utils/format";
+import { RFC_6979 } from "../../utils/p256";
 import { BLOCK_170 } from "../../utils/secp";
 import { ALICE, ALICE_HELLO, ALICE_JUNCTION, DEV_SECRET, DEV_SEED, flipBit } from "../../utils/sr25519";
 import { jsonTokens, shellTokens } from "../../utils/tokens";
@@ -52,6 +55,7 @@ const COMMANDS: Record<ToolName, string> = {
   curves_compute: "compute",
   curves_secp256k1_compute: "secp256k1",
   curves_bip340_compute: "bip340",
+  curves_p256_compute: "p256",
   curves_sr25519_compute: "sr25519",
   curves_ed25519_compute: "ed25519",
 };
@@ -80,6 +84,13 @@ const OPERATIONS: readonly Operation[] = [
   { key: "bip340:keypair", tool: "curves_bip340_compute", op: "keypair", takes: ["secret"], about: "A 32-byte secret in, the x-only key out. y doesn't make the trip, it's whichever one is even." },
   { key: "bip340:sign", tool: "curves_bip340_compute", op: "sign", takes: ["secret", "message", "random"], about: "Sign the BIP340 way. Leave random empty and fresh bytes go in, so every signature differs and all of them verify." },
   { key: "bip340:verify", tool: "curves_bip340_compute", op: "verify", takes: ["publicKey", "message", "signature"], about: "The pi message comes with a signature. Flip a bit and see what verify says." },
+  { key: "p256:add", tool: "curves_p256_compute", op: "add", takes: ["point", "other", "compressed"], about: "The sum of two P-256 points." },
+  { key: "p256:subtract", tool: "curves_p256_compute", op: "subtract", takes: ["point", "other", "compressed"], about: "The offset between two P-256 points." },
+  { key: "p256:negate", tool: "curves_p256_compute", op: "negate", takes: ["point", "compressed"], about: "Same x, the other y. Only the SEC1 prefix changes." },
+  { key: "p256:multiply", tool: "curves_p256_compute", op: "multiply", takes: ["point", "scalar", "compressed"], about: "A point times a scalar from 1 to n - 1. G times a private key is its public key." },
+  { key: "p256:lift", tool: "curves_p256_compute", op: "lift", takes: ["x", "compressed"], about: "Both points above an x. Try x = 1. Nobody's home." },
+  { key: "p256:check", tool: "curves_p256_compute", op: "check", takes: ["point"], about: "Check a SEC1 point on P-256. secp256k1's G is on the wrong curve." },
+  { key: "p256:verify", tool: "curves_p256_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "Check ECDSA over a digest. The default signature doesn't verify with G. The RFC 6979 key chip loads the key that does." },
   { key: "sr25519:keypair", tool: "curves_sr25519_compute", op: "keypair", takes: ["source"], sources: ["seed", "secret"], about: "A 32-byte seed grows into a secret and a public key. A secret alone gives back its public key." },
   { key: "sr25519:sign", tool: "curves_sr25519_compute", op: "sign", takes: ["secret", "message", "encoding"], about: "Sign under the substrate context. Fresh randomness each time, so the bytes change and both still verify." },
   { key: "sr25519:verify", tool: "curves_sr25519_compute", op: "verify", takes: ["publicKey", "message", "encoding", "signature"], about: "Whether the key signed these bytes. A wrong signature is a plain false, not an error." },
@@ -94,6 +105,9 @@ const TWO_G = multiplyGenerator("2");
 const HALF = invertScalar(2n);
 /** n - 1, the largest secret there is. Its public key is minus G. */
 const TOP_SECRET = subtractScalars("0", "1");
+/** G and 2G on P-256, compressed. */
+const NIST_G = p256Generator("1");
+const NIST_TWO_G = p256Generator("2");
 /** The ids `recover` takes: bit 0 is the parity of y of R, bit 1 says its x is r + n. */
 const RECOVERY_IDS = [0, 1, 2, 3] as const;
 
@@ -121,6 +135,16 @@ const recovery = ref<number>(BLOCK_170.recovery);
 const lowS = ref(false);
 /** The secp256k1 fields that are text, by the argument each one fills. */
 const SECP_FIELDS = { point: secpPoint, other: secpOther, scalar: secpScalar, secret: secpSecret, x, digest: secpDigest, signature: secpSignature } as const;
+const nistPoint = ref(NIST_G);
+const nistOther = ref(NIST_TWO_G);
+const nistScalar = ref("3");
+const nistX = ref(NIST_G.slice(2));
+const nistDigest = ref<string>(RFC_6979.digest);
+const nistSignature = ref<string>(RFC_6979.signature);
+/** The P-256 fields that are text, by the argument each one fills. */
+const NIST_FIELDS = { point: nistPoint, other: nistOther, scalar: nistScalar, x: nistX, digest: nistDigest, signature: nistSignature } as const;
+/** The text fields of both SEC1 tools, by tool. */
+const SEC1_FIELDS = { curves_secp256k1_compute: SECP_FIELDS, curves_p256_compute: NIST_FIELDS } as const;
 const uncompressed = ref(false);
 const schnorrSecret = ref<string>(PI_VECTOR.secret);
 const schnorrRandom = ref<string>(PI_VECTOR.random);
@@ -158,6 +182,9 @@ const position = computed(() => OPERATIONS.indexOf(current.value) + 1);
 const curve = computed(() => current.value.tool === "curves_compute");
 const secp = computed(() => current.value.tool === "curves_secp256k1_compute");
 const schnorr = computed(() => current.value.tool === "curves_bip340_compute");
+const nist = computed(() => current.value.tool === "curves_p256_compute");
+/** The SEC1 fields on screen, secp256k1's or P-256's. */
+const sec1Fields = computed(() => (nist.value ? NIST_FIELDS : SECP_FIELDS));
 const sr = computed(() => current.value.tool === "curves_sr25519_compute");
 const edwards = computed(() => current.value.tool === "curves_ed25519_compute");
 /** The key the operation on screen starts from: the one picked, when this operation takes it. */
@@ -242,7 +269,7 @@ const toolArgs = computed(() => {
   if (schnorr.value) return schnorrArgs();
   if (edwards.value) return edArgs();
   const args: Record<string, unknown> = { operation: current.value.op };
-  if (!secp.value) Object.assign(args, { a: a.value.trim(), b: b.value.trim(), p: p.value.trim() });
+  if (curve.value) Object.assign(args, { a: a.value.trim(), b: b.value.trim(), p: p.value.trim() });
   for (const field of current.value.takes) {
     if (field === "compressed") {
       if (uncompressed.value) args.compressed = false;
@@ -252,8 +279,9 @@ const toolArgs = computed(() => {
       args.recovery = recovery.value;
     } else if (field === "lowS") {
       if (lowS.value) args.lowS = true;
-    } else if (secp.value) {
-      const value = SECP_FIELDS[field as keyof typeof SECP_FIELDS].value.trim();
+    } else if (!curve.value) {
+      const fields: Readonly<Record<string, Ref<string> | undefined>> = sec1Fields.value;
+      const value = fields[field]?.value.trim() ?? "";
       if (value !== "") args[field] = value;
     } else if (field === "point" || field === "other") {
       const value = (field === "point" ? point : other).value.trim();
@@ -504,6 +532,25 @@ const SECP_SAMPLES: readonly { label: string; op?: string; load: () => unknown }
 /** The secp256k1 chips on screen. The secret ones show up where there's a secret to fill. */
 const secpSamples = computed(() => SECP_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
 
+/** P-256 samples: G and 2G, an x no point has, the RFC 6979 key, and one bit off on verify. */
+const NIST_SAMPLES: readonly { label: string; op?: string; load: () => unknown }[] = [
+  { label: "G and 2G", load: () => ((nistPoint.value = NIST_G), (nistOther.value = NIST_TWO_G), (nistScalar.value = "3")) },
+  { label: "x of G", load: () => (nistX.value = NIST_G.slice(2)) },
+  { label: "x = 1", load: () => ((nistX.value = "1".padStart(64, "0")), (nistPoint.value = `02${"1".padStart(64, "0")}`)) },
+  {
+    label: "RFC 6979 key",
+    load: () => {
+      nistPoint.value = RFC_6979.publicKey;
+      nistDigest.value = RFC_6979.digest;
+      nistSignature.value = RFC_6979.signature;
+    },
+  },
+  { label: "one bit off", op: "verify", load: () => (nistSignature.value = flipBit(nistSignature.value)) },
+];
+
+/** The P-256 chips on screen. `one bit off` waits for a signature to break. */
+const nistSamples = computed(() => NIST_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
+
 /**
  * Loads one BIP340 vector into every BIP340 field, secret and aux_rand included.
  *
@@ -611,12 +658,12 @@ function readQuery(query: Readonly<Record<string, unknown>>) {
     }
     strict.value = query.zip215 === "false";
   }
-  const onSecp = op?.tool === "curves_secp256k1_compute";
-  for (const [name, field] of Object.entries(onSecp ? { ...FIELDS, ...SECP_FIELDS } : FIELDS)) {
+  const sec1 = op?.tool === "curves_secp256k1_compute" || op?.tool === "curves_p256_compute" ? SEC1_FIELDS[op.tool] : undefined;
+  for (const [name, field] of Object.entries({ ...FIELDS, ...sec1 })) {
     if (typeof query[name] === "string") field.value = query[name];
   }
   if (typeof query.uncompressed === "string") uncompressed.value = query.uncompressed === "true";
-  if (onSecp && op.takes.includes("lowS")) lowS.value = query.lowS === "true";
+  if (sec1 && op?.takes.includes("lowS")) lowS.value = query.lowS === "true";
   if (typeof query.recovery === "string" && /^[0-3]$/u.test(query.recovery)) recovery.value = Number(query.recovery);
   request.value = { operation: current.value, args: toolArgs.value };
 }
@@ -754,34 +801,34 @@ const shareLink = computed(() => {
                 <dd><UInput id="playground-limit" v-model="limit" variant="none" inputmode="numeric" placeholder="default 100" class="w-full" /></dd>
               </div>
             </dl>
-            <dl v-else-if="secp" class="console-readout-rows">
+            <dl v-else-if="secp || nist" class="console-readout-rows">
               <div v-if="current.takes.includes('secret')">
                 <dt><label for="playground-secp-secret">secret</label></dt>
                 <dd><UInput id="playground-secp-secret" v-model="secpSecret" variant="none" placeholder="hex, 1 to n - 1" class="w-full" spellcheck="false" /></dd>
               </div>
               <div v-if="current.takes.includes('point')">
                 <dt><label for="playground-secp-point">point</label></dt>
-                <dd><UInput id="playground-secp-point" v-model="secpPoint" variant="none" placeholder="SEC1 hex" class="w-full" spellcheck="false" /></dd>
+                <dd><UInput id="playground-secp-point" v-model="sec1Fields.point.value" variant="none" placeholder="SEC1 hex" class="w-full" spellcheck="false" /></dd>
               </div>
               <div v-if="current.takes.includes('other')">
                 <dt><label for="playground-secp-other">other</label></dt>
-                <dd><UInput id="playground-secp-other" v-model="secpOther" variant="none" placeholder="SEC1 hex" class="w-full" spellcheck="false" /></dd>
+                <dd><UInput id="playground-secp-other" v-model="sec1Fields.other.value" variant="none" placeholder="SEC1 hex" class="w-full" spellcheck="false" /></dd>
               </div>
               <div v-if="current.takes.includes('scalar')">
                 <dt><label for="playground-secp-scalar">scalar</label></dt>
-                <dd><UInput id="playground-secp-scalar" v-model="secpScalar" variant="none" placeholder="hex, 1 to n - 1" class="w-full" spellcheck="false" /></dd>
+                <dd><UInput id="playground-secp-scalar" v-model="sec1Fields.scalar.value" variant="none" placeholder="hex, 1 to n - 1" class="w-full" spellcheck="false" /></dd>
               </div>
               <div v-if="current.takes.includes('x')">
                 <dt><label for="playground-x">x</label></dt>
-                <dd><UInput id="playground-x" v-model="x" variant="none" placeholder="64 hex digits" class="w-full" spellcheck="false" /></dd>
+                <dd><UInput id="playground-x" v-model="sec1Fields.x.value" variant="none" placeholder="64 hex digits" class="w-full" spellcheck="false" /></dd>
               </div>
               <div v-if="current.takes.includes('digest')">
                 <dt><label for="playground-digest">digest</label></dt>
-                <dd><UInput id="playground-digest" v-model="secpDigest" variant="none" placeholder="digest hex, 1 to 64 bytes" class="w-full" spellcheck="false" /></dd>
+                <dd><UInput id="playground-digest" v-model="sec1Fields.digest.value" variant="none" placeholder="digest hex, 1 to 64 bytes" class="w-full" spellcheck="false" /></dd>
               </div>
               <div v-if="current.takes.includes('signature')">
                 <dt><label for="playground-secp-signature">signature</label></dt>
-                <dd><UInput id="playground-secp-signature" v-model="secpSignature" variant="none" placeholder="r then s, 128 hex digits" class="w-full" spellcheck="false" /></dd>
+                <dd><UInput id="playground-secp-signature" v-model="sec1Fields.signature.value" variant="none" placeholder="r then s, 128 hex digits" class="w-full" spellcheck="false" /></dd>
               </div>
               <div v-if="current.takes.includes('recovery')">
                 <dt>recovery</dt>
@@ -799,7 +846,7 @@ const shareLink = computed(() => {
               </div>
               <div v-if="current.takes.includes('lowS')">
                 <dt><label for="playground-low-s">s</label></dt>
-                <dd><UCheckbox id="playground-low-s" v-model="lowS" label="low s, Bitcoin's stricter rule" /></dd>
+                <dd><UCheckbox id="playground-low-s" v-model="lowS" :label="nist ? 'low s, at most n / 2' : 'low s, Bitcoin\'s stricter rule'" /></dd>
               </div>
               <div v-if="current.takes.includes('compressed')">
                 <dt><label for="playground-uncompressed">output</label></dt>
@@ -913,6 +960,9 @@ const shareLink = computed(() => {
           <div v-else-if="secp" class="playground-chips" role="group" aria-label="Sample points">
             <UButton v-for="sample in secpSamples" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
+          <div v-else-if="nist" class="playground-chips" role="group" aria-label="Sample P-256 points">
+            <UButton v-for="sample in nistSamples" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
+          </div>
           <div v-else-if="schnorr" class="playground-chips" role="group" aria-label="BIP340 test vectors">
             <UButton v-for="sample in schnorrSamples" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
@@ -935,6 +985,11 @@ const shareLink = computed(() => {
               >Keys and signatures are hex without 0x. The key is just the x coordinate, with even y
               filling in the other half. The BIP's secrets are public on purpose. Yours would land in
               the address bar, so maybe don't.</template
+            >
+            <template v-else-if="nist"
+              >As on secp256k1, points use SEC1 hex in 33 or 65 bytes. Digests and signatures are hex
+              without 0x. Unpack a WebAuthn or X.509 DER signature into r then s first, and keep private
+              scalars out: the address bar is a bad place for secrets.</template
             >
             <template v-else-if="secp"
               >Points are SEC1 hex, 33 or 65 bytes. Digests and signatures are hex without 0x. Every

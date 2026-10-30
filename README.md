@@ -27,11 +27,12 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 - 🔑 **secp256k1 with SEC1 points.** Add, subtract, multiply, lift an x, convert between 33 and 65 bytes.
 - 🔍 **ECDSA signing, verification and recovery.** RFC 6979 picks the nonce, so a key and a digest always sign the same way. Low s and a recovery id come with it. The block 170 signature that paid Hal Finney 10 BTC? Checks out. Recovery hands back Satoshi's key.
 - ✍️ **BIP340 signatures.** Taproot and Nostr, signed and checked against 32-byte x-only keys. It lives in `@agntn/curves/bip340`. Fresh aux_rand by default, or yours. One BIP vector signs pi's hex digits with a key made of e's. Same bytes here.
+- 🟢 **P-256 with SEC1 points.** Also called secp256r1 and prime256v1, it's the curve of passkeys, ES256 tokens and TLS. `@agntn/curves/p256` does point math and verifies ECDSA over a digest you hashed. All 262 Wycheproof vectors for P-256 with SHA-256 pass. A familiar name isn't proof. That's 262 witnesses.
 - 🟣 **sr25519 for Polkadot.** Keys from a seed, signatures, `//hard` and `/soft` children. `//Alice` comes out right.
 - 🟠 **ed25519 for Monero.** Add, multiply, reduce a scalar like `sc_reduce32`. A point of order 8 decodes fine, and `isTorsionFree` still says no.
 - 🔏 **Ed25519 signatures.** Sign and verify in `@agntn/curves/ed25519`. One secret, one message, one signature. RFC 8032's own, to the byte. ZIP 215 by default, strict on request.
-- 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1, plus RFC 6979 nonces. BIP340 for Schnorr, RFC 9496 for ristretto255, RFC 8032 for ed25519. No `@noble/curves`.
-- 🤖 **Agent tools.** Curves you define, secp256k1, BIP340, sr25519 and Ed25519. MCP, Pi, OMP and the AI SDK get the lot.
+- 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1 and P-256, plus RFC 6979 nonces. BIP340 for Schnorr, RFC 9496 for ristretto255, RFC 8032 for ed25519. No `@noble/curves`.
+- 🤖 **Agent tools.** Curves you define, secp256k1, BIP340, P-256, sr25519 and Ed25519. MCP, Pi, OMP and the AI SDK get the lot.
 
 ## 📦 Install
 
@@ -75,11 +76,14 @@ The scalar is the inverse of 2 mod n. Look at all those zeros in x. Funny, right
 | `curves compute <operation>`   | add, double, negate, multiply, lift, check, order, count, points, log |
 | `curves secp256k1 <operation>` | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
 | `curves bip340 <operation>`    | keypair, sign, verify                                                 |
+| `curves p256 <operation>`      | add, subtract, negate, multiply, lift, check, verify                  |
 | `curves sr25519 <operation>`   | keypair, sign, verify, derive                                         |
 | `curves ed25519 <operation>`   | keypair, sign, verify                                                 |
 | `curves mcp`                   | MCP server over stdio                                                 |
 
-Points go in as JSON for `compute`, the same `{"x":…,"y":…}` the tool takes, and as SEC1 hex for `secp256k1`. `--a -3` works, it's reduced mod p. The output is the line a model reads, `--json` makes it pretty. Every flag comes from the tool schema through `runCli` of [`@agntn/tools`](https://tools.agntn.dev/guide/cli), so `curves <command> --help` never lies about what a command takes.
+Points go in as JSON for `compute`, the same `{"x":…,"y":…}` the tool takes, and as SEC1 hex for `secp256k1` and `p256`. `--a -3` works, it's reduced mod p. The output is the line a model reads, `--json` makes it pretty.
+
+Every flag comes from the tool schema through `runCli` of [`@agntn/tools`](https://tools.agntn.dev/guide/cli), so `curves <command> --help` never lies about what a command takes.
 
 ## 🧠 Library
 
@@ -113,7 +117,7 @@ omp install @agntn/curves
 }
 ```
 
-Tools: `curves_compute`, `curves_secp256k1_compute`, `curves_bip340_compute`, `curves_sr25519_compute` and `curves_ed25519_compute`. The AI SDK versions sit in `@agntn/curves/ai`. Integers travel as decimal or `0x` strings. Infinity comes back as `"infinity"`.
+Tools: `curves_compute`, `curves_secp256k1_compute`, `curves_bip340_compute`, `curves_p256_compute`, `curves_sr25519_compute` and `curves_ed25519_compute`. The AI SDK versions sit in `@agntn/curves/ai`. Integers travel as decimal or `0x` strings. Infinity comes back as `"infinity"`.
 
 ## 🚫 What this does not do
 
@@ -124,8 +128,8 @@ Mnemonics and addresses. That's [@agntn/keys](https://github.com/agntn/keys). Yo
 ```bash
 pnpm install
 pnpm --dir docs install   # the /mcp test borrows Zod, the toolkit and the SDK from here
-pnpm build       # dist/, the CLI and the secp256k1, bip340, ristretto255, sr25519 and ed25519 subpaths
-pnpm test        # textbook curves, brute force oracles, Wycheproof, BIP340, RFC 6979, RFC 9496, RFC 8032 and speccheck, frozen secp256k1, sr25519 and Ed25519 vectors
+pnpm build       # dist/, the CLI and the secp256k1, bip340, p256, ristretto255, sr25519 and ed25519 subpaths
+pnpm test        # textbook curves, brute force oracles, Wycheproof, BIP340, RFC 6979, RFC 9496, RFC 8032 and speccheck, frozen secp256k1, P-256, sr25519 and Ed25519 vectors
 pnpm lint        # vp lint and vp fmt --check
 pnpm typecheck   # src, the extensions, the tests and the docs app, including .vue files
 ```
