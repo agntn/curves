@@ -23,7 +23,12 @@ const rows = computed(() => {
         ? [{ label: "onCurve", value: String(details.onCurve), full: String(details.onCurve), accent: true }]
         : details.operation === "verify"
           ? [{ label: "valid", value: String(details.valid), full: String(details.valid), accent: true }]
-          : [{ label: "point", value: shortPoint(details.point), full: details.point, accent: true }];
+          : details.operation === "sign"
+            ? [
+                { label: "signature", value: shortPoint(details.signature), full: details.signature, accent: true },
+                { label: "recovery", value: String(details.recovery), full: String(details.recovery) },
+              ]
+            : [{ label: "point", value: shortPoint(details.point), full: details.point, accent: true }];
   return [...input, ...output];
 });
 </script>

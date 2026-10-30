@@ -57,6 +57,12 @@ const CALLS: readonly Omit<SecpSample, "details" | "text">[] = [
     params: { operation: "negate", point: G },
   },
   {
+    key: "sign",
+    title: "Signed by secret 1",
+    note: "Block 170's sighash again, under the key whose public key is G. RFC 6979 picks k, so reload all you like.",
+    params: { operation: "sign", secret: "1", digest: BLOCK_170.digest },
+  },
+  {
     key: "recover",
     title: "Satoshi's key, recovered",
     note: "Block 170, 12 January 2009: Satoshi paid Hal Finney 10 BTC. Recovery id 1 finds Satoshi's.",

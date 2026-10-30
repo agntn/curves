@@ -25,12 +25,12 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 - 📏 **Point orders.** Baby step giant step over the Hasse interval, fields up to 2⁴⁸.
 - 🕵️ **Discrete logs.** The smallest k, one prime of the order at a time. A 40-bit order made of small primes? About 20 ms. Only a prime above 2³⁶ stops it. No k? You get `undefined`, not a guess.
 - 🔑 **secp256k1 with SEC1 points.** Add, subtract, multiply, lift an x, convert between 33 and 65 bytes.
-- 🔍 **ECDSA verification and recovery.** The block 170 signature that paid Hal Finney 10 BTC? Checks out. Recovery hands back Satoshi's key.
-- ✍️ **BIP340 verification.** Taproot and Nostr signatures, checked against 32-byte x-only keys. It lives in `@agntn/curves/bip340`. One BIP vector signs pi's hex digits with a key made of e's. Signing isn't in yet.
+- 🔍 **ECDSA signing, verification and recovery.** RFC 6979 picks the nonce, so a key and a digest always sign the same way. Low s and a recovery id come with it. The block 170 signature that paid Hal Finney 10 BTC? Checks out. Recovery hands back Satoshi's key.
+- ✍️ **BIP340 signatures.** Taproot and Nostr, signed and checked against 32-byte x-only keys. It lives in `@agntn/curves/bip340`. Fresh aux_rand by default, or yours. One BIP vector signs pi's hex digits with a key made of e's. Same bytes here.
 - 🟣 **sr25519 for Polkadot.** Keys from a seed, signatures, `//hard` and `/soft` children. `//Alice` comes out right.
 - 🟠 **ed25519 for Monero.** Add, multiply, reduce a scalar like `sc_reduce32`. A point of order 8 decodes fine, and `isTorsionFree` still says no.
 - 🔏 **Ed25519 signatures.** Sign and verify in `@agntn/curves/ed25519`. One secret, one message, one signature. RFC 8032's own, to the byte. ZIP 215 by default, strict on request.
-- 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1, BIP340 for Schnorr, RFC 9496 for ristretto255, RFC 8032 for ed25519. No `@noble/curves`.
+- 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1, plus RFC 6979 nonces. BIP340 for Schnorr, RFC 9496 for ristretto255, RFC 8032 for ed25519. No `@noble/curves`.
 - 🤖 **Agent tools.** Curves you define, secp256k1, BIP340, sr25519 and Ed25519. MCP, Pi, OMP and the AI SDK get the lot.
 
 ## 📦 Install
@@ -73,8 +73,8 @@ The scalar is the inverse of 2 mod n. Look at all those zeros in x. Funny, right
 | Command                        | Does                                                                  |
 | ------------------------------ | --------------------------------------------------------------------- |
 | `curves compute <operation>`   | add, double, negate, multiply, lift, check, order, count, points, log |
-| `curves secp256k1 <operation>` | add, subtract, negate, multiply, lift, check, verify, recover         |
-| `curves bip340 <operation>`    | verify                                                                |
+| `curves secp256k1 <operation>` | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
+| `curves bip340 <operation>`    | keypair, sign, verify                                                 |
 | `curves sr25519 <operation>`   | keypair, sign, verify, derive                                         |
 | `curves ed25519 <operation>`   | keypair, sign, verify                                                 |
 | `curves mcp`                   | MCP server over stdio                                                 |
@@ -117,7 +117,7 @@ Tools: `curves_compute`, `curves_secp256k1_compute`, `curves_bip340_compute`, `c
 
 ## 🚫 What this does not do
 
-Mnemonics and addresses. That's [@agntn/keys](https://github.com/agntn/keys). ECDSA and BIP340 signing aren't in yet. Your own curves don't run in constant time either. And a log over a real 256-bit group? Not happening, here or anywhere else.
+Mnemonics and addresses. That's [@agntn/keys](https://github.com/agntn/keys). Your own curves don't run in constant time either. And a log over a real 256-bit group? Not happening, here or anywhere else.
 
 ## 🛠️ Development
 
@@ -125,7 +125,7 @@ Mnemonics and addresses. That's [@agntn/keys](https://github.com/agntn/keys). EC
 pnpm install
 pnpm --dir docs install   # the /mcp test borrows Zod, the toolkit and the SDK from here
 pnpm build       # dist/, the CLI and the secp256k1, bip340, ristretto255, sr25519 and ed25519 subpaths
-pnpm test        # textbook curves, brute force oracles, Wycheproof, BIP340, RFC 9496, RFC 8032 and speccheck, frozen secp256k1, sr25519 and Ed25519 vectors
+pnpm test        # textbook curves, brute force oracles, Wycheproof, BIP340, RFC 6979, RFC 9496, RFC 8032 and speccheck, frozen secp256k1, sr25519 and Ed25519 vectors
 pnpm lint        # vp lint and vp fmt --check
 pnpm typecheck   # src, the extensions, the tests and the docs app, including .vue files
 ```

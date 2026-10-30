@@ -88,3 +88,31 @@ export const tampered: readonly SignedMessage[] = [
     valid: false,
   },
 ];
+
+/** A signature with the secret that made it, for the checks that sign. */
+export interface SignedBySecret extends SignedMessage {
+  readonly secret: string;
+}
+
+/**
+ * Edges signed by @noble/curves 2.4.0 `schnorr.sign` with aux_rand of 32 zero bytes: secret 1 over
+ * no bytes, then n - 1, whose point has odd y, so signing negates it first.
+ */
+export const nobleEdges: readonly SignedBySecret[] = [
+  {
+    secret: "0000000000000000000000000000000000000000000000000000000000000001",
+    message: "",
+    signature:
+      "c77be847b5fd7c789048160bc419c590365d479b5ef579cff35c809c40e25ea9241c66d70a0d007f9b0d50faf8196477f6b65fc958ab287a72de32016617407f",
+    publicKey: "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    valid: true,
+  },
+  {
+    secret: "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
+    message: "00",
+    signature:
+      "cca5cb053bbbd1346550f4381be0d3bbfd69e38be77df2a0df8d7576984d757f9ea1bf74d208382eb51c6507ecdcf2f98a8b76a574b5c38a8d38bad2a4dff163",
+    publicKey: "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    valid: true,
+  },
+];

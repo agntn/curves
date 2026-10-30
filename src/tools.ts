@@ -169,7 +169,7 @@ export const secp256k1ComputeSchema = Type.Object(
     operation: Type.String({
       enum: [...SECP256K1_OPERATIONS],
       description:
-        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, verify takes point as the public key with digest and signature, recover takes digest, signature and recovery and gives the public key",
+        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, sign takes secret and digest, verify takes point as the public key with digest and signature, recover takes digest, signature and recovery and gives the public key",
     }),
     point: sec1Point(
       "Every operation but lift and recover, required there; the public key for verify",
@@ -183,6 +183,14 @@ export const secp256k1ComputeSchema = Type.Object(
         pattern: "^[0-9A-Fa-f]{0,64}$",
         description:
           "multiply only, required there: 1 to n - 1 as hex without 0x. It enters the transcript, so pass a public tweak or a disposable key",
+      }),
+    ),
+    secret: Type.Optional(
+      Type.String({
+        maxLength: 64,
+        pattern: "^[0-9A-Fa-f]{0,64}$",
+        description:
+          "sign only, required there: the private key, 1 to n - 1 as hex without 0x. It enters the transcript, so pass a disposable key or a test vector",
       }),
     ),
     x: Type.Optional(
@@ -206,7 +214,7 @@ export const secp256k1ComputeSchema = Type.Object(
         maxLength: 128,
         pattern: `^(?:${DIGEST_PATTERN})?$`,
         description:
-          "verify and recover only, required there: the hash of the signed message, 1 to 64 bytes as hex without 0x. Hash the message first; past 32 bytes only the leftmost 256 bits count",
+          "sign, verify and recover only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. Hash the message first; past 32 bytes only the leftmost 256 bits count",
       }),
     ),
     recovery: Type.Optional(
@@ -226,7 +234,7 @@ export const secp256k1ComputeSchema = Type.Object(
     compressed: Type.Optional(
       Type.Boolean({
         description:
-          "Output SEC1 encoding, for every operation but check and verify. Default: true",
+          "Output SEC1 encoding, for every operation but check and verify; sign uses it for the public key. Default: true",
       }),
     ),
   },
@@ -237,21 +245,22 @@ export const secp256k1ComputeTool = defineTool({
   name: "curves_secp256k1_compute",
   title: "Compute on secp256k1",
   description:
-    "Do curve math on public secp256k1 points: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Verify an ECDSA signature over a digest, or recover the public key behind one. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. The scalar enters the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks or disposable keys.",
+    "Do curve math on public secp256k1 points: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, so one key and one digest always give the same signature, the low-S form Bitcoin and Ethereum want. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
   snippet:
-    "Use for split key vanity addresses, offsets between known public keys, x-only keys, and the key behind an ECDSA signature.",
+    "Use for split key vanity addresses, offsets between known public keys, x-only keys, and ECDSA signatures: make one, check one, or find the key behind one.",
   guidelines: [
     "add and subtract take point and other; negate takes point",
     "multiply takes point and scalar, hex from 1 to n - 1",
     "lift takes x and returns the even and the odd point; the even one is the BIP340 key",
     "check takes point and answers onCurve true or false",
+    "sign takes secret and digest and returns signature, recovery and publicKey; recovery is what recover takes, Ethereum's v is 27 plus it",
     "verify takes point, digest and signature and answers valid true or false; lowS refuses a high s",
     "recover takes digest, signature and recovery and returns the point; with the id unknown, try 0 to 3 and compare with the key you expect",
   ],
   effect: "read",
   cli: {
     command: "secp256k1",
-    description: "Point math on secp256k1 with SEC1 hex points, and ECDSA verify and recover",
+    description: "Point math on secp256k1 with SEC1 hex points, and ECDSA sign, verify and recover",
     positional: ["operation"],
   },
   input: secp256k1ComputeSchema,
@@ -278,8 +287,17 @@ export const bip340ComputeSchema = Type.Object(
   {
     operation: Type.String({
       enum: [...BIP340_OPERATIONS],
-      description: "verify takes publicKey, message and signature",
+      description:
+        "keypair takes secret, sign takes secret and message, and random to fix aux_rand, verify takes publicKey, message and signature",
     }),
+    secret: hexBytes(
+      32,
+      "keypair and sign only, required there: the secret key, a number from 1 to n - 1 as 32 bytes",
+    ),
+    random: hexBytes(
+      32,
+      "sign only: aux_rand, the bytes BIP340 mixes into the nonce, in place of fresh randomness, for repeatable output",
+    ),
     publicKey: hexBytes(
       32,
       "verify only, required there: the x-only key, which is a compressed SEC1 key without its 02 or 03",
@@ -289,7 +307,7 @@ export const bip340ComputeSchema = Type.Object(
         maxLength: MAX_MESSAGE_LENGTH,
         pattern: "^(?:[0-9A-Fa-f]{2})*$",
         description:
-          "verify only, required there: the signed bytes as hex without 0x, any length, empty too. Taproot signs a 32-byte sighash, Nostr an event id",
+          "sign and verify only, required there: the bytes to sign or that were signed, as hex without 0x, any length, empty too. Taproot signs a 32-byte sighash, Nostr an event id",
       }),
     ),
     signature: hexBytes(64, "verify only, required there: the x of R, then s"),
@@ -301,17 +319,20 @@ export const bip340ComputeTool = defineTool({
   name: "curves_bip340_compute",
   title: "Compute with BIP340",
   description:
-    "Verify a BIP340 Schnorr signature on secp256k1, the kind Taproot key path spends and Nostr events carry. The key is x-only, 32 bytes. The message is hex of any length, empty included, and the signature is 64 bytes. A key with no point on the curve fails like any bad signature.",
-  snippet: "Use for Taproot key path signatures and Nostr events, once you have the signed hash.",
+    "Derive the x-only key of a 32-byte secret, sign a message, or verify a BIP340 Schnorr signature on secp256k1, the kind Taproot key path spends and Nostr events carry. The key is x-only, 32 bytes. The message is hex of any length, empty included, and the signature is 64 bytes. Signing mixes 32 fresh random bytes into the nonce, so signing twice gives two valid signatures unless random fixes them. A key with no point on the curve fails like any bad signature. The secret enters the transcript, so pass only disposable keys or test vectors.",
+  snippet:
+    "Use for Taproot key path signatures and Nostr events, once you have the hash to sign or the signed one.",
   guidelines: [
+    "keypair takes secret and returns publicKey; sign takes secret and message and returns signature and publicKey",
+    "random replaces the fresh aux_rand, so the same secret, message and random repeat a signature",
     "verify takes publicKey, message and signature and answers valid true or false",
     "publicKey is the x coordinate alone: drop the 02 or 03 of a compressed SEC1 key",
-    "message is the signed bytes as hex, not text: the sighash for Taproot, the event id for Nostr",
+    "message is the bytes as hex, not text: the sighash for Taproot, the event id for Nostr",
   ],
   effect: "read",
   cli: {
     command: "bip340",
-    description: "BIP340 Schnorr signatures on secp256k1, checked against x-only keys",
+    description: "BIP340 Schnorr keys and signatures on secp256k1, with x-only keys",
     positional: ["operation"],
   },
   input: bip340ComputeSchema,
