@@ -1,8 +1,9 @@
-/** `@agntn/curves/ed25519`: edwards25519 points as RFC 8032 encodes them, and Ed25519 verify. */
+/** `@agntn/curves/ed25519`: RFC 8032 points and scalars, Ed25519 keys and signatures. */
 
 export {
   addPoints,
   ed25519,
+  getPublicKey,
   INVALID_POINT,
   isIdentity,
   isTorsionFree,
@@ -11,7 +12,8 @@ export {
   multiplyPoint,
   negatePoint,
   reduceScalar,
+  sign,
   subtractPoints,
   verify,
 } from "./core/ed25519.ts";
-export type { VerifyOptions } from "./core/ed25519.ts";
+export type { SignOptions, VerifyOptions } from "./core/ed25519.ts";

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { curvesAiTools } from "../src/ai.ts";
 import { curvesTools } from "../src/tools.ts";
 import { nobleSignatures } from "./fixtures/bip340.ts";
-import { speccheck } from "./fixtures/ed25519.ts";
+import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 
 describe("@agntn/curves/ai", () => {
   it("offers every tool MCP, Pi and OMP list, under the same name and in the same order", () => {
@@ -31,5 +31,18 @@ describe("@agntn/curves/ai", () => {
     expect(await tool.execute?.({ ...call, zip215: false }, options)).toMatchObject({
       valid: false,
     });
+  });
+
+  it("signs with Ed25519 through the AI SDK tool", async () => {
+    const [keys] = rfc8032Keys;
+    const [empty] = rfc8032Signatures;
+    if (keys === undefined || empty === undefined)
+      throw new Error("The RFC 8032 fixture lost test 1");
+    const [secret, publicKey] = keys;
+    const output = await curvesAiTools.curves_ed25519_compute.execute?.(
+      { operation: "sign", secret, message: "" },
+      { toolCallId: "ed25519-sign", messages: [], context: {} },
+    );
+    expect(output).toMatchObject({ operation: "sign", signature: empty.signature, publicKey });
   });
 });

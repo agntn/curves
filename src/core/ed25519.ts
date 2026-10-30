@@ -2,7 +2,8 @@
  * ed25519 points as RFC 8032 writes them: edwards25519 with its cofactor 8 in plain sight, so a
  * point of small order decodes like any other and only `isTorsionFree` tells them apart. Monero
  * keys live here. Multiplying takes the same steps for every scalar, the way edwards25519 does.
- * Signatures pass by the cofactored equation of RFC 8032, under ZIP 215's rules or strict ones.
+ * Ed25519 signs as RFC 8032 does, and signatures pass by its cofactored equation, under ZIP 215's
+ * rules or strict ones.
  */
 
 import { sha512 } from "@agntn/hashes/sha2";
@@ -36,6 +37,13 @@ const SCALAR_RANGE = "Scalar must be a bigint from 0 to l, the order of the base
 const REDUCE_LENGTH = "Scalar to reduce must be 32 or 64 bytes of hex";
 
 const Y_MASK = (1n << 255n) - 1n;
+
+const SECRET_LENGTH = "Secret must be 64 hex digits without 0x, the 32 bytes RFC 8032 hashes";
+
+/** Keeps bits 3 to 253 of a hashed secret. Bit 254 goes on separately, the clamp of RFC 8032. */
+const CLAMP_MASK = (1n << 254n) - 8n;
+
+const BIT_254 = 1n << 254n;
 
 /**
  * Decoding of RFC 8032, section 5.1.3: y little-endian, the sign of x in the top bit.
@@ -191,6 +199,62 @@ export function reduceScalar(text: string): bigint {
   const bytes = typeof text === "string" ? hexToBytes(text) : undefined;
   if (bytes?.length !== 32 && bytes?.length !== 64) throw new RangeError(REDUCE_LENGTH);
   return mod(bytesToNumberLE(bytes), L);
+}
+
+/** The hash of a secret, split as RFC 8032, section 5.1.5, splits it. */
+interface ExpandedSecret {
+  /** s, the clamped low half: a multiple of 8, from 2^254 up to 2^255. */
+  readonly scalar: bigint;
+  /** The high half, which seeds every nonce. */
+  readonly prefix: Uint8Array;
+}
+
+/**
+ * Hash a secret with SHA-512 and clamp the low half into the scalar.
+ * @param secret - 32 bytes
+ * @returns {ExpandedSecret} The scalar and the nonce prefix
+ */
+function expandSecret(secret: Uint8Array): ExpandedSecret {
+  const hash = sha512(secret);
+  const scalar = (bytesToNumberLE(hash.subarray(0, 32)) & CLAMP_MASK) | BIT_254;
+  return { scalar, prefix: hash.subarray(32) };
+}
+
+/**
+ * The public key of a secret, A = sB by RFC 8032, section 5.1.5.
+ * @param secret - 64 hex digits, the 32 random bytes a key pair starts from
+ * @returns {string} The key, 64 hex digits
+ * @throws {RangeError} When the secret is no 64 hex digits
+ */
+export function getPublicKey(secret: string): string {
+  return encodePoint(multiplyBase(expandSecret(readHex(secret, 32, SECRET_LENGTH)).scalar));
+}
+
+/** What {@link sign} signs. */
+export interface SignOptions {
+  /** The bytes to sign as hex, any length, empty too. */
+  readonly message: string;
+}
+
+/**
+ * Sign plain Ed25519 by RFC 8032, section 5.1.6: one secret and one message, one signature.
+ * Both multiplications take the same steps for any scalar. SHA-512 and the math mod l don't.
+ * @param secret - 64 hex digits, the 32 bytes of RFC 8032
+ * @param options - The message
+ * @returns {string} 128 hex digits, R then S
+ * @throws {RangeError} When the secret or the message is no hex of its length
+ * @throws {TypeError} When options is not an object
+ */
+export function sign(secret: string, options: SignOptions): string {
+  const bytes = readHex(secret, 32, SECRET_LENGTH);
+  requireOptions(options, "sign(secret, { message })");
+  const message = readHex(options.message, undefined, "Message must be hex without 0x");
+  const { scalar, prefix } = expandSecret(bytes);
+  const key = encode(multiplyBase(scalar));
+  const r = mod(bytesToNumberLE(sha512(concatBytes(prefix, message))), L);
+  const encodedR = encode(multiplyBase(r));
+  const k = mod(bytesToNumberLE(sha512(concatBytes(encodedR, key, message))), L);
+  return bytesToHex(concatBytes(encodedR, numberToBytesLE(mod(r + k * scalar, L), 32)));
 }
 
 /** What {@link verify} checks a signature against, and by which rules. */

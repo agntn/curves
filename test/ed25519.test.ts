@@ -5,6 +5,7 @@ import { bytesToHex, concatBytes, hexToBytes } from "../src/core/bytes.ts";
 import {
   addPoints,
   ed25519,
+  getPublicKey,
   INVALID_POINT,
   isIdentity,
   isTorsionFree,
@@ -13,12 +14,14 @@ import {
   multiplyPoint,
   negatePoint,
   reduceScalar,
+  sign,
   subtractPoints,
   verify,
 } from "../src/ed25519.ts";
 import {
   invalidEncodings,
   monero,
+  nobleSignatures,
   orderEight,
   rfc8032Keys,
   rfc8032Signatures,
@@ -239,5 +242,72 @@ describe("Ed25519 verify", () => {
     expect(() => {
       Reflect.apply(verify, undefined, nobleShape);
     }).toThrow("Signature must be 128 hex digits without 0x, R then S");
+  });
+});
+
+describe("Ed25519 sign", () => {
+  const [keys] = rfc8032Keys;
+  if (keys === undefined) throw new Error("The RFC 8032 fixture lost test 1");
+  const [secret, publicKey] = keys;
+  const secretLength = "Secret must be 64 hex digits without 0x, the 32 bytes RFC 8032 hashes";
+
+  it("signs the five tests of RFC 8032, section 7.1, byte for byte", () => {
+    for (const [index, { name, message, signature }] of rfc8032Signatures.entries()) {
+      const [testSecret, testKey] = rfc8032Keys[index] ?? ["", ""];
+      expect(getPublicKey(testSecret), `TEST ${name}`).toBe(testKey);
+      expect(rfc8032Signatures[index]?.publicKey, `TEST ${name}`).toBe(testKey);
+      expect(sign(testSecret, { message }), `TEST ${name}`).toBe(signature);
+      const upper = { message: message.toUpperCase() };
+      expect(sign(testSecret.toUpperCase(), upper), `TEST ${name}`).toBe(signature);
+    }
+    expect(rfc8032Keys).toHaveLength(5);
+  });
+
+  it("agrees with @noble/curves 2.4.0 on six signatures its own verify takes", () => {
+    for (const [index, row] of nobleSignatures.entries()) {
+      expect(getPublicKey(row.secret), `signature ${index}`).toBe(row.publicKey);
+      expect(sign(row.secret, { message: row.message }), `signature ${index}`).toBe(row.signature);
+      const { message } = row;
+      for (const zip215 of [true, false]) {
+        const options = { message, publicKey: row.publicKey, zip215 };
+        expect(verify(row.signature, options), `signature ${index}`).toBe(true);
+      }
+    }
+    expect(nobleSignatures.map(({ message }) => message.length / 2)).toEqual([
+      32, 32, 0, 1, 64, 200,
+    ]);
+  });
+
+  it("refuses arguments in another shape, without the secret in the message", () => {
+    const message = "";
+    for (const malformed of [secret.slice(2), `0x${secret.slice(2)}`, `${secret}${publicKey}`]) {
+      expect(() => sign(malformed, { message })).toThrow(new RangeError(secretLength));
+      expect(() => getPublicKey(malformed)).toThrow(new RangeError(secretLength));
+    }
+    for (const malformed of [null, 7, hexToBytes(secret)]) {
+      expect(() => {
+        Reflect.apply(sign, undefined, [malformed, { message }]);
+      }).toThrow(secretLength);
+      expect(() => {
+        Reflect.apply(getPublicKey, undefined, [malformed]);
+      }).toThrow(secretLength);
+    }
+    for (const malformed of ["0", "0x00", "zz", null, 7]) {
+      expect(() => {
+        Reflect.apply(sign, undefined, [secret, { message: malformed }]);
+      }).toThrow("Message must be hex without 0x");
+    }
+    for (const options of [undefined, null, "00"]) {
+      expect(() => {
+        Reflect.apply(sign, undefined, [secret, options]);
+      }).toThrow("Call it as sign(secret, { message })");
+    }
+    const digest = "ab".repeat(32);
+    expect(() => {
+      Reflect.apply(sign, undefined, [digest, secret]);
+    }).toThrow("Call it as sign(secret, { message })");
+    expect(() => {
+      Reflect.apply(sign, undefined, [Buffer.from(digest, "hex"), Buffer.from(secret, "hex")]);
+    }).toThrow(secretLength);
   });
 });

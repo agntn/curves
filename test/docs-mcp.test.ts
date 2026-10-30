@@ -105,6 +105,7 @@ const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
   ],
   ["curves_sr25519_compute", { operation: "keypair", seed }],
   ["curves_sr25519_compute", { operation: "derive", publicKey: seed, chainCode: seed, hard: true }],
+  ["curves_ed25519_compute", { operation: "sign", secret: seed, message: "" }],
   ["curves_ed25519_compute", { operation: "verify", ...smallOrder, zip215: false }],
   ["curves_ed25519_compute", { operation: "verify", ...smallOrder, signature: "00" }],
 ];

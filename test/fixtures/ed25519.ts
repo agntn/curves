@@ -1,6 +1,6 @@
 /** Vectors for ed25519. Where each set comes from sits above it. */
 
-/** Secret and public keys of RFC 8032, section 7.1, tests 1 to 3. */
+/** Secret and public keys of RFC 8032, section 7.1, all five tests in the order it prints them. */
 export const rfc8032Keys: readonly (readonly [secret: string, publicKey: string])[] = [
   [
     "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
@@ -13,6 +13,14 @@ export const rfc8032Keys: readonly (readonly [secret: string, publicKey: string]
   [
     "c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7",
     "fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025",
+  ],
+  [
+    "f5e5767cf153319517630f226876b86c8160cc583bc013744c6bf255f5cc0ee5",
+    "278117fc144c72340f67d0f2316e8386ceffbf2b2428c9c51fef7c597f1d426e",
+  ],
+  [
+    "833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42",
+    "ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf",
   ],
 ];
 
@@ -206,3 +214,56 @@ export const unreducedR: SignedMessage = {
   signature:
     "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fdc4faec99871a286b3cb7c7cb8aab3c66f637b0260f956da003bb5e8fe84c20c",
 };
+
+/**
+ * Ed25519 signatures from @noble/curves 2.4.0 `ed25519.sign`, with its `getPublicKey`. Secret i
+ * is SHA-256 of "agntn/curves ed25519 key <i>". Messages 0 and 1 hash "agntn/curves ed25519 <i>"
+ * with SHA-256. Then no bytes, the byte 01, SHA-512 of "agntn/curves ed25519 4" and 200 bytes
+ * of ab.
+ */
+export const nobleSignatures: readonly (SignedMessage & { readonly secret: string })[] = [
+  {
+    secret: "94dd53ad3f6c72f0575e7421b538119d3ba963c74c69f421021d1a7c151134dd",
+    publicKey: "0f1048a57cc6a0dfb484d8e8e55f9d82840ade7f5f2a519c6bc9af86d6dd13aa",
+    message: "fee7361610750e74ac0e79d41dbb91202bd83186ab89abe2a78fcfbceae5225d",
+    signature:
+      "58a18163693b094c3d704c802e35469abeb762491b97ac679b1e7a9a249928a7b144173e9e84223b1e298c5715f358348a32dfb6630fd1aa2cb92bfdb3529a09",
+  },
+  {
+    secret: "e548346bd21283a1f1da46b22f766160e438af4fe2ae982e9211cdb0d7bf2dd6",
+    publicKey: "adb885add7d18b21196c70483cc1c5a64c238744995abf8876314a0052021cd1",
+    message: "2832a59b2d51a820c25339c9829ad2bbbe36f950ef3172bf26aa82989d8cc634",
+    signature:
+      "c30153f1bad77befb7181abb81572e020b04ceaaf73f91a55462f2081db40ec2bb10c55711df548e3c75e44d4f558ea65c1b8d3ad59691def7b64a11b9984003",
+  },
+  {
+    secret: "4e86aa6bae3f35253218948d8e45629ccde722dd97c1b6d928ee87ad075c1fe4",
+    publicKey: "88523bf5d742d04b5724f7c1f186759707e8d81533b416c9ab4b7a5aa0210e2b",
+    message: "",
+    signature:
+      "21b8dca6fa9d990fafaaf40b06fc3a326bdb11110511bcd5c2457cec68da7e8904d94f386c4953f4908e97b6c6a083fe993d909a28ce3ae42de7815f07c8950b",
+  },
+  {
+    secret: "1c072b1ea1d5b69f45ea02e25d31935c9d2400cc285808c3f8c8d414eed7cd83",
+    publicKey: "68e338a5ad0187a2925ba664569cdba5a6c1cef33546df24851eebb712d1af05",
+    message: "01",
+    signature:
+      "686a33384a5a28e2c846e4b519cdeb0f612f89d6bb3a57a105293832741a33fd223f69ec1a3f6de1330b3da18d63a334774bfee3d545f158e84f439a48d45c09",
+  },
+  {
+    secret: "b5b65c1d0e98f4c12eb042e425eb7b66ef3cc40679ecf16fb377196f15ac2aef",
+    publicKey: "fe82f04a922b28afa0f915287ec80f1542be09e239faea3bb6eb6bbc0d391332",
+    message:
+      "3065da5f4c1bfda1b2edfa7974443c7c6fa4d26b677d36326486a1ea6d7899fc132700936931b3160bd4aa880b000fc3b574b492c282e69a0ffa67727a06f040",
+    signature:
+      "1b6ee68098f0d5ab4a3654d6cbcd7629d046acf07db441c0617d56ae166663c9556b2daf74216984d89a79ce6fd43b05ff8032a39534aadd3d30b3a22ad8240a",
+  },
+  {
+    secret: "3942c532af77190790357f6f4c28263efb827a13da85dad5940110f33b8f6c1b",
+    publicKey: "658a2f00d677d0e833fe46b34f831285accf351de5ed3a314246210629071833",
+    message:
+      "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+    signature:
+      "a45f153835aeaa5ec577404544f6a1cf0d753f90a6d1718728e7366856ba10c78ea5a89d53d94c10e45f4d9a1239f0472f9f04c89bb6e84f93b2eea317734a09",
+  },
+];

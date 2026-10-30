@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { invertScalar, multiplyGenerator } from "@agntn/curves/secp256k1";
-import type { CurvePointText, Sr25519Details } from "#tool-operations";
+import type { CurvePointText, Ed25519Details, Sr25519Details } from "#tool-operations";
 import { EMPTY_VECTOR, PI_VECTOR } from "../../utils/bip340";
 import { CURVES, pointArgument } from "../../utils/curves";
-import { ORDER_EIGHT, RFC_TEST_1 } from "../../utils/ed25519";
+import { ORDER_EIGHT, RFC_TEST_1, RFC_TEST_2 } from "../../utils/ed25519";
 import { shellArg } from "../../utils/format";
 import { BLOCK_170 } from "../../utils/secp";
 import { ALICE, ALICE_HELLO, ALICE_JUNCTION, DEV_SECRET, DEV_SEED, flipBit } from "../../utils/sr25519";
@@ -80,6 +80,8 @@ const OPERATIONS: readonly Operation[] = [
   { key: "sr25519:sign", tool: "curves_sr25519_compute", op: "sign", takes: ["secret", "message", "encoding"], about: "Sign under the substrate context. Fresh randomness each time, so the bytes change and both still verify." },
   { key: "sr25519:verify", tool: "curves_sr25519_compute", op: "verify", takes: ["publicKey", "message", "encoding", "signature"], about: "Whether the key signed these bytes. A wrong signature is a plain false, not an error." },
   { key: "sr25519:derive", tool: "curves_sr25519_compute", op: "derive", takes: ["source", "chainCode", "hard"], sources: ["seed", "secret", "publicKey"], about: "A child as Substrate HDKD makes it. Hard needs the seed or secret. Soft follows from the public key too." },
+  { key: "ed25519:keypair", tool: "curves_ed25519_compute", op: "keypair", takes: ["secret"], about: "32 bytes of secret in, the public key out. SHA-512 and a clamp sit in between." },
+  { key: "ed25519:sign", tool: "curves_ed25519_compute", op: "sign", takes: ["secret", "message"], about: "Sign as RFC 8032 does. Same secret, same message, same bytes, every single time." },
   { key: "ed25519:verify", tool: "curves_ed25519_compute", op: "verify", takes: ["publicKey", "message", "signature", "zip215"], about: "Check an Ed25519 signature. An order 8 key can pass ZIP 215. Tick strict and watch it fail." },
 ];
 
@@ -127,13 +129,14 @@ const signature = ref(ALICE_HELLO);
 const chainCode = ref(ALICE_JUNCTION);
 const hard = ref(true);
 const from = ref<KeySource>("seed");
+const edSecret = ref<string>(RFC_TEST_1.secret);
 const edKey = ref<string>(RFC_TEST_1.publicKey);
 const edMessage = ref<string>(RFC_TEST_1.message);
 const edSignature = ref<string>(RFC_TEST_1.signature);
 /** Ticked, the call goes out with `zip215: false`. */
 const strict = ref(false);
 /** The Ed25519 fields that are text, by the argument each one fills. */
-const ED_FIELDS = { publicKey: edKey, message: edMessage, signature: edSignature } as const;
+const ED_FIELDS = { secret: edSecret, publicKey: edKey, message: edMessage, signature: edSignature } as const;
 
 const current = computed(() => OPERATIONS.find((row) => row.key === key.value) ?? OPERATIONS[0]!);
 const position = computed(() => OPERATIONS.indexOf(current.value) + 1);
@@ -188,20 +191,22 @@ function schnorrArgs(): Record<string, unknown> {
 }
 
 /**
- * The Ed25519 arguments on screen. The message always goes along, so blank verifies the empty one.
+ * The Ed25519 arguments on screen. The message always goes along, so blank is the empty one.
  *
  * @returns {Record<string, unknown>} The arguments, operation included.
  */
 function edArgs(): Record<string, unknown> {
-  const key = edKey.value.trim();
-  const signature = edSignature.value.trim();
-  return {
-    operation: current.value.op,
-    ...(key === "" ? {} : { publicKey: key }),
-    message: edMessage.value.trim(),
-    ...(signature === "" ? {} : { signature }),
-    ...(strict.value ? { zip215: false } : {}),
-  };
+  const args: Record<string, unknown> = { operation: current.value.op };
+  for (const field of current.value.takes) {
+    if (field === "message") args.message = edMessage.value.trim();
+    else if (field === "zip215") {
+      if (strict.value) args.zip215 = false;
+    } else {
+      const value = ED_FIELDS[field as "secret" | "publicKey" | "signature"].value.trim();
+      if (value !== "") args[field] = value;
+    }
+  }
+  return args;
 }
 
 /**
@@ -335,13 +340,16 @@ function hexRow(label: string, value: string, accent = false): Row {
   return { label, value: shortHex(value), full: value, accent };
 }
 
+/** An sr25519 or Ed25519 answer that carries a key: a key pair, a signature or a child. */
+type KeyDetails = Exclude<Sr25519Details | Ed25519Details, { operation: "verify" }>;
+
 /**
- * Whether the details carry an sr25519 key. Its `verify` has secp256k1's shape and goes with it.
+ * Whether the details carry a key. A `verify` of either tool has the verdict's shape instead.
  *
  * @param {ToolDetails} details - Any tool's details.
- * @returns {boolean} True for an sr25519 key pair, signature or child.
+ * @returns {boolean} True for a key pair, signature or child of sr25519 or Ed25519.
  */
-function isSr25519Key(details: ToolDetails): details is Exclude<Sr25519Details, { operation: "verify" }> {
+function carriesKey(details: ToolDetails): details is KeyDetails {
   return "publicKey" in details;
 }
 
@@ -360,13 +368,12 @@ function verdictView(valid: boolean): { icon: string; heading: string; rows: Row
 }
 
 /**
- * The sr25519 answer as a glyph, a heading and rows.
+ * A key answer of sr25519 or Ed25519 as a glyph, a heading and rows.
  *
- * @param {Sr25519Details} details - What the tool returned.
+ * @param {KeyDetails} details - What the tool returned.
  * @returns {{ icon: string; heading: string; rows: Row[] }} The subject band.
  */
-function srView(details: Sr25519Details): { icon: string; heading: string; rows: Row[] } {
-  if (details.operation === "verify") return verdictView(details.valid);
+function keyView(details: KeyDetails): { icon: string; heading: string; rows: Row[] } {
   if (details.operation === "sign") {
     return {
       icon: "i-lucide-signature",
@@ -376,7 +383,7 @@ function srView(details: Sr25519Details): { icon: string; heading: string; rows:
   }
   const rows = [hexRow("publicKey", details.publicKey, true)];
   if (details.operation === "derive" && details.seed !== undefined) rows.push(hexRow("seed", details.seed));
-  if (details.secret !== undefined) rows.push(hexRow("secret", details.secret));
+  if ("secret" in details && details.secret !== undefined) rows.push(hexRow("secret", details.secret));
   if (details.operation === "derive") rows.push({ label: "child", value: details.hard ? "hard, //" : "soft, /" });
   return { icon: details.operation === "derive" ? "i-lucide-git-branch" : "i-lucide-key-round", heading: shortHex(details.publicKey), rows };
 }
@@ -390,7 +397,7 @@ const view = computed(() => {
   }
   const details = result.details;
   if ("valid" in details) return { ...verdictView(details.valid), label, about: answered.value.about, points: [] };
-  if (isSr25519Key(details)) return { ...srView(details), label, about: answered.value.about, points: [] };
+  if (carriesKey(details)) return { ...keyView(details), label, about: answered.value.about, points: [] };
   const rows: Row[] = [];
   let heading = "";
   let icon = "i-lucide-spline";
@@ -483,18 +490,32 @@ const SCHNORR_SAMPLES = [
   { label: "one bit off", load: () => (schnorrSignature.value = flipBit(schnorrSignature.value)) },
 ] as const;
 
-/** Ed25519 samples: RFC 8032's empty message, a key of order 8, and either one bit off. */
+/**
+ * Loads one RFC 8032 test into every Ed25519 field.
+ *
+ * @param test - The test.
+ */
+function loadEd(test: typeof RFC_TEST_1 | typeof RFC_TEST_2) {
+  edSecret.value = test.secret;
+  edKey.value = test.publicKey;
+  edMessage.value = test.message;
+  edSignature.value = test.signature;
+}
+
+/** Ed25519 samples: two RFC 8032 tests everywhere, an order 8 key and one bit off on verify. */
 const ED_SAMPLES = [
-  {
-    label: "RFC 8032 test 1",
-    load: () => ((edKey.value = RFC_TEST_1.publicKey), (edMessage.value = RFC_TEST_1.message), (edSignature.value = RFC_TEST_1.signature)),
-  },
+  { label: "RFC 8032 test 1", verify: false, load: () => loadEd(RFC_TEST_1) },
+  { label: "RFC 8032 test 2", verify: false, load: () => loadEd(RFC_TEST_2) },
   {
     label: "order 8 key",
+    verify: true,
     load: () => ((edKey.value = ORDER_EIGHT.publicKey), (edMessage.value = ORDER_EIGHT.message), (edSignature.value = ORDER_EIGHT.signature)),
   },
-  { label: "one bit off", load: () => (edSignature.value = flipBit(edSignature.value)) },
+  { label: "one bit off", verify: true, load: () => (edSignature.value = flipBit(edSignature.value)) },
 ] as const;
+
+/** The Ed25519 chips on screen. The verify ones wait for a signature to break. */
+const edSamples = computed(() => ED_SAMPLES.filter((sample) => !sample.verify || current.value.op === "verify"));
 
 /** sr25519 samples: the dev seed with `//Alice`, and her signature one bit off. */
 const SR_SAMPLES = [
@@ -756,19 +777,23 @@ const shareLink = computed(() => {
               </div>
             </dl>
             <dl v-else-if="edwards" class="console-readout-rows">
-              <div>
+              <div v-if="current.takes.includes('secret')">
+                <dt><label for="playground-ed-secret">secret</label></dt>
+                <dd><UInput id="playground-ed-secret" v-model="edSecret" variant="none" placeholder="secret, 64 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('publicKey')">
                 <dt><label for="playground-ed-key">publicKey</label></dt>
                 <dd><UInput id="playground-ed-key" v-model="edKey" variant="none" placeholder="public key, 64 hex digits" class="w-full" spellcheck="false" /></dd>
               </div>
-              <div>
+              <div v-if="current.takes.includes('message')">
                 <dt><label for="playground-ed-message">message</label></dt>
                 <dd><UInput id="playground-ed-message" v-model="edMessage" variant="none" placeholder="hex, empty is fine" class="w-full" spellcheck="false" /></dd>
               </div>
-              <div>
+              <div v-if="current.takes.includes('signature')">
                 <dt><label for="playground-ed-signature">signature</label></dt>
                 <dd><UInput id="playground-ed-signature" v-model="edSignature" variant="none" placeholder="R then S, 128 hex digits" class="w-full" spellcheck="false" /></dd>
               </div>
-              <div>
+              <div v-if="current.takes.includes('zip215')">
                 <dt><label for="playground-strict">rules</label></dt>
                 <dd><UCheckbox id="playground-strict" v-model="strict" label="strict rules, zip215 false" /></dd>
               </div>
@@ -840,7 +865,7 @@ const shareLink = computed(() => {
             <UButton v-for="sample in SCHNORR_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
           <div v-else-if="edwards" class="playground-chips" role="group" aria-label="Ed25519 test vectors">
-            <UButton v-for="sample in ED_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
+            <UButton v-for="sample in edSamples" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
           <div v-else class="playground-chips" role="group" aria-label="Sample keys">
             <UButton v-for="sample in SR_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
@@ -852,7 +877,7 @@ const shareLink = computed(() => {
               can sign as Alice. Your own secret would land in the address bar, so maybe don't.</template
             >
             <template v-else-if="edwards"
-              >Keys, messages and signatures are hex without 0x. Empty messages are fine. The samples are public, and every field lands in the address bar.</template
+              >Keys, messages and signatures are hex without 0x. Empty messages are fine. The RFC secrets are public on purpose. Yours would land in the address bar, so maybe don't.</template
             >
             <template v-else-if="schnorr"
               >Keys and signatures are hex without 0x. The key is just the x coordinate, with even y
