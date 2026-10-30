@@ -30,6 +30,7 @@ import {
 import * as bip340 from "./core/bip340.ts";
 import { hexToBytes } from "./core/bytes.ts";
 import * as ed25519 from "./core/ed25519.ts";
+import * as p256 from "./core/p256.ts";
 import * as secp256k1 from "./core/secp256k1.ts";
 import * as sr25519 from "./core/sr25519.ts";
 import {
@@ -43,11 +44,13 @@ import {
   MAX_CONTEXT_LENGTH,
   MAX_MESSAGE_LENGTH,
   MESSAGE_ENCODINGS,
+  P256_OPERATIONS,
   SECP256K1_OPERATIONS,
   SR25519_OPERATIONS,
   type Bip340Operation,
   type CurveOperation,
   type Ed25519Operation,
+  type P256Operation,
   type Secp256k1Operation,
   type Sr25519Operation,
 } from "./tool-contract.ts";
@@ -83,6 +86,13 @@ export type Secp256k1Details =
   | { operation: "lift"; even: string; odd: string }
   | { operation: "check"; onCurve: boolean }
   | { operation: "sign"; signature: string; recovery: number; publicKey: string }
+  | { operation: "verify"; valid: boolean };
+
+/** What the P-256 tool computes, by operation. */
+export type P256Details =
+  | { operation: Exclude<P256Operation, "lift" | "check" | "verify">; point: string }
+  | { operation: "lift"; even: string; odd: string }
+  | { operation: "check"; onCurve: boolean }
   | { operation: "verify"; valid: boolean };
 
 /** What the BIP340 tool computes, by operation. */
@@ -416,46 +426,31 @@ const SECP256K1_ARGUMENTS: Readonly<Record<Secp256k1Operation, readonly string[]
   recover: ["digest", "signature", "recovery", "compressed"],
 };
 
-/** Every optional argument of the secp256k1 tool. */
-const SECP256K1_OPTIONAL = [...new Set(Object.values(SECP256K1_ARGUMENTS).flat())];
+/** P-256 takes what secp256k1 takes for each operation the two share. */
+const P256_ARGUMENTS: Readonly<Record<P256Operation, readonly string[]>> = {
+  add: SECP256K1_ARGUMENTS.add,
+  subtract: SECP256K1_ARGUMENTS.subtract,
+  negate: SECP256K1_ARGUMENTS.negate,
+  multiply: SECP256K1_ARGUMENTS.multiply,
+  lift: SECP256K1_ARGUMENTS.lift,
+  check: SECP256K1_ARGUMENTS.check,
+  verify: SECP256K1_ARGUMENTS.verify,
+};
 
-/**
- * Tell whether an argument is a SEC1 point of secp256k1, false for anything that isn't SEC1 hex.
- * @param value - Raw argument
- * @returns {boolean} Whether the point decodes
- */
-function isSec1Point(value: unknown): boolean {
-  try {
-    return typeof value === "string" && secp256k1.isOnCurve(value);
-  } catch {
-    return false;
-  }
+/** What the point and verify operations call, the same for every SEC 1 curve module. */
+interface Sec1Module {
+  readonly INVALID_POINT: string;
+  readonly addPoints: typeof secp256k1.addPoints;
+  readonly subtractPoints: typeof secp256k1.subtractPoints;
+  readonly negatePoint: typeof secp256k1.negatePoint;
+  readonly multiplyPoint: typeof secp256k1.multiplyPoint;
+  readonly liftX: typeof secp256k1.liftX;
+  readonly isOnCurve: typeof secp256k1.isOnCurve;
+  readonly verify: typeof secp256k1.verify;
 }
 
-/**
- * Run a secp256k1 operation and turn its invalid point refusal into one that names the argument.
- * @param args - Tool arguments
- * @param names - The point arguments the operation reads
- * @param run - The operation
- * @returns {Value} What the operation returns
- */
-function namingPoints<Value>(
-  args: Readonly<Record<string, unknown>>,
-  names: readonly string[],
-  run: () => Value,
-): Value {
-  try {
-    return run();
-  } catch (error) {
-    if (!(error instanceof Error) || error.message !== secp256k1.INVALID_POINT) throw error;
-    const name = names.find((candidate) => !isSec1Point(args[candidate]));
-    if (name === undefined) throw error;
-    throw new RangeError(`${name} is not a SEC1 point of secp256k1`, { cause: error });
-  }
-}
-
-/** The secp256k1 tool's arguments, read for one operation. */
-interface Secp256k1Input {
+/** A SEC 1 curve tool's arguments, read for one operation. */
+interface Sec1Input {
   readonly args: Readonly<Record<string, unknown>>;
   readonly text: (name: string) => string;
   readonly encoding: { readonly compressed: boolean };
@@ -482,50 +477,86 @@ function recoveryId(value: unknown): number {
   return value;
 }
 
-/** How each operation turns the arguments into its result. */
+/**
+ * The point and verify operations of one curve, with refusals that name the bad argument.
+ * @param curve - The curve's module
+ * @param name - What the refusals call the curve
+ * @returns {Record<P256Operation, (input: Sec1Input) => P256Details>} How each operation runs
+ */
+function sec1Computations(
+  curve: Sec1Module,
+  name: string,
+): Readonly<Record<P256Operation, (input: Sec1Input) => P256Details>> {
+  const isPoint = (value: unknown): boolean => {
+    try {
+      return typeof value === "string" && curve.isOnCurve(value);
+    } catch {
+      return false;
+    }
+  };
+  const naming = <Value>(
+    { args }: Sec1Input,
+    names: readonly string[],
+    run: () => Value,
+  ): Value => {
+    try {
+      return run();
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== curve.INVALID_POINT) throw error;
+      const refused = names.find((candidate) => !isPoint(args[candidate]));
+      if (refused === undefined) throw error;
+      throw new RangeError(`${refused} is not a SEC1 point of ${name}`, { cause: error });
+    }
+  };
+  return {
+    add: (input) => ({
+      operation: "add",
+      point: naming(input, ["point", "other"], () =>
+        curve.addPoints(input.text("point"), input.text("other"), input.encoding),
+      ),
+    }),
+    subtract: (input) => ({
+      operation: "subtract",
+      point: naming(input, ["point", "other"], () =>
+        curve.subtractPoints(input.text("point"), input.text("other"), input.encoding),
+      ),
+    }),
+    negate: (input) => ({
+      operation: "negate",
+      point: naming(input, ["point"], () => curve.negatePoint(input.text("point"), input.encoding)),
+    }),
+    multiply: (input) => ({
+      operation: "multiply",
+      point: naming(input, ["point"], () =>
+        curve.multiplyPoint(input.text("point"), input.text("scalar"), input.encoding),
+      ),
+    }),
+    lift: ({ text, encoding }) => ({ operation: "lift", ...curve.liftX(text("x"), encoding) }),
+    check: ({ text }) => ({ operation: "check", onCurve: curve.isOnCurve(text("point")) }),
+    verify: (input) => ({
+      operation: "verify",
+      valid: naming(input, ["point"], () =>
+        curve.verify(input.text("signature"), {
+          digest: input.text("digest"),
+          publicKey: input.text("point"),
+          lowS: lowS(input.args["lowS"]),
+        }),
+      ),
+    }),
+  };
+}
+
+/** How each secp256k1 operation turns the arguments into its result. */
 const SECP256K1_COMPUTATIONS: Readonly<
-  Record<Secp256k1Operation, (input: Secp256k1Input) => Secp256k1Details>
+  Record<Secp256k1Operation, (input: Sec1Input) => Secp256k1Details>
 > = {
-  add: ({ args, text, encoding }) => ({
-    operation: "add",
-    point: namingPoints(args, ["point", "other"], () =>
-      secp256k1.addPoints(text("point"), text("other"), encoding),
-    ),
-  }),
-  subtract: ({ args, text, encoding }) => ({
-    operation: "subtract",
-    point: namingPoints(args, ["point", "other"], () =>
-      secp256k1.subtractPoints(text("point"), text("other"), encoding),
-    ),
-  }),
-  negate: ({ args, text, encoding }) => ({
-    operation: "negate",
-    point: namingPoints(args, ["point"], () => secp256k1.negatePoint(text("point"), encoding)),
-  }),
-  multiply: ({ args, text, encoding }) => ({
-    operation: "multiply",
-    point: namingPoints(args, ["point"], () =>
-      secp256k1.multiplyPoint(text("point"), text("scalar"), encoding),
-    ),
-  }),
-  lift: ({ text, encoding }) => ({ operation: "lift", ...secp256k1.liftX(text("x"), encoding) }),
-  check: ({ text }) => ({ operation: "check", onCurve: secp256k1.isOnCurve(text("point")) }),
+  ...sec1Computations(secp256k1, "secp256k1"),
   sign: ({ text, encoding }) => {
     const secret = text("secret");
     const { signature, recovery } = secp256k1.sign(secret, { digest: text("digest") });
     const publicKey = secp256k1.multiplyGenerator(secret, encoding);
     return { operation: "sign", signature, recovery, publicKey };
   },
-  verify: ({ args, text }) => ({
-    operation: "verify",
-    valid: namingPoints(args, ["point"], () =>
-      secp256k1.verify(text("signature"), {
-        digest: text("digest"),
-        publicKey: text("point"),
-        lowS: lowS(args["lowS"]),
-      }),
-    ),
-  }),
   recover: ({ args, text, encoding }) => ({
     operation: "recover",
     point: secp256k1.recoverPublicKey(text("signature"), {
@@ -536,6 +567,38 @@ const SECP256K1_COMPUTATIONS: Readonly<
   }),
 };
 
+/** How each P-256 operation turns the arguments into its result. */
+const P256_COMPUTATIONS = sec1Computations(p256, "P-256");
+
+/** One SEC 1 curve tool: its operations, the arguments each takes and how each runs. */
+interface Sec1Tool<Operation extends string, Details> {
+  readonly operations: readonly Operation[];
+  readonly arguments: Readonly<Record<Operation, readonly string[]>>;
+  readonly computations: Readonly<Record<Operation, (input: Sec1Input) => Details>>;
+}
+
+/**
+ * Run one operation of a SEC 1 curve tool.
+ * @param args - Tool arguments, the operation and the ones it takes
+ * @param tool - The curve's operations
+ * @returns {ToolResult<Details>} What the operation gives
+ */
+function computeSec1<Operation extends string, Details>(
+  args: Readonly<Record<string, unknown>>,
+  tool: Sec1Tool<Operation, Details>,
+): ToolResult<Details> {
+  const operation = oneOf(args["operation"], "operation", tool.operations);
+  const optional = [...new Set(Object.values<readonly string[]>(tool.arguments).flat())];
+  refuseForeign(args, operation, optional, tool.arguments[operation]);
+  const text = (name: string): string => {
+    if (isUnset(args[name])) throw new TypeError(`${operation} needs ${name}`);
+    return requiredString(args[name], name);
+  };
+  const compressed = args["compressed"] ?? true;
+  if (typeof compressed !== "boolean") throw new TypeError("Compressed must be a boolean");
+  return result(tool.computations[operation]({ args, text, encoding: { compressed } }));
+}
+
 /**
  * Do math on public secp256k1 points, or sign a digest with ECDSA, verify a signature and recover
  * its key.
@@ -545,15 +608,24 @@ const SECP256K1_COMPUTATIONS: Readonly<
 export function computeSecp256k1(
   args: Readonly<Record<string, unknown>>,
 ): ToolResult<Secp256k1Details> {
-  const operation = oneOf(args["operation"], "operation", SECP256K1_OPERATIONS);
-  refuseForeign(args, operation, SECP256K1_OPTIONAL, SECP256K1_ARGUMENTS[operation]);
-  const text = (name: string): string => {
-    if (isUnset(args[name])) throw new TypeError(`${operation} needs ${name}`);
-    return requiredString(args[name], name);
-  };
-  const compressed = args["compressed"] ?? true;
-  if (typeof compressed !== "boolean") throw new TypeError("Compressed must be a boolean");
-  return result(SECP256K1_COMPUTATIONS[operation]({ args, text, encoding: { compressed } }));
+  return computeSec1(args, {
+    operations: SECP256K1_OPERATIONS,
+    arguments: SECP256K1_ARGUMENTS,
+    computations: SECP256K1_COMPUTATIONS,
+  });
+}
+
+/**
+ * Do math on public P-256 points, or verify an ECDSA signature over a digest.
+ * @param args - Tool arguments, the operation and the ones it takes
+ * @returns {ToolResult<P256Details>} A point, the lifted pair or the verdict
+ */
+export function computeP256(args: Readonly<Record<string, unknown>>): ToolResult<P256Details> {
+  return computeSec1(args, {
+    operations: P256_OPERATIONS,
+    arguments: P256_ARGUMENTS,
+    computations: P256_COMPUTATIONS,
+  });
 }
 
 /** The arguments each BIP340 operation takes. */

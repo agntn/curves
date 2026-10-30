@@ -7,6 +7,7 @@ import type { CallToolResult } from "../docs/node_modules/@modelcontextprotocol/
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createMcpServer, toolListings } from "../src/mcp.ts";
 import { speccheck } from "./fixtures/ed25519.ts";
+import { p256Vectors } from "./fixtures/p256.ts";
 import { devAccounts } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
@@ -106,6 +107,12 @@ const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
   ],
   ["curves_bip340_compute", { operation: "keypair", secret: seed }],
   ["curves_bip340_compute", { operation: "sign", secret: seed, message: "", random: seed }],
+  ["curves_p256_compute", { operation: "lift", x: p256Vectors.g.slice(2) }],
+  ["curves_p256_compute", { operation: "subtract", point: p256Vectors.g, other: p256Vectors.g }],
+  [
+    "curves_p256_compute",
+    { operation: "verify", point: p256Vectors.g, digest: "01", signature: SIGNATURE },
+  ],
   ["curves_sr25519_compute", { operation: "keypair", seed }],
   ["curves_sr25519_compute", { operation: "derive", publicKey: seed, chainCode: seed, hard: true }],
   ["curves_ed25519_compute", { operation: "sign", secret: seed, message: "" }],

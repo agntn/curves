@@ -1,21 +1,33 @@
 /**
  * secp256k1 from SEC 2 v2, section 2.4.1: y^2 = x^3 + 7 over the prime field of p, cofactor 1.
- * Points travel as SEC1 hex (SEC 1 v2, sections 2.3.3 and 2.3.4) and add in projective
- * coordinates with complete formulas, so no sum needs a branch of its own. ECDSA signing,
- * verification and public key recovery follow SEC 1 v2, sections 4.1.3, 4.1.4 and 4.1.6, and the
- * signing nonce comes from RFC 6979. A multiply runs the same additions and doublings for every
- * scalar, and no digit stands for zero. Only verification, whose scalars are public, reads G from
- * a faster table whose time follows the digits. The bigint arithmetic underneath is the
- * JavaScript engine's, and it promises nothing about time.
+ * The points, the scalars and ECDSA run on the SEC 1 code in `sec1.ts`, with the a = 0 formulas.
  * The messages are the ones @agntn/keys threw: keys re-exports these functions, and its tests
  * read the words.
  */
 
-import { readHex, requireOptions } from "./arguments.ts";
 import type { AffinePoint } from "./arithmetic.ts";
-import { digitsOf } from "./digits.ts";
-import { invert, mod, power } from "./field.ts";
-import { nonces } from "./rfc6979.ts";
+import * as sec1 from "./sec1.ts";
+import {
+  zeroAFormulas,
+  sec1Curve,
+  type LiftedPoints,
+  type PointEncodingOptions,
+  type RecoverOptions,
+  type Scalar,
+  type Signature,
+  type SignOptions,
+  type VerifyOptions,
+} from "./sec1.ts";
+
+export type {
+  LiftedPoints,
+  PointEncodingOptions,
+  RecoverOptions,
+  Scalar,
+  Signature,
+  SignOptions,
+  VerifyOptions,
+} from "./sec1.ts";
 
 /** The domain parameters: the curve, its generator and the order of the generator. */
 export const secp256k1 = Object.freeze({
@@ -30,58 +42,10 @@ export const secp256k1 = Object.freeze({
   }),
 });
 
-const { p: P, n: N, b: B, g: G } = secp256k1;
-
-/** p is 3 mod 4, so a square root of a square r is r^((p + 1) / 4). */
-const ROOT_EXPONENT = (P + 1n) / 4n;
-
 /** The one refusal for text that isn't a SEC1 point of the curve. */
 export const INVALID_POINT = "Invalid SEC1 secp256k1 public key";
 
-const INFINITY = "The result is the point at infinity, which is no public key, as with P minus P";
-
-const SEC1 = /^(?:0[23][0-9a-f]{64}|04[0-9a-f]{128})$/iu;
-const SCALAR = /^[0-9a-f]{1,64}$/iu;
-const X_ONLY = /^[0-9a-f]{64}$/iu;
-
-/** A scalar as hex without 0x, up to 64 digits, or as a bigint. */
-export type Scalar = string | bigint;
-
-/** SEC1 output encoding; this does not change the point. */
-export interface PointEncodingOptions {
-  readonly compressed?: boolean;
-}
-
-/** The two points above one x coordinate, as SEC1 hex. */
-export interface LiftedPoints {
-  /** Even y, the point a BIP340 x-only key stands for. */
-  readonly even: string;
-  readonly odd: string;
-}
-
-/** A finite point with both coordinates from 0 to p minus 1. */
-type Affine = AffinePoint;
-
-/** (X, Y, Z) stands for (X / Z, Y / Z); Z = 0 is the point at infinity. */
-interface Projective {
-  readonly x: bigint;
-  readonly y: bigint;
-  readonly z: bigint;
-}
-
-const ZERO: Projective = { x: 0n, y: 1n, z: 0n };
-
-/** 3b, the one curve constant the complete formulas take. */
-const B3 = 3n * B;
-
-/**
- * The right side of the curve equation.
- * @param x - From 0 to p minus 1
- * @returns {bigint} x^3 + 7 mod p
- */
-function rightSide(x: bigint): bigint {
-  return mod(x * x * x + B, P);
-}
+const curve = /* @__PURE__ */ sec1Curve(secp256k1, { name: "secp256k1", formulas: zeroAFormulas });
 
 /**
  * The y with the asked parity above x, if any point has this x.
@@ -90,290 +54,7 @@ function rightSide(x: bigint): bigint {
  * @returns {bigint | undefined} y, or undefined when x^3 + 7 is no square
  */
 export function liftY(x: bigint, odd: boolean): bigint | undefined {
-  const square = rightSide(x);
-  const root = power(square, ROOT_EXPONENT, P);
-  if ((root * root) % P !== square) return undefined;
-  return ((root & 1n) === 1n) === odd ? root : mod(-root, P);
-}
-
-/**
- * Read SEC1 hex into a point of the curve.
- * @param text - Compressed or uncompressed SEC1 hex without 0x
- * @returns {Affine} The point
- * @throws {Error} When the text is not SEC1 hex, a coordinate reaches p, or the point is off the curve
- */
-function decodePoint(text: unknown): Affine {
-  if (typeof text !== "string" || !SEC1.test(text)) throw new Error(INVALID_POINT);
-  const x = BigInt(`0x${text.slice(2, 66)}`);
-  if (x >= P) throw new Error(INVALID_POINT);
-  const prefix = text.slice(0, 2);
-  if (prefix === "04") {
-    const y = BigInt(`0x${text.slice(66)}`);
-    if (y >= P || (y * y) % P !== rightSide(x)) throw new Error(INVALID_POINT);
-    return { x, y };
-  }
-  const y = liftY(x, prefix === "03");
-  if (y === undefined) throw new Error(INVALID_POINT);
-  return { x, y };
-}
-
-/**
- * Write a point as SEC1 hex.
- * @param point - A finite point
- * @param compressed - 33 bytes with the parity of y, or 65 with both coordinates
- * @returns {string} Lowercase SEC1 hex
- */
-function encodeAffine(point: Affine, compressed: boolean): string {
-  const x = point.x.toString(16).padStart(64, "0");
-  if (!compressed) return `04${x}${point.y.toString(16).padStart(64, "0")}`;
-  return `${(point.y & 1n) === 1n ? "03" : "02"}${x}`;
-}
-
-/**
- * Read the output encoding.
- * @param options - The caller's options
- * @returns {boolean} Whether to compress, true by default
- */
-function compression(options: PointEncodingOptions): boolean {
-  const { compressed = true } = options;
-  if (typeof compressed !== "boolean") throw new TypeError("Compressed must be a boolean");
-  return compressed;
-}
-
-function toProjective(point: Affine): Projective {
-  return { x: point.x, y: point.y, z: 1n };
-}
-
-/**
- * Scale a finite point back to x and y.
- * @param point - Any point but infinity
- * @param zInverse - The inverse of its Z mod p
- * @returns {Affine} The point
- */
-function scale(point: Projective, zInverse: bigint): Affine {
-  return { x: (point.x * zInverse) % P, y: (point.y * zInverse) % P };
-}
-
-/**
- * Add with the complete formulas of Renes, Costello and Batina (2016), algorithm 7 for a = 0.
- * Every pair takes the same path, infinity and a point plus itself included.
- * @param left - Any point
- * @param right - Any point
- * @returns {Projective} The sum
- */
-function add(left: Projective, right: Projective): Projective {
-  const xx = (left.x * right.x) % P;
-  const yy = (left.y * right.y) % P;
-  const zz = (left.z * right.z) % P;
-  const xy = mod((left.x + left.y) * (right.x + right.y) - xx - yy, P);
-  const yz = mod((left.y + left.z) * (right.y + right.z) - yy - zz, P);
-  const bxz = (B3 * mod((left.x + left.z) * (right.x + right.z) - xx - zz, P)) % P;
-  const bzz = (B3 * zz) % P;
-  const plus = (yy + bzz) % P;
-  const minus = mod(yy - bzz, P);
-  const triple = (3n * xx) % P;
-  return {
-    x: mod(xy * minus - yz * bxz, P),
-    y: (bxz * triple + minus * plus) % P,
-    z: (plus * yz + triple * xy) % P,
-  };
-}
-
-/**
- * Double a point, algorithm 9 of the same paper. Infinity doubles to itself.
- * @param point - Any point
- * @returns {Projective} Twice the point
- */
-function double(point: Projective): Projective {
-  const { x, y, z } = point;
-  const yy = (y * y) % P;
-  const yy8 = (8n * yy) % P;
-  const bzz = (B3 * ((z * z) % P)) % P;
-  const rest = mod(yy - 3n * bzz, P);
-  return {
-    x: (2n * rest * ((x * y) % P)) % P,
-    y: (rest * (yy + bzz) + bzz * yy8) % P,
-    z: (((y * z) % P) * yy8) % P,
-  };
-}
-
-function negate(point: Projective): Projective {
-  return { x: point.x, y: mod(-point.y, P), z: point.z };
-}
-
-/**
- * Multiply by 16 with four doublings.
- * @param point - Any point
- * @returns {Projective} 16 times the point
- */
-function timesSixteen(point: Projective): Projective {
-  return double(double(double(double(point))));
-}
-
-/**
- * The table a digit picks from.
- * @param point - Any point
- * @returns {Projective[]} 1 to 16 times the point, so digit d picks entry d
- */
-function multiplesOf(point: Projective): Projective[] {
-  const multiples = [point];
-  let multiple = point;
-  for (let count = 2; count <= 16; count++) {
-    multiple = add(multiple, point);
-    multiples.push(multiple);
-  }
-  return multiples;
-}
-
-/**
- * Multiply digit by digit from the top, four doublings and one table addition each.
- * @param point - Any point
- * @param scalar - Zero or more
- * @returns {Projective} The product
- */
-function multiply(point: Projective, scalar: bigint): Projective {
-  const multiples = multiplesOf(point);
-  return digitsOf(scalar, N)
-    .toReversed()
-    .reduce((result, digit) => add(timesSixteen(result), multiples[digit] ?? ZERO), ZERO);
-}
-
-/**
- * Bring many finite points to Z = 1 with one inversion, Montgomery's trick. Public points only.
- * @param points - Finite points
- * @returns {Projective[]} The same points, in order
- */
-function normalizeAll(points: readonly Projective[]): Projective[] {
-  let product = 1n;
-  const steps = points.map((point) => {
-    const before = product;
-    product = (product * point.z) % P;
-    return { point, before };
-  });
-  let inverse = invert(product, P);
-  return steps
-    .toReversed()
-    .map(({ point, before }) => {
-      const zInverse = (inverse * before) % P;
-      inverse = (inverse * point.z) % P;
-      return { ...scale(point, zInverse), z: 1n };
-    })
-    .toReversed();
-}
-
-/** Comb rows. More rows skip doublings, but then a repeated secret runs faster. */
-const ROWS = 4;
-
-/** How far apart the digits one step of the comb picks are. */
-const SPACING = 64 / ROWS;
-
-/** Row r holds 1 to 16 times 16^(16r) times G. */
-let combTable: readonly (readonly Projective[])[] | undefined;
-
-/**
- * Build the comb's rows, 64 points in all.
- * @returns {Projective[][]} The rows, lowest first
- */
-function buildCombTable(): Projective[][] {
-  let base = toProjective(G);
-  const points = Array.from({ length: ROWS }, () => {
-    const row = multiplesOf(base);
-    for (let step = 0; step < SPACING; step++) base = timesSixteen(base);
-    return row;
-  }).flat();
-  const normal = normalizeAll(points);
-  return Array.from({ length: ROWS }, (_, row) => normal.slice(row * 16, row * 16 + 16));
-}
-
-/**
- * Multiply G by a secret with a comb of 16 steps, building its table on the first call.
- * @param scalar - Zero or more
- * @returns {Projective} The product
- */
-function multiplyBase(scalar: bigint): Projective {
-  combTable ??= buildCombTable();
-  const table = combTable;
-  const digits = digitsOf(scalar, N);
-  let result = ZERO;
-  for (let step = SPACING - 1; step >= 0; step--) {
-    result = timesSixteen(result);
-    for (const [row, multiples] of table.entries()) {
-      result = add(result, multiples[digits[row * SPACING + step] ?? 0] ?? ZERO);
-    }
-  }
-  return result;
-}
-
-/** Entry j of row i is (j + 1) times 16^(63 - i) times G, so hex digit i picks entry digit - 1. */
-let publicTable: readonly (readonly Projective[])[] | undefined;
-
-function buildPublicTable(): readonly (readonly Projective[])[] {
-  const points: Projective[] = [];
-  let base = toProjective(G);
-  for (let row = 0; row < 64; row++) {
-    let multiple = base;
-    for (let digit = 1; digit < 16; digit++) {
-      points.push(multiple);
-      multiple = add(multiple, base);
-    }
-    base = multiple;
-  }
-  const normal = normalizeAll(points);
-  return Array.from({ length: 64 }, (_, row) => normal.slice(row * 15, row * 15 + 15)).toReversed();
-}
-
-/**
- * Multiply G by a public scalar, one table addition per nonzero hex digit and no doubling.
- * Its time follows the digits, so it never sees a secret.
- * @param scalar - Zero to n minus 1
- * @returns {Projective} The product
- */
-function multiplyBasePublic(scalar: bigint): Projective {
-  publicTable ??= buildPublicTable();
-  const digits = scalar.toString(16).padStart(64, "0");
-  let result = ZERO;
-  for (const [row, multiples] of publicTable.entries()) {
-    const point = multiples[Number.parseInt(digits.charAt(row), 16) - 1];
-    if (point !== undefined) result = add(result, point);
-  }
-  return result;
-}
-
-/**
- * Encode a result, refusing the point at infinity, which SEC1 public keys have no form for.
- * Z^(p - 2) inverts Z, since Euclid's step count leaks it.
- * @param point - Any point
- * @param options - Output encoding
- * @returns {string} SEC1 hex
- */
-function encodePoint(point: Projective, options: PointEncodingOptions): string {
-  const compressed = compression(options);
-  if (point.z === 0n) throw new RangeError(INFINITY);
-  return encodeAffine(scale(point, power(point.z, P - 2n, P)), compressed);
-}
-
-/**
- * Read a scalar and check it against the range the operation allows.
- * @param value - Hex without 0x, up to 64 digits, or a bigint
- * @param name - What the error calls the value
- * @param minimum - 0 for scalar arithmetic, 1 where zero would give the point at infinity
- * @returns {bigint} The scalar
- * @throws {RangeError} When the value is not hex or a bigint, or falls outside minimum to n minus 1
- */
-function decodeScalar(value: unknown, name: string, minimum: 0n | 1n): bigint {
-  let scalar: bigint | undefined;
-  if (typeof value === "bigint") scalar = value;
-  else if (typeof value === "string" && SCALAR.test(value)) scalar = BigInt(`0x${value}`);
-  if (scalar === undefined || scalar < minimum || scalar >= N) {
-    throw new RangeError(
-      `${name} must be hex without 0x or a bigint, from ${minimum} to the curve order minus 1`,
-    );
-  }
-  return scalar;
-}
-
-function encodeScalar(scalar: bigint): string {
-  return scalar.toString(16).padStart(64, "0");
+  return sec1.liftY(curve, x, odd);
 }
 
 /**
@@ -385,7 +66,7 @@ function encodeScalar(scalar: bigint): string {
  * @throws {RangeError} When b is the negation of a, since the sum is the point at infinity
  */
 export function addPoints(a: string, b: string, options: PointEncodingOptions = {}): string {
-  return encodePoint(add(toProjective(decodePoint(a)), toProjective(decodePoint(b))), options);
+  return sec1.addPoints(curve, a, b, options);
 }
 
 /**
@@ -397,10 +78,7 @@ export function addPoints(a: string, b: string, options: PointEncodingOptions = 
  * @throws {RangeError} When a equals b, since the difference is the point at infinity
  */
 export function subtractPoints(a: string, b: string, options: PointEncodingOptions = {}): string {
-  return encodePoint(
-    add(toProjective(decodePoint(a)), negate(toProjective(decodePoint(b)))),
-    options,
-  );
+  return sec1.subtractPoints(curve, a, b, options);
 }
 
 /**
@@ -410,7 +88,7 @@ export function subtractPoints(a: string, b: string, options: PointEncodingOptio
  * @returns {string} The negated point as SEC1 hex
  */
 export function negatePoint(point: string, options: PointEncodingOptions = {}): string {
-  return encodePoint(negate(toProjective(decodePoint(point))), options);
+  return sec1.negatePoint(curve, point, options);
 }
 
 /**
@@ -425,8 +103,7 @@ export function multiplyPoint(
   scalar: Scalar,
   options: PointEncodingOptions = {},
 ): string {
-  const decoded = decodePoint(point);
-  return encodePoint(multiply(toProjective(decoded), decodeScalar(scalar, "Scalar", 1n)), options);
+  return sec1.multiplyPoint(curve, point, scalar, options);
 }
 
 /**
@@ -436,17 +113,16 @@ export function multiplyPoint(
  * @returns {string} The product as SEC1 hex
  */
 export function multiplyGenerator(scalar: Scalar, options: PointEncodingOptions = {}): string {
-  return encodePoint(multiplyBase(decodeScalar(scalar, "Scalar", 1n)), options);
+  return sec1.multiplyGenerator(curve, scalar, options);
 }
 
 /**
  * Secret times G as x and y, through the same comb and Z^(p - 2) as {@link multiplyGenerator}.
  * @param secret - From 1 to n minus 1
- * @returns {Affine} The point
+ * @returns {AffinePoint} The point
  */
-export function publicPoint(secret: bigint): Affine {
-  const point = multiplyBase(secret);
-  return scale(point, power(point.z, P - 2n, P));
+export function publicPoint(secret: bigint): AffinePoint {
+  return sec1.publicPoint(curve, secret);
 }
 
 /**
@@ -456,7 +132,7 @@ export function publicPoint(secret: bigint): Affine {
  * @returns {string} The sum as 64 hex digits
  */
 export function addScalars(a: Scalar, b: Scalar): string {
-  return encodeScalar(mod(decodeScalar(a, "Scalar a", 0n) + decodeScalar(b, "Scalar b", 0n), N));
+  return sec1.addScalars(curve, [a, b]);
 }
 
 /**
@@ -466,7 +142,7 @@ export function addScalars(a: Scalar, b: Scalar): string {
  * @returns {string} The difference as 64 hex digits
  */
 export function subtractScalars(a: Scalar, b: Scalar): string {
-  return encodeScalar(mod(decodeScalar(a, "Scalar a", 0n) - decodeScalar(b, "Scalar b", 0n), N));
+  return sec1.subtractScalars(curve, [a, b]);
 }
 
 /**
@@ -476,7 +152,7 @@ export function subtractScalars(a: Scalar, b: Scalar): string {
  * @returns {string} The product as 64 hex digits
  */
 export function multiplyScalars(a: Scalar, b: Scalar): string {
-  return encodeScalar(mod(decodeScalar(a, "Scalar a", 0n) * decodeScalar(b, "Scalar b", 0n), N));
+  return sec1.multiplyScalars(curve, [a, b]);
 }
 
 /**
@@ -485,7 +161,7 @@ export function multiplyScalars(a: Scalar, b: Scalar): string {
  * @returns {string} The inverse as 64 hex digits
  */
 export function invertScalar(scalar: Scalar): string {
-  return encodeScalar(invert(decodeScalar(scalar, "Scalar", 1n), N));
+  return sec1.invertScalar(curve, scalar);
 }
 
 /**
@@ -496,17 +172,7 @@ export function invertScalar(scalar: Scalar): string {
  * @throws {RangeError} When x is not 64 hex digits, or no point of the curve has it
  */
 export function liftX(x: string, options: PointEncodingOptions = {}): LiftedPoints {
-  if (typeof x !== "string" || !X_ONLY.test(x)) {
-    throw new RangeError("x must be 64 hex digits without 0x");
-  }
-  const compressed = compression(options);
-  const value = BigInt(`0x${x}`);
-  const y = value < P ? liftY(value, false) : undefined;
-  if (y === undefined) throw new RangeError("No point of secp256k1 has this x");
-  return {
-    even: encodeAffine({ x: value, y }, compressed),
-    odd: encodeAffine({ x: value, y: mod(-y, P) }, compressed),
-  };
+  return sec1.liftX(curve, x, options);
 }
 
 /**
@@ -516,13 +182,7 @@ export function liftX(x: string, options: PointEncodingOptions = {}): LiftedPoin
  * @throws {Error} When the value is not SEC1 hex at all, since there is no point to check
  */
 export function isOnCurve(point: string): boolean {
-  if (typeof point !== "string" || !SEC1.test(point)) throw new Error(INVALID_POINT);
-  try {
-    decodePoint(point);
-    return true;
-  } catch {
-    return false;
-  }
+  return sec1.isOnCurve(curve, point);
 }
 
 /**
@@ -533,83 +193,7 @@ export function isOnCurve(point: string): boolean {
  * @throws {Error} When the value is not a SEC1 point of the curve
  */
 export function convertPoint(point: string, options: PointEncodingOptions = {}): string {
-  const compressed = compression(options);
-  return encodeAffine(decodePoint(point), compressed);
-}
-
-/** The largest s a low-S signature may carry, as BIP 62 and BIP 146 count it. */
-const HALF_N = N >> 1n;
-
-const SIGNATURE = /^[0-9a-f]{128}$/iu;
-const DIGEST = /^(?:[0-9a-f]{2}){1,64}$/iu;
-const DIGEST_REFUSAL = "Digest must be hex without 0x, 1 to 64 bytes";
-
-/** What {@link sign} signs. */
-export interface SignOptions {
-  /** The message digest as hex, 1 to 64 bytes, read as {@link verify} reads it. */
-  readonly digest: string;
-}
-
-/** An ECDSA signature and the recovery id that brings its key back. */
-export interface Signature {
-  /** 128 hex digits, r then s, with s at most n / 2. */
-  readonly signature: string;
-  /** From 0 to 3, the id {@link recoverPublicKey} takes. */
-  readonly recovery: number;
-}
-
-/** What {@link verify} checks a signature against. */
-export interface VerifyOptions {
-  /** The message digest as hex, 1 to 64 bytes. Past 32 bytes only the leftmost 256 bits count. */
-  readonly digest: string;
-  /** The signer's key, compressed or uncompressed SEC1 hex. */
-  readonly publicKey: string;
-  /** Refuse s above n / 2, as BIP 62 and BIP 146 do. Default: false, SEC 1 takes either. */
-  readonly lowS?: boolean;
-}
-
-/** What {@link recoverPublicKey} needs besides the signature, and how to write the key. */
-export interface RecoverOptions extends PointEncodingOptions {
-  /** The message digest as hex, 1 to 64 bytes, read as {@link verify} reads it. */
-  readonly digest: string;
-  /** 0 to 3: bit 0 is the parity of y of R, bit 1 says the x of R is r + n. */
-  readonly recovery: number;
-}
-
-/** r and s as the signature carries them, before any range check. */
-interface SignatureParts {
-  readonly r: bigint;
-  readonly s: bigint;
-}
-
-/**
- * Read a compact signature: r, then s, 32 bytes each, big-endian.
- * @param value - The caller's value
- * @returns {SignatureParts} r and s, not yet checked against n
- * @throws {RangeError} When the value is no 128 hex digits
- */
-function readSignature(value: unknown): SignatureParts {
-  if (typeof value !== "string" || !SIGNATURE.test(value)) {
-    throw new RangeError("Signature must be 128 hex digits without 0x, r then s");
-  }
-  return { r: BigInt(`0x${value.slice(0, 64)}`), s: BigInt(`0x${value.slice(64)}`) };
-}
-
-/**
- * Turn a digest into e as SEC 1 v2 section 4.1.4 step 3 does: its leftmost 256 bits, n's length.
- * @param value - Hex without 0x, 1 to 64 bytes
- * @returns {bigint} e, not reduced mod n
- * @throws {RangeError} When the value is no hex of whole bytes, or longer than 64
- */
-function readDigest(value: unknown): bigint {
-  if (typeof value !== "string" || !DIGEST.test(value)) throw new RangeError(DIGEST_REFUSAL);
-  const extra = value.length * 4 - 256;
-  const e = BigInt(`0x${value}`);
-  return extra > 0 ? e >> BigInt(extra) : e;
-}
-
-function isScalar(value: bigint): boolean {
-  return value > 0n && value < N;
+  return sec1.convertPoint(curve, point, options);
 }
 
 /**
@@ -618,27 +202,10 @@ function isScalar(value: bigint): boolean {
  * @param a - Zero to n minus 1, never a secret
  * @param b - Zero to n minus 1
  * @param point - A finite point
- * @returns {Affine | undefined} The sum, undefined for the point at infinity
+ * @returns {AffinePoint | undefined} The sum, undefined for the point at infinity
  */
-export function combine(a: bigint, b: bigint, point: Affine): Affine | undefined {
-  const sum = add(multiplyBasePublic(a), multiply(toProjective(point), b));
-  return sum.z === 0n ? undefined : scale(sum, invert(sum.z, P));
-}
-
-/**
- * Keep s at most n / 2. n - s signs with -k, whose R has the other y, so the parity bit flips.
- * @param commitment - R, the point k times G
- * @param r - The x of R mod n
- * @param s - From 1 to n minus 1
- * @returns {Signature} The low-S signature and its recovery id
- */
-function lowSignature(commitment: Affine, r: bigint, s: bigint): Signature {
-  const high = s > HALF_N;
-  const parity = Number(commitment.y & 1n) ^ Number(high);
-  return {
-    signature: `${encodeScalar(r)}${encodeScalar(high ? N - s : s)}`,
-    recovery: parity | (commitment.x >= N ? 2 : 0),
-  };
+export function combine(a: bigint, b: bigint, point: AffinePoint): AffinePoint | undefined {
+  return sec1.combine(curve, { a, b, point });
 }
 
 /**
@@ -651,18 +218,7 @@ function lowSignature(commitment: Affine, r: bigint, s: bigint): Signature {
  * @throws {TypeError} When options is not an object
  */
 export function sign(secret: Scalar, options: SignOptions): Signature {
-  const d = decodeScalar(secret, "Secret", 1n);
-  requireOptions(options, "sign(secret, { digest })");
-  const e = readDigest(options.digest);
-  const digest = readHex(options.digest, undefined, DIGEST_REFUSAL);
-  const candidates = nonces(N, { secret: d, digest });
-  for (;;) {
-    const k = candidates.next().value;
-    const commitment = publicPoint(k);
-    const r = commitment.x % N;
-    const s = (power(k, N - 2n, N) * (e + r * d)) % N;
-    if (r !== 0n && s !== 0n) return lowSignature(commitment, r, s);
-  }
+  return sec1.sign(curve, secret, options);
 }
 
 /**
@@ -674,46 +230,7 @@ export function sign(secret: Scalar, options: SignOptions): Signature {
  * @throws {Error} When the public key is no SEC1 point of the curve
  */
 export function verify(signature: string, options: VerifyOptions): boolean {
-  const { r, s } = readSignature(signature);
-  requireOptions(options, "verify(signature, { digest, publicKey })");
-  const e = readDigest(options.digest);
-  const key = decodePoint(options.publicKey);
-  const lowS = options.lowS ?? false;
-  if (typeof lowS !== "boolean") throw new TypeError("lowS must be a boolean");
-  if (!isScalar(r) || !isScalar(s) || (lowS && s > HALF_N)) return false;
-  const inverse = invert(s, N);
-  const commitment = combine(mod(e * inverse, N), (r * inverse) % N, key);
-  return commitment !== undefined && commitment.x % N === r;
-}
-
-/**
- * Rebuild R from r and the recovery id, SEC 1 v2 section 4.1.6 steps 1.1 to 1.3.
- * @param r - From 1 to n minus 1
- * @param recovery - From 0 to 3
- * @returns {Affine} The point R the signer committed to
- * @throws {RangeError} When no point has that x
- */
-function liftCommitment(r: bigint, recovery: number): Affine {
-  const x = recovery >= 2 ? r + N : r;
-  const y = x < P ? liftY(x, recovery % 2 === 1) : undefined;
-  if (y === undefined) {
-    const named = recovery >= 2 ? "r + n" : "r";
-    throw new RangeError(`No point of secp256k1 has x = ${named}, so recovery ${recovery} fails`);
-  }
-  return { x, y };
-}
-
-/**
- * Read a recovery id.
- * @param value - The caller's value
- * @returns {number} From 0 to 3
- * @throws {RangeError} When the value is no integer from 0 to 3
- */
-function readRecovery(value: unknown): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 3) {
-    throw new RangeError("Recovery must be an integer from 0 to 3");
-  }
-  return value;
+  return sec1.verify(curve, signature, options);
 }
 
 /**
@@ -724,19 +241,5 @@ function readRecovery(value: unknown): number {
  * @throws {RangeError} When an argument is malformed, r or s is out of range, or R does not exist
  */
 export function recoverPublicKey(signature: string, options: RecoverOptions): string {
-  const { r, s } = readSignature(signature);
-  requireOptions(options, "recoverPublicKey(signature, { digest, recovery })");
-  const e = readDigest(options.digest);
-  const recovery = readRecovery(options.recovery);
-  const compressed = compression(options);
-  if (!isScalar(r) || !isScalar(s)) {
-    throw new RangeError("r and s must both be from 1 to the curve order minus 1");
-  }
-  const inverse = invert(r, N);
-  const commitment = liftCommitment(r, recovery);
-  const key = combine(mod(-e * inverse, N), (s * inverse) % N, commitment);
-  if (key === undefined) {
-    throw new RangeError("This signature recovers the point at infinity, which is no public key");
-  }
-  return encodeAffine(key, compressed);
+  return sec1.recoverPublicKey(curve, signature, options);
 }

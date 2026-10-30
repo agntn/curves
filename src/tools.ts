@@ -25,6 +25,7 @@ import {
   MAX_MESSAGE_LENGTH,
   MAX_ORDER_PRIME,
   MESSAGE_ENCODINGS,
+  P256_OPERATIONS,
   SEC1_PATTERN,
   SECP256K1_OPERATIONS,
   SR25519_OPERATIONS,
@@ -339,6 +340,87 @@ export const bip340ComputeTool = defineTool({
   execute: async (params) => (await loadOperations()).computeBip340(params),
 });
 
+export const p256ComputeSchema = Type.Object(
+  {
+    operation: Type.String({
+      enum: [...P256_OPERATIONS],
+      description:
+        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, verify takes point as the public key with digest and signature",
+    }),
+    point: sec1Point("Every operation but lift, required there; the public key for verify"),
+    other: sec1Point(
+      "add and subtract only, required there: the point added to point or subtracted from it",
+    ),
+    scalar: Type.Optional(
+      Type.String({
+        maxLength: 64,
+        pattern: "^[0-9A-Fa-f]{0,64}$",
+        description:
+          "multiply only, required there: 1 to n - 1 as hex without 0x. It enters the transcript, so pass a public tweak or a disposable key",
+      }),
+    ),
+    x: Type.Optional(
+      Type.String({
+        maxLength: 64,
+        pattern: "^(?:[0-9A-Fa-f]{64})?$",
+        description: "lift only, required there: x coordinate as 64 hex digits",
+      }),
+    ),
+    signature: Type.Optional(
+      Type.String({
+        maxLength: 128,
+        pattern: "^(?:[0-9A-Fa-f]{128})?$",
+        description:
+          "verify only, required there: the ECDSA signature as r then s, 128 hex digits without 0x. WebAuthn and X.509 send DER, so unpack it first; a JWS ES256 signature is r then s already",
+      }),
+    ),
+    digest: Type.Optional(
+      Type.String({
+        maxLength: 128,
+        pattern: `^(?:${DIGEST_PATTERN})?$`,
+        description:
+          "verify only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. Hash the message first, with SHA-256 for ES256 and WebAuthn; past 32 bytes only the leftmost 256 bits count",
+      }),
+    ),
+    lowS: Type.Optional(
+      Type.Boolean({
+        description: "verify only: refuse s above n / 2. Default: false, since SEC 1 takes either",
+      }),
+    ),
+    compressed: Type.Optional(
+      Type.Boolean({
+        description:
+          "Output SEC1 encoding, for every operation but check and verify. Default: true",
+      }),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const p256ComputeTool = defineTool({
+  name: "curves_p256_compute",
+  title: "Compute on P-256",
+  description:
+    "Do curve math on public points of NIST P-256, also called secp256r1 and prime256v1: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Verify an ECDSA signature over a digest, the kind ES256 tokens, WebAuthn passkeys and TLS certificates carry. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. Scalars enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
+  snippet:
+    "Use for P-256 public keys and the ECDSA signatures of ES256 tokens, passkeys and certificates, once you have the digest.",
+  guidelines: [
+    "add and subtract take point and other; negate takes point",
+    "multiply takes point and scalar, hex from 1 to n - 1",
+    "lift takes x and returns the even and the odd point",
+    "check takes point and answers onCurve true or false",
+    "verify takes point, digest and signature and answers valid true or false; hash the message yourself, SHA-256 for ES256",
+  ],
+  effect: "read",
+  cli: {
+    command: "p256",
+    description: "Point math on NIST P-256 with SEC1 hex points, and ECDSA verify",
+    positional: ["operation"],
+  },
+  input: p256ComputeSchema,
+  execute: async (params) => (await loadOperations()).computeP256(params),
+});
+
 export const sr25519ComputeSchema = Type.Object(
   {
     operation: Type.String({
@@ -477,6 +559,7 @@ export const curvesTools: readonly ToolDefinition[] = [
   computeTool,
   secp256k1ComputeTool,
   bip340ComputeTool,
+  p256ComputeTool,
   sr25519ComputeTool,
   ed25519ComputeTool,
 ];

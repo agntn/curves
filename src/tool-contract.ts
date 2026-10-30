@@ -38,6 +38,19 @@ export const SECP256K1_OPERATIONS = [
 
 export type Secp256k1Operation = (typeof SECP256K1_OPERATIONS)[number];
 
+/** What `curves_p256_compute` does with public points and ECDSA signatures. */
+export const P256_OPERATIONS = [
+  "add",
+  "subtract",
+  "negate",
+  "multiply",
+  "lift",
+  "check",
+  "verify",
+] as const;
+
+export type P256Operation = (typeof P256_OPERATIONS)[number];
+
 /** What `curves_bip340_compute` does with BIP340 Schnorr keys and signatures. */
 export const BIP340_OPERATIONS = ["keypair", "sign", "verify"] as const;
 
