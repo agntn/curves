@@ -1,14 +1,18 @@
 /**
  * secp256k1 from SEC 2 v2, section 2.4.1: y^2 = x^3 + 7 over the prime field of p, cofactor 1.
- * Points travel as SEC1 hex (SEC 1 v2, sections 2.3.3 and 2.3.4) and multiply in Jacobian
- * coordinates, so a product costs one inversion instead of one per step. ECDSA verification and
- * public key recovery follow SEC 1 v2, sections 4.1.4 and 4.1.6. Nothing here runs in constant
- * time. The messages are the ones @agntn/keys threw: keys re-exports these functions, and its
- * tests read the words.
+ * Points travel as SEC1 hex (SEC 1 v2, sections 2.3.3 and 2.3.4) and add in projective
+ * coordinates with complete formulas, so no sum needs a branch of its own. ECDSA verification
+ * and public key recovery follow SEC 1 v2, sections 4.1.4 and 4.1.6. A multiply runs the same
+ * additions and doublings for every scalar, and no digit stands for zero. Only verification,
+ * whose scalars are public, reads G from a faster table whose time follows the digits. The
+ * bigint arithmetic underneath is the JavaScript engine's, and it promises nothing about time.
+ * The messages are the ones @agntn/keys threw: keys re-exports these functions, and its tests
+ * read the words.
  */
 
 import { requireOptions } from "./arguments.ts";
 import type { AffinePoint } from "./arithmetic.ts";
+import { digitsOf } from "./digits.ts";
 import { invert, mod, power } from "./field.ts";
 
 /** The domain parameters: the curve, its generator and the order of the generator. */
@@ -56,14 +60,17 @@ export interface LiftedPoints {
 /** A finite point with both coordinates from 0 to p minus 1. */
 type Affine = AffinePoint;
 
-/** (X, Y, Z) stands for (X / Z^2, Y / Z^3); Z = 0 is the point at infinity. */
-interface Jacobian {
+/** (X, Y, Z) stands for (X / Z, Y / Z); Z = 0 is the point at infinity. */
+interface Projective {
   readonly x: bigint;
   readonly y: bigint;
   readonly z: bigint;
 }
 
-const ZERO: Jacobian = { x: 1n, y: 1n, z: 0n };
+const ZERO: Projective = { x: 0n, y: 1n, z: 0n };
+
+/** 3b, the one curve constant the complete formulas take. */
+const B3 = 3n * B;
 
 /**
  * The right side of the curve equation.
@@ -131,108 +138,110 @@ function compression(options: PointEncodingOptions): boolean {
   return compressed;
 }
 
-function toJacobian(point: Affine): Jacobian {
+function toProjective(point: Affine): Projective {
   return { x: point.x, y: point.y, z: 1n };
 }
 
 /**
- * Bring a Jacobian point back to x and y.
- * @param point - Any point
- * @returns {Affine | undefined} The point, undefined for infinity
+ * Scale a finite point back to x and y.
+ * @param point - Any point but infinity
+ * @param zInverse - The inverse of its Z mod p
+ * @returns {Affine} The point
  */
-function toAffine(point: Jacobian): Affine | undefined {
-  if (point.z === 0n) return undefined;
-  const inverse = invert(point.z, P);
-  const square = (inverse * inverse) % P;
-  return { x: (point.x * square) % P, y: (point.y * square * inverse) % P };
+function scale(point: Projective, zInverse: bigint): Affine {
+  return { x: (point.x * zInverse) % P, y: (point.y * zInverse) % P };
 }
 
 /**
- * Double a point: dbl-2009-l from the Explicit-Formulas Database, for a = 0.
- * @param point - Any point
- * @returns {Jacobian} Twice the point
- */
-function double(point: Jacobian): Jacobian {
-  if (point.z === 0n || point.y === 0n) return ZERO;
-  const { x, y, z } = point;
-  const xx = (x * x) % P;
-  const yy = (y * y) % P;
-  const yyyy = (yy * yy) % P;
-  const d = mod(2n * ((x + yy) ** 2n - xx - yyyy), P);
-  const e = (3n * xx) % P;
-  const sumX = mod(e * e - 2n * d, P);
-  return { x: sumX, y: mod(e * (d - sumX) - 8n * yyyy, P), z: (2n * y * z) % P };
-}
-
-/**
- * Add two points in Jacobian coordinates.
+ * Add with the complete formulas of Renes, Costello and Batina (2016), algorithm 7 for a = 0.
+ * Every pair takes the same path, infinity and a point plus itself included.
  * @param left - Any point
  * @param right - Any point
- * @returns {Jacobian} The sum
+ * @returns {Projective} The sum
  */
-function add(left: Jacobian, right: Jacobian): Jacobian {
-  if (left.z === 0n) return right;
-  if (right.z === 0n) return left;
-  const leftZZ = (left.z * left.z) % P;
-  const rightZZ = (right.z * right.z) % P;
-  const u1 = (left.x * rightZZ) % P;
-  const u2 = (right.x * leftZZ) % P;
-  const s1 = (left.y * right.z * rightZZ) % P;
-  const s2 = (right.y * left.z * leftZZ) % P;
-  const h = mod(u2 - u1, P);
-  const r = mod(s2 - s1, P);
-  if (h === 0n) return r === 0n ? double(left) : ZERO;
-  const hh = (h * h) % P;
-  const hhh = (hh * h) % P;
-  const v = (u1 * hh) % P;
-  const sumX = mod(r * r - hhh - 2n * v, P);
-  return { x: sumX, y: mod(r * (v - sumX) - s1 * hhh, P), z: (left.z * right.z * h) % P };
+function add(left: Projective, right: Projective): Projective {
+  const xx = (left.x * right.x) % P;
+  const yy = (left.y * right.y) % P;
+  const zz = (left.z * right.z) % P;
+  const xy = mod((left.x + left.y) * (right.x + right.y) - xx - yy, P);
+  const yz = mod((left.y + left.z) * (right.y + right.z) - yy - zz, P);
+  const bxz = (B3 * mod((left.x + left.z) * (right.x + right.z) - xx - zz, P)) % P;
+  const bzz = (B3 * zz) % P;
+  const plus = (yy + bzz) % P;
+  const minus = mod(yy - bzz, P);
+  const triple = (3n * xx) % P;
+  return {
+    x: mod(xy * minus - yz * bxz, P),
+    y: (bxz * triple + minus * plus) % P,
+    z: (plus * yz + triple * xy) % P,
+  };
 }
 
-function negate(point: Jacobian): Jacobian {
+/**
+ * Double a point, algorithm 9 of the same paper. Infinity doubles to itself.
+ * @param point - Any point
+ * @returns {Projective} Twice the point
+ */
+function double(point: Projective): Projective {
+  const { x, y, z } = point;
+  const yy = (y * y) % P;
+  const yy8 = (8n * yy) % P;
+  const bzz = (B3 * ((z * z) % P)) % P;
+  const rest = mod(yy - 3n * bzz, P);
+  return {
+    x: (2n * rest * ((x * y) % P)) % P,
+    y: (rest * (yy + bzz) + bzz * yy8) % P,
+    z: (((y * z) % P) * yy8) % P,
+  };
+}
+
+function negate(point: Projective): Projective {
   return { x: point.x, y: mod(-point.y, P), z: point.z };
 }
 
 /**
- * Multiply by double and add from the top bit down.
+ * Multiply by 16 with four doublings.
+ * @param point - Any point
+ * @returns {Projective} 16 times the point
+ */
+function timesSixteen(point: Projective): Projective {
+  return double(double(double(double(point))));
+}
+
+/**
+ * The table a digit picks from.
+ * @param point - Any point
+ * @returns {Projective[]} 1 to 16 times the point, so digit d picks entry d
+ */
+function multiplesOf(point: Projective): Projective[] {
+  const multiples = [point];
+  let multiple = point;
+  for (let count = 2; count <= 16; count++) {
+    multiple = add(multiple, point);
+    multiples.push(multiple);
+  }
+  return multiples;
+}
+
+/**
+ * Multiply digit by digit from the top, four doublings and one table addition each.
  * @param point - Any point
  * @param scalar - Zero or more
- * @returns {Jacobian} The product
+ * @returns {Projective} The product
  */
-function multiply(point: Jacobian, scalar: bigint): Jacobian {
-  let result = ZERO;
-  for (const bit of scalar.toString(2)) {
-    result = double(result);
-    if (bit === "1") result = add(result, point);
-  }
-  return result;
+function multiply(point: Projective, scalar: bigint): Projective {
+  const multiples = multiplesOf(point);
+  return digitsOf(scalar, N)
+    .toReversed()
+    .reduce((result, digit) => add(timesSixteen(result), multiples[digit] ?? ZERO), ZERO);
 }
 
 /**
- * Add a finite affine point to a Jacobian one, cheaper than `add` since the right Z is 1.
- * @param left - Any point
- * @param right - A finite point
- * @returns {Jacobian} The sum
- */
-function addAffine(left: Jacobian, right: Affine): Jacobian {
-  if (left.z === 0n) return toJacobian(right);
-  const zz = (left.z * left.z) % P;
-  const h = mod(right.x * zz - left.x, P);
-  const r = mod(right.y * left.z * zz - left.y, P);
-  if (h === 0n) return r === 0n ? double(left) : ZERO;
-  const hh = (h * h) % P;
-  const hhh = (hh * h) % P;
-  const v = (left.x * hh) % P;
-  const sumX = mod(r * r - hhh - 2n * v, P);
-  return { x: sumX, y: mod(r * (v - sumX) - left.y * hhh, P), z: (left.z * h) % P };
-}
-
-/**
- * Bring many Jacobian points to x and y with one inversion, Montgomery's trick.
+ * Bring many finite points to Z = 1 with one inversion, Montgomery's trick. Public points only.
  * @param points - Finite points
- * @returns {Affine[]} The same points, in order
+ * @returns {Projective[]} The same points, in order
  */
-function toAffineAll(points: readonly Jacobian[]): Affine[] {
+function normalizeAll(points: readonly Projective[]): Projective[] {
   let product = 1n;
   const steps = points.map((point) => {
     const before = product;
@@ -245,18 +254,60 @@ function toAffineAll(points: readonly Jacobian[]): Affine[] {
     .map(({ point, before }) => {
       const zInverse = (inverse * before) % P;
       inverse = (inverse * point.z) % P;
-      const square = (zInverse * zInverse) % P;
-      return { x: (point.x * square) % P, y: (point.y * square * zInverse) % P };
+      return { ...scale(point, zInverse), z: 1n };
     })
     .toReversed();
 }
 
-/** Entry j of row i is (j + 1) times 16^(63 - i) times G, so hex digit i picks entry digit - 1. */
-let generatorTable: readonly (readonly Affine[])[] | undefined;
+/** Comb rows. More rows skip doublings, but then a repeated secret runs faster. */
+const ROWS = 4;
 
-function buildGeneratorTable(): readonly (readonly Affine[])[] {
-  const points: Jacobian[] = [];
-  let base = toJacobian(G);
+/** How far apart the digits one step of the comb picks are. */
+const SPACING = 64 / ROWS;
+
+/** Row r holds 1 to 16 times 16^(16r) times G. */
+let combTable: readonly (readonly Projective[])[] | undefined;
+
+/**
+ * Build the comb's rows, 64 points in all.
+ * @returns {Projective[][]} The rows, lowest first
+ */
+function buildCombTable(): Projective[][] {
+  let base = toProjective(G);
+  const points = Array.from({ length: ROWS }, () => {
+    const row = multiplesOf(base);
+    for (let step = 0; step < SPACING; step++) base = timesSixteen(base);
+    return row;
+  }).flat();
+  const normal = normalizeAll(points);
+  return Array.from({ length: ROWS }, (_, row) => normal.slice(row * 16, row * 16 + 16));
+}
+
+/**
+ * Multiply G by a secret with a comb of 16 steps, building its table on the first call.
+ * @param scalar - Zero or more
+ * @returns {Projective} The product
+ */
+function multiplyBase(scalar: bigint): Projective {
+  combTable ??= buildCombTable();
+  const table = combTable;
+  const digits = digitsOf(scalar, N);
+  let result = ZERO;
+  for (let step = SPACING - 1; step >= 0; step--) {
+    result = timesSixteen(result);
+    for (const [row, multiples] of table.entries()) {
+      result = add(result, multiples[digits[row * SPACING + step] ?? 0] ?? ZERO);
+    }
+  }
+  return result;
+}
+
+/** Entry j of row i is (j + 1) times 16^(63 - i) times G, so hex digit i picks entry digit - 1. */
+let publicTable: readonly (readonly Projective[])[] | undefined;
+
+function buildPublicTable(): readonly (readonly Projective[])[] {
+  const points: Projective[] = [];
+  let base = toProjective(G);
   for (let row = 0; row < 64; row++) {
     let multiple = base;
     for (let digit = 1; digit < 16; digit++) {
@@ -265,37 +316,38 @@ function buildGeneratorTable(): readonly (readonly Affine[])[] {
     }
     base = multiple;
   }
-  const affine = toAffineAll(points);
-  return Array.from({ length: 64 }, (_, row) => affine.slice(row * 15, row * 15 + 15)).toReversed();
+  const normal = normalizeAll(points);
+  return Array.from({ length: 64 }, (_, row) => normal.slice(row * 15, row * 15 + 15)).toReversed();
 }
 
 /**
- * Multiply G with one table lookup per nonzero hex digit and not a single doubling.
+ * Multiply G by a public scalar, one table addition per nonzero hex digit and no doubling.
+ * Its time follows the digits, so it never sees a secret.
  * @param scalar - Zero to n minus 1
- * @returns {Jacobian} The product
+ * @returns {Projective} The product
  */
-function multiplyBase(scalar: bigint): Jacobian {
-  generatorTable ??= buildGeneratorTable();
+function multiplyBasePublic(scalar: bigint): Projective {
+  publicTable ??= buildPublicTable();
   const digits = scalar.toString(16).padStart(64, "0");
   let result = ZERO;
-  for (const [row, multiples] of generatorTable.entries()) {
+  for (const [row, multiples] of publicTable.entries()) {
     const point = multiples[Number.parseInt(digits.charAt(row), 16) - 1];
-    if (point !== undefined) result = addAffine(result, point);
+    if (point !== undefined) result = add(result, point);
   }
   return result;
 }
 
 /**
  * Encode a result, refusing the point at infinity, which SEC1 public keys have no form for.
+ * Z^(p - 2) inverts Z, since Euclid's step count leaks it.
  * @param point - Any point
  * @param options - Output encoding
  * @returns {string} SEC1 hex
  */
-function encodePoint(point: Jacobian, options: PointEncodingOptions): string {
+function encodePoint(point: Projective, options: PointEncodingOptions): string {
   const compressed = compression(options);
-  const affine = toAffine(point);
-  if (affine === undefined) throw new RangeError(INFINITY);
-  return encodeAffine(affine, compressed);
+  if (point.z === 0n) throw new RangeError(INFINITY);
+  return encodeAffine(scale(point, power(point.z, P - 2n, P)), compressed);
 }
 
 /**
@@ -331,7 +383,7 @@ function encodeScalar(scalar: bigint): string {
  * @throws {RangeError} When b is the negation of a, since the sum is the point at infinity
  */
 export function addPoints(a: string, b: string, options: PointEncodingOptions = {}): string {
-  return encodePoint(add(toJacobian(decodePoint(a)), toJacobian(decodePoint(b))), options);
+  return encodePoint(add(toProjective(decodePoint(a)), toProjective(decodePoint(b))), options);
 }
 
 /**
@@ -343,7 +395,10 @@ export function addPoints(a: string, b: string, options: PointEncodingOptions = 
  * @throws {RangeError} When a equals b, since the difference is the point at infinity
  */
 export function subtractPoints(a: string, b: string, options: PointEncodingOptions = {}): string {
-  return encodePoint(add(toJacobian(decodePoint(a)), negate(toJacobian(decodePoint(b)))), options);
+  return encodePoint(
+    add(toProjective(decodePoint(a)), negate(toProjective(decodePoint(b)))),
+    options,
+  );
 }
 
 /**
@@ -353,7 +408,7 @@ export function subtractPoints(a: string, b: string, options: PointEncodingOptio
  * @returns {string} The negated point as SEC1 hex
  */
 export function negatePoint(point: string, options: PointEncodingOptions = {}): string {
-  return encodePoint(negate(toJacobian(decodePoint(point))), options);
+  return encodePoint(negate(toProjective(decodePoint(point))), options);
 }
 
 /**
@@ -369,7 +424,7 @@ export function multiplyPoint(
   options: PointEncodingOptions = {},
 ): string {
   const decoded = decodePoint(point);
-  return encodePoint(multiply(toJacobian(decoded), decodeScalar(scalar, "Scalar", 1n)), options);
+  return encodePoint(multiply(toProjective(decoded), decodeScalar(scalar, "Scalar", 1n)), options);
 }
 
 /**
@@ -534,13 +589,15 @@ function isScalar(value: bigint): boolean {
 
 /**
  * a times G plus b times a point, the sum ECDSA and BIP340 verification and recovery end on.
- * @param a - Zero to n minus 1
+ * Both scalars are public there, so G comes from the faster table and Euclid inverts Z.
+ * @param a - Zero to n minus 1, never a secret
  * @param b - Zero to n minus 1
  * @param point - A finite point
  * @returns {Affine | undefined} The sum, undefined for the point at infinity
  */
 export function combine(a: bigint, b: bigint, point: Affine): Affine | undefined {
-  return toAffine(add(multiplyBase(a), multiply(toJacobian(point), b)));
+  const sum = add(multiplyBasePublic(a), multiply(toProjective(point), b));
+  return sum.z === 0n ? undefined : scale(sum, invert(sum.z, P));
 }
 
 /**

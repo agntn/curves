@@ -19,6 +19,7 @@ import {
   verify,
   type RecoverOptions,
 } from "../src/secp256k1.ts";
+import { combine } from "../src/core/secp256k1.ts";
 import { block170, highS, nobleSignatures, overflow } from "./fixtures/ecdsa.ts";
 import {
   curveVectors,
@@ -28,6 +29,7 @@ import {
   secp256k1Vectors,
 } from "./fixtures/vectors.ts";
 import wycheproof from "./fixtures/wycheproof-ecdsa.json" with { type: "json" };
+import { medians } from "./timing.ts";
 
 const {
   g,
@@ -47,6 +49,44 @@ const invalidPoint = "Invalid SEC1 secp256k1 public key";
 const uncompressed = { compressed: false };
 const order = BigInt(`0x${orderMinusOne}`) + 1n;
 const onePlusP = (curveVectors.secp256k1.p + 1n).toString(16);
+
+/* A point as uncompressed SEC1, or "infinity", so results from every path compare as text. */
+function sec1(point: Readonly<{ x: bigint; y: bigint }> | null | undefined): string {
+  if (point === null || point === undefined) return "infinity";
+  return `04${point.x.toString(16).padStart(64, "0")}${point.y.toString(16).padStart(64, "0")}`;
+}
+
+/* x and y of uncompressed SEC1 hex. */
+function coordinates(point: string): { x: bigint; y: bigint } {
+  return { x: BigInt(`0x${point.slice(2, 66)}`), y: BigInt(`0x${point.slice(66)}`) };
+}
+
+/* 1 + 16 + ... + 16^63: a multiply recodes a scalar minus this, so its neighbours are edges. */
+const ones = ((1n << 256n) - 1n) / 15n;
+const hashed = Array.from({ length: 8 }, (_, index) =>
+  BigInt(`0x${Buffer.from(sha256(new Uint8Array([index]))).toString("hex")}`),
+);
+const edges = [
+  1n,
+  2n,
+  15n,
+  16n,
+  17n,
+  255n,
+  256n,
+  ones - 1n,
+  ones,
+  ones + 1n,
+  1n << 252n,
+  1n << 255n,
+  order >> 1n,
+  (order >> 1n) + 1n,
+  order - 17n,
+  order - 2n,
+  order - 1n,
+  ...hashed,
+];
+const other = multiplyPoint(g, 0x5eedn, uncompressed);
 
 describe("secp256k1 domain parameters", () => {
   it("match SEC 2, and n times G is infinity on the generic curve code", () => {
@@ -93,12 +133,13 @@ describe("secp256k1 point math", () => {
     }
   });
 
-  it("reads every entry of the generator table right", () => {
+  it("reads every entry of the comb and of the verification table right", () => {
     for (let row = 0n; row < 64n; row++) {
       const base = multiplyPoint(g, 16n ** row, uncompressed);
       let multiple = base;
       for (let digit = 1n; digit < 16n; digit++) {
         expect(multiplyGenerator(digit * 16n ** row, uncompressed)).toBe(multiple);
+        expect(sec1(combine(digit * 16n ** row, 0n, secp256k1.g))).toBe(multiple);
         multiple = addPoints(multiple, base, uncompressed);
       }
     }
@@ -128,6 +169,47 @@ describe("secp256k1 point math", () => {
     expect(() => negatePoint(`02${onePlusP}`)).toThrow(invalidPoint);
     expect(isOnCurve(yOne)).toBe(true);
     expect(isOnCurve(`${yOne.slice(0, 66)}${onePlusP}`)).toBe(false);
+  });
+});
+
+describe("secp256k1 multiplication", () => {
+  it("multiplies G and another point like the affine code, at the digit edges too", () => {
+    const curve = defineCurve(secp256k1);
+    for (const scalar of edges) {
+      const product = sec1(multiplyOnCurve(curve, secp256k1.g, scalar));
+      expect(multiplyGenerator(scalar, uncompressed)).toBe(product);
+      expect(multiplyPoint(g, scalar, uncompressed)).toBe(product);
+      expect(multiplyPoint(other, scalar, uncompressed)).toBe(
+        sec1(multiplyOnCurve(curve, coordinates(other), scalar)),
+      );
+    }
+  });
+
+  it("combines G and a point for verification, through zero scalars and infinity", () => {
+    const point = coordinates(other);
+    expect(sec1(combine(0n, 5n, point))).toBe(multiplyPoint(other, 5n, uncompressed));
+    expect(sec1(combine(5n, 0n, point))).toBe(multiplyGenerator(5n, uncompressed));
+    expect(combine(0n, 0n, point)).toBeUndefined();
+    for (const scalar of edges) {
+      expect(combine(scalar, order - scalar, secp256k1.g)).toBeUndefined();
+      expect(sec1(combine(scalar, scalar, secp256k1.g))).toBe(
+        multiplyGenerator((2n * scalar) % order, uncompressed),
+      );
+    }
+  });
+
+  it("takes about as long for 1 as for n - 1", () => {
+    for (const run of [
+      (scalar: bigint) => multiplyGenerator(scalar),
+      (scalar: bigint) => multiplyPoint(other, scalar),
+    ]) {
+      const [one, top] = medians(
+        () => run(1n),
+        () => run(order - 1n),
+      );
+      expect(one / top).toBeGreaterThan(0.75);
+      expect(one / top).toBeLessThan(1.33);
+    }
   });
 });
 

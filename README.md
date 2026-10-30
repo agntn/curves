@@ -117,7 +117,7 @@ Tools: `curves_compute`, `curves_secp256k1_compute`, `curves_bip340_compute`, `c
 
 ## 🚫 What this does not do
 
-Mnemonics and addresses. That's [@agntn/keys](https://github.com/agntn/keys). ECDSA and BIP340 signing aren't in yet. secp256k1 and your own curves don't run in constant time. And a log over a real 256-bit group? Not happening, here or anywhere else.
+Mnemonics and addresses. That's [@agntn/keys](https://github.com/agntn/keys). ECDSA and BIP340 signing aren't in yet. Your own curves don't run in constant time either. And a log over a real 256-bit group? Not happening, here or anywhere else.
 
 ## 🛠️ Development
 

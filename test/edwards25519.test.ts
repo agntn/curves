@@ -13,6 +13,7 @@ import {
   SQRT_M1,
   type Extended,
 } from "../src/core/edwards25519.ts";
+import { medians } from "./timing.ts";
 
 /* The double and add that multiply replaced. Slow, and every bit shows in its time, but right. */
 function doubleAndAdd(point: Extended, scalar: bigint): Extended {
@@ -27,20 +28,6 @@ function doubleAndAdd(point: Extended, scalar: bigint): Extended {
 /* Whether two extended points are the same point, whatever their Z. */
 function same(a: Extended, b: Extended): boolean {
   return fe(a.x * b.z) === fe(b.x * a.z) && fe(a.y * b.z) === fe(b.y * a.z);
-}
-
-/* Median milliseconds of each run, the two interleaved so drift hits both alike. */
-function medians(first: () => unknown, second: () => unknown): [number, number] {
-  const times: [number[], number[]] = [[], []];
-  for (let round = 0; round < 45; round++) {
-    for (const [index, run] of [first, second].entries()) {
-      const start = performance.now();
-      run();
-      if (round >= 5) times[index === 0 ? 0 : 1].push(performance.now() - start);
-    }
-  }
-  const middle = (values: readonly number[]): number => values.toSorted((a, b) => a - b)[20] ?? 0;
-  return [middle(times[0]), middle(times[1])];
 }
 
 const ones = ((1n << 256n) - 1n) / 15n;
