@@ -8,6 +8,7 @@ import {
   computeCurve,
   computeEd25519,
   computeP256,
+  computeP384,
   computeSecp256k1,
   computeSr25519,
 } from "../src/tool-operations.ts";
@@ -18,6 +19,7 @@ import {
 import { highS, nobleEdges, nobleSignatures } from "./fixtures/ecdsa.ts";
 import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 import { p256Rfc6979, p256Vectors } from "./fixtures/p256.ts";
+import { p384Rfc6979, p384Vectors } from "./fixtures/p384.ts";
 import { devAccounts, keyringPairs, scureVectors, subkeySeeds } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
@@ -92,6 +94,7 @@ describe("curves MCP server", () => {
       "curves_secp256k1_compute",
       "curves_bip340_compute",
       "curves_p256_compute",
+      "curves_p384_compute",
       "curves_sr25519_compute",
       "curves_ed25519_compute",
     ]);
@@ -288,6 +291,48 @@ describe("curves MCP server", () => {
     expect(
       await refused({ operation: "verify", point: `02${"00".repeat(32)}`, digest, signature }),
     ).toContain("point is not a SEC1 point of secp256k1");
+  });
+
+  it("computes on P-384 at 48 bytes a number and verifies RFC 6979's SHA-384 signature", async () => {
+    const client = await connectTestClient();
+    const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+      answer(await client.callTool({ name: "curves_p384_compute", arguments: args }));
+    const refused = async (args: Readonly<Record<string, unknown>>): Promise<string> =>
+      failure(await client.callTool({ name: "curves_p384_compute", arguments: args }));
+    const { publicKey, signatures } = p384Rfc6979;
+    const [, { signature }] = signatures;
+    const digest =
+      "9a9083505bc92276aec4be312696ef7bf3bf603f4bbd381196a029f340585312313bca4a9b5b890efee42c77b1ee25fe";
+    const offCurve = `02${p384Vectors.xWithoutPoint}`;
+
+    expect(await call({ operation: "add", point: p384Vectors.g, other: p384Vectors.twoG })).toEqual(
+      { operation: "add", point: p384Vectors.threeG },
+    );
+    expect(await call({ operation: "lift", x: p384Vectors.g.slice(2) })).toEqual({
+      operation: "lift",
+      even: p384Vectors.minusG,
+      odd: p384Vectors.g,
+    });
+    expect(await call({ operation: "check", point: offCurve })).toEqual({
+      operation: "check",
+      onCurve: false,
+    });
+    expect(await call({ operation: "verify", point: publicKey, digest, signature })).toEqual({
+      operation: "verify",
+      valid: true,
+    });
+    expect(
+      await call({ operation: "verify", point: publicKey, digest, signature, lowS: true }),
+    ).toEqual({ operation: "verify", valid: false });
+    expect(await refused({ operation: "verify", point: offCurve, digest, signature })).toContain(
+      "point is not a SEC1 point of P-384",
+    );
+    expect(await refused({ operation: "negate", point: p256Vectors.g })).toContain(
+      "Invalid arguments at /point",
+    );
+    expect(await refused({ operation: "sign", point: publicKey })).toContain(
+      "Invalid arguments at /operation",
+    );
   });
 
   it("computes on P-256 and verifies the ECDSA signatures RFC 6979 prints", async () => {
@@ -691,6 +736,9 @@ describe("curve executors", () => {
     expect(() => computeP256({ operation: "sign", secret: "01", digest: "00" })).toThrow(
       "operation must be one of add, subtract, negate, multiply, lift, check, verify",
     );
+    expect(() =>
+      computeP384({ operation: "verify", point: p384Vectors.g, digest: "00", signature: "00" }),
+    ).toThrow("Signature must be 192 hex digits");
     expect(() =>
       computeP256({ operation: "verify", point: p256Vectors.g, digest: "00", signature: "00" }),
     ).toThrow("Signature must be 128 hex digits");

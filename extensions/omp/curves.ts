@@ -61,6 +61,7 @@ export default async function curvesExtension(pi: ExtensionAPI): Promise<void> {
       curves_compute: answerRenderer,
       curves_secp256k1_compute: answerRenderer,
       curves_p256_compute: answerRenderer,
+      curves_p384_compute: answerRenderer,
     },
   });
 }

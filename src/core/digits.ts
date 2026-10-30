@@ -1,23 +1,30 @@
 /**
- * The digits a multiply walks when every scalar has to take the same steps. edwards25519 and
- * secp256k1 both read them, each mod the order of its own group.
+ * The digits a multiply walks when every scalar has to take the same steps. edwards25519 and the
+ * SEC 1 curves all read them, each mod the order of its own group.
  */
 
 import { mod } from "./field.ts";
 
-/** 1 + 16 + ... + 16^63. Taken off a scalar first, it comes back as one more in every digit. */
-const ONES = ((1n << 256n) - 1n) / 15n;
-
-/** A bit above the top digit, so every scalar shifts as a bigint of the same length. */
-const PAD = 1n << 256n;
+/**
+ * How many hex digits a scalar below the order takes: 64 up to 2^256, 96 for P-384.
+ * @param order - The order of the group
+ * @returns {number} The digit count, from the bit length of the order, which is public
+ */
+export function digitCount(order: bigint): number {
+  return Math.ceil(order.toString(2).length / 4);
+}
 
 /**
- * The 64 digits a multiply walks, lowest first. Digit d picks d + 1 times the point, never 0.
+ * The digits a multiply walks, lowest first. Digit d picks d + 1 times the point, never 0.
+ * 1 + 16 + 16^2 + ... comes off the scalar first and back as one more in every digit, and a bit
+ * above the top digit makes every scalar shift as a bigint of the same length.
  * @param scalar - Zero or more
- * @param order - Below 2^256, and any point of the group times it is the identity
- * @returns {number[]} From 0 to 15, base 16 digits of the scalar minus {@link ONES}, mod the order
+ * @param order - Any point of the group times it is the identity
+ * @returns {number[]} From 0 to 15, base 16 digits of the scalar minus 1 + 16 + ..., mod the order
  */
 export function digitsOf(scalar: bigint, order: bigint): number[] {
-  const padded = mod(scalar - ONES, order) | PAD;
-  return Array.from({ length: 64 }, (_, index) => Number((padded >> BigInt(4 * index)) & 15n));
+  const count = digitCount(order);
+  const top = 1n << BigInt(4 * count);
+  const padded = mod(scalar - (top - 1n) / 15n, order) | top;
+  return Array.from({ length: count }, (_, index) => Number((padded >> BigInt(4 * index)) & 15n));
 }

@@ -13,6 +13,7 @@ const NAV_ICONS: Record<string, string> = {
   "/math/sr25519": "i-lucide-fingerprint",
   "/math/ed25519": "i-lucide-shield-half",
   "/math/p256": "i-lucide-badge-check",
+  "/math/p384": "i-lucide-shield-check",
   "/playground": "i-lucide-flask-conical",
 };
 

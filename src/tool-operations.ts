@@ -31,6 +31,7 @@ import * as bip340 from "./core/bip340.ts";
 import { hexToBytes } from "./core/bytes.ts";
 import * as ed25519 from "./core/ed25519.ts";
 import * as p256 from "./core/p256.ts";
+import * as p384 from "./core/p384.ts";
 import * as secp256k1 from "./core/secp256k1.ts";
 import * as sr25519 from "./core/sr25519.ts";
 import {
@@ -45,6 +46,7 @@ import {
   MAX_MESSAGE_LENGTH,
   MESSAGE_ENCODINGS,
   P256_OPERATIONS,
+  P384_OPERATIONS,
   SECP256K1_OPERATIONS,
   SR25519_OPERATIONS,
   type Bip340Operation,
@@ -94,6 +96,9 @@ export type P256Details =
   | { operation: "lift"; even: string; odd: string }
   | { operation: "check"; onCurve: boolean }
   | { operation: "verify"; valid: boolean };
+
+/** What the P-384 tool computes: the same answers as P-256, with longer hex. */
+export type P384Details = P256Details;
 
 /** What the BIP340 tool computes, by operation. */
 export type Bip340Details =
@@ -570,6 +575,9 @@ const SECP256K1_COMPUTATIONS: Readonly<
 /** How each P-256 operation turns the arguments into its result. */
 const P256_COMPUTATIONS = sec1Computations(p256, "P-256");
 
+/** How each P-384 operation turns the arguments into its result. */
+const P384_COMPUTATIONS = sec1Computations(p384, "P-384");
+
 /** One SEC 1 curve tool: its operations, the arguments each takes and how each runs. */
 interface Sec1Tool<Operation extends string, Details> {
   readonly operations: readonly Operation[];
@@ -625,6 +633,19 @@ export function computeP256(args: Readonly<Record<string, unknown>>): ToolResult
     operations: P256_OPERATIONS,
     arguments: P256_ARGUMENTS,
     computations: P256_COMPUTATIONS,
+  });
+}
+
+/**
+ * Do math on public P-384 points, or verify an ECDSA signature over a digest.
+ * @param args - Tool arguments, the operation and the ones it takes
+ * @returns {ToolResult<P384Details>} A point, the lifted pair or the verdict
+ */
+export function computeP384(args: Readonly<Record<string, unknown>>): ToolResult<P384Details> {
+  return computeSec1(args, {
+    operations: P384_OPERATIONS,
+    arguments: P256_ARGUMENTS,
+    computations: P384_COMPUTATIONS,
   });
 }
 
