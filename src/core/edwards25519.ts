@@ -7,6 +7,7 @@
  * promises nothing about time.
  */
 
+import { digitsOf } from "./digits.ts";
 import { invert, mod, power } from "./field.ts";
 
 export const P = (1n << 255n) - 19n;
@@ -36,12 +37,6 @@ export const BASE: Extended = { x: G.x, y: G.y, z: 1n, t: mod(G.x * G.y, P) };
 
 /** The order of the whole group, cofactor included: any point times it is the identity. */
 const ORDER = 8n * L;
-
-/** 1 + 16 + ... + 16^63. Taken off a scalar first, it comes back as one more in every digit. */
-const ONES = ((1n << 256n) - 1n) / 15n;
-
-/** A bit above the top digit, so every scalar shifts as a bigint of the same length. */
-const PAD = 1n << 256n;
 
 /**
  * Reduce mod p.
@@ -151,16 +146,6 @@ function timesSixteen(point: Extended): Extended {
 }
 
 /**
- * The 64 digits a multiply walks, lowest first. Digit d picks d + 1 times the point, never 0.
- * @param scalar - Zero or more
- * @returns {number[]} From 0 to 15, base 16 digits of the scalar minus {@link ONES}, mod 8l
- */
-function digitsOf(scalar: bigint): number[] {
-  const padded = mod(scalar - ONES, ORDER) | PAD;
-  return Array.from({ length: 64 }, (_, index) => Number((padded >> BigInt(4 * index)) & 15n));
-}
-
-/**
  * The table a digit picks from.
  * @param point - Any point
  * @returns {Extended[]} 1 to 16 times the point, so digit d picks entry d
@@ -183,7 +168,7 @@ function multiplesOf(point: Extended): Extended[] {
  */
 export function multiply(point: Extended, scalar: bigint): Extended {
   const multiples = multiplesOf(point);
-  return digitsOf(scalar)
+  return digitsOf(scalar, ORDER)
     .toReversed()
     .reduce((result, digit) => add(timesSixteen(result), multiples[digit] ?? IDENTITY), IDENTITY);
 }
@@ -218,7 +203,7 @@ function buildBaseTable(): Extended[][] {
 export function multiplyBase(scalar: bigint): Extended {
   baseTable ??= buildBaseTable();
   const table = baseTable;
-  const digits = digitsOf(scalar);
+  const digits = digitsOf(scalar, ORDER);
   let result = IDENTITY;
   for (let step = SPACING - 1; step >= 0; step--) {
     result = timesSixteen(result);

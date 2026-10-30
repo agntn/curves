@@ -36,7 +36,7 @@ const { samples, tick, paused, current, step } = useLandingSample();
       :checks="[
         'Add, subtract, negate and multiply points, lift an x, check a point',
         'Scalars mod n: add, subtract, multiply, invert',
-        'Domain parameters from SEC 2, encodings from SEC 1, Jacobian coordinates inside',
+        'SEC 2 parameters, SEC 1 encodings, the same steps for every secret',
       ]"
       reverse
     >
