@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { invertScalar, multiplyGenerator } from "@agntn/curves/secp256k1";
-import type { CurvePointText, Ed25519Details, Sr25519Details } from "#tool-operations";
+import { invertScalar, multiplyGenerator, subtractScalars } from "@agntn/curves/secp256k1";
+import type { Bip340Details, CurvePointText, Ed25519Details, Secp256k1Details, Sr25519Details } from "#tool-operations";
 import { EMPTY_VECTOR, PI_VECTOR } from "../../utils/bip340";
 import { CURVES, pointArgument } from "../../utils/curves";
 import { ORDER_EIGHT, RFC_TEST_1, RFC_TEST_2 } from "../../utils/ed25519";
@@ -32,7 +32,8 @@ type Field =
   | "lowS"
   | "chainCode"
   | "hard"
-  | "zip215";
+  | "zip215"
+  | "random";
 
 interface Operation {
   /** `compute:log`, `secp256k1:lift` or `sr25519:sign`, unique across the tools. */
@@ -73,8 +74,11 @@ const OPERATIONS: readonly Operation[] = [
   { key: "secp256k1:multiply", tool: "curves_secp256k1_compute", op: "multiply", takes: ["point", "scalar", "compressed"], about: "A point times a scalar from 1 to n - 1. G times a private key is its public key." },
   { key: "secp256k1:lift", tool: "curves_secp256k1_compute", op: "lift", takes: ["x", "compressed"], about: "Both points above an x. The even one is what a BIP340 key stands for." },
   { key: "secp256k1:check", tool: "curves_secp256k1_compute", op: "check", takes: ["point"], about: "Whether a SEC1 point lies on secp256k1." },
+  { key: "secp256k1:sign", tool: "curves_secp256k1_compute", op: "sign", takes: ["secret", "digest", "compressed"], about: "Sign a digest with ECDSA. RFC 6979 picks k from the key and the digest, so the bytes never change. Low s, recovery id included." },
   { key: "secp256k1:verify", tool: "curves_secp256k1_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "Check whether a key signed a digest. G didn't. The block 170 chip loads Satoshi's key, which did." },
   { key: "secp256k1:recover", tool: "curves_secp256k1_compute", op: "recover", takes: ["digest", "signature", "recovery", "compressed"], about: "Recover a verifying key from a digest, signature and id. For block 170, ids 0 and 1 both verify, but only 1 is Satoshi's." },
+  { key: "bip340:keypair", tool: "curves_bip340_compute", op: "keypair", takes: ["secret"], about: "A 32-byte secret in, the x-only key out. y doesn't make the trip, it's whichever one is even." },
+  { key: "bip340:sign", tool: "curves_bip340_compute", op: "sign", takes: ["secret", "message", "random"], about: "Sign the BIP340 way. Leave random empty and fresh bytes go in, so every signature differs and all of them verify." },
   { key: "bip340:verify", tool: "curves_bip340_compute", op: "verify", takes: ["publicKey", "message", "signature"], about: "The pi message comes with a signature. Flip a bit and see what verify says." },
   { key: "sr25519:keypair", tool: "curves_sr25519_compute", op: "keypair", takes: ["source"], sources: ["seed", "secret"], about: "A 32-byte seed grows into a secret and a public key. A secret alone gives back its public key." },
   { key: "sr25519:sign", tool: "curves_sr25519_compute", op: "sign", takes: ["secret", "message", "encoding"], about: "Sign under the substrate context. Fresh randomness each time, so the bytes change and both still verify." },
@@ -88,6 +92,8 @@ const OPERATIONS: readonly Operation[] = [
 const G = multiplyGenerator("1");
 const TWO_G = multiplyGenerator("2");
 const HALF = invertScalar(2n);
+/** n - 1, the largest secret there is. Its public key is minus G. */
+const TOP_SECRET = subtractScalars("0", "1");
 /** The ids `recover` takes: bit 0 is the parity of y of R, bit 1 says its x is r + n. */
 const RECOVERY_IDS = [0, 1, 2, 3] as const;
 
@@ -107,19 +113,28 @@ const limit = ref("");
 const secpPoint = ref(G);
 const secpOther = ref(TWO_G);
 const secpScalar = ref("3");
+const secpSecret = ref("1");
 const x = ref(G.slice(2));
 const secpDigest = ref<string>(BLOCK_170.digest);
 const secpSignature = ref<string>(BLOCK_170.signature);
 const recovery = ref<number>(BLOCK_170.recovery);
 const lowS = ref(false);
 /** The secp256k1 fields that are text, by the argument each one fills. */
-const SECP_FIELDS = { point: secpPoint, other: secpOther, scalar: secpScalar, x, digest: secpDigest, signature: secpSignature } as const;
+const SECP_FIELDS = { point: secpPoint, other: secpOther, scalar: secpScalar, secret: secpSecret, x, digest: secpDigest, signature: secpSignature } as const;
 const uncompressed = ref(false);
+const schnorrSecret = ref<string>(PI_VECTOR.secret);
+const schnorrRandom = ref<string>(PI_VECTOR.random);
 const schnorrKey = ref<string>(PI_VECTOR.publicKey);
 const schnorrMessage = ref<string>(PI_VECTOR.message);
 const schnorrSignature = ref<string>(PI_VECTOR.signature);
 /** The BIP340 fields, by the argument each one fills. */
-const SCHNORR_FIELDS = { publicKey: schnorrKey, message: schnorrMessage, signature: schnorrSignature } as const;
+const SCHNORR_FIELDS = {
+  secret: schnorrSecret,
+  random: schnorrRandom,
+  publicKey: schnorrKey,
+  message: schnorrMessage,
+  signature: schnorrSignature,
+} as const;
 const seed = ref(DEV_SEED);
 const secret = ref(DEV_SECRET);
 const publicKey = ref(ALICE);
@@ -175,19 +190,20 @@ function srArgs(): Record<string, unknown> {
 }
 
 /**
- * The BIP340 arguments on screen. The message always goes along, so blank verifies the empty one.
+ * The BIP340 arguments on screen. The message always goes along, so blank is the empty one.
  *
  * @returns {Record<string, unknown>} The arguments, operation included.
  */
 function schnorrArgs(): Record<string, unknown> {
-  const key = schnorrKey.value.trim();
-  const signature = schnorrSignature.value.trim();
-  return {
-    operation: current.value.op,
-    ...(key === "" ? {} : { publicKey: key }),
-    message: schnorrMessage.value.trim(),
-    ...(signature === "" ? {} : { signature }),
-  };
+  const args: Record<string, unknown> = { operation: current.value.op };
+  for (const field of current.value.takes) {
+    if (field === "message") args.message = schnorrMessage.value.trim();
+    else {
+      const value = SCHNORR_FIELDS[field as keyof typeof SCHNORR_FIELDS].value.trim();
+      if (value !== "") args[field] = value;
+    }
+  }
+  return args;
 }
 
 /**
@@ -340,14 +356,16 @@ function hexRow(label: string, value: string, accent = false): Row {
   return { label, value: shortHex(value), full: value, accent };
 }
 
-/** An sr25519 or Ed25519 answer that carries a key: a key pair, a signature or a child. */
-type KeyDetails = Exclude<Sr25519Details | Ed25519Details, { operation: "verify" }>;
+/** An answer that carries a key: a key pair, a signature or a child. */
+type KeyDetails =
+  | Exclude<Sr25519Details | Ed25519Details | Bip340Details, { operation: "verify" }>
+  | Extract<Secp256k1Details, { operation: "sign" }>;
 
 /**
- * Whether the details carry a key. A `verify` of either tool has the verdict's shape instead.
+ * Whether the details carry a key. A `verify` has the verdict's shape instead.
  *
  * @param {ToolDetails} details - Any tool's details.
- * @returns {boolean} True for a key pair, signature or child of sr25519 or Ed25519.
+ * @returns {boolean} True for a key pair, a signature or a child.
  */
 function carriesKey(details: ToolDetails): details is KeyDetails {
   return "publicKey" in details;
@@ -368,7 +386,7 @@ function verdictView(valid: boolean): { icon: string; heading: string; rows: Row
 }
 
 /**
- * A key answer of sr25519 or Ed25519 as a glyph, a heading and rows.
+ * A key answer as a glyph, a heading and rows. An ECDSA signature brings its recovery id along.
  *
  * @param {KeyDetails} details - What the tool returned.
  * @returns {{ icon: string; heading: string; rows: Row[] }} The subject band.
@@ -378,7 +396,11 @@ function keyView(details: KeyDetails): { icon: string; heading: string; rows: Ro
     return {
       icon: "i-lucide-signature",
       heading: shortHex(details.signature),
-      rows: [hexRow("signature", details.signature, true), hexRow("publicKey", details.publicKey)],
+      rows: [
+        hexRow("signature", details.signature, true),
+        ...("recovery" in details ? [{ label: "recovery", value: String(details.recovery) }] : []),
+        hexRow("publicKey", details.publicKey),
+      ],
     };
   }
   const rows = [hexRow("publicKey", details.publicKey, true)];
@@ -460,8 +482,8 @@ function loadCurve(index: number) {
   scalar.value = String(sample.scalar);
 }
 
-/** secp256k1 samples, each a different kind of point to start from. */
-const SECP_SAMPLES = [
+/** secp256k1 samples, each a different kind of point to start from, and two keys for sign alone. */
+const SECP_SAMPLES: readonly { label: string; op?: string; load: () => unknown }[] = [
   { label: "G and 2G", load: () => ((secpPoint.value = G), (secpOther.value = TWO_G), (secpScalar.value = "3")) },
   { label: "half of G", load: () => ((secpPoint.value = G), (secpScalar.value = HALF)) },
   { label: "x of G", load: () => (x.value = G.slice(2)) },
@@ -475,20 +497,36 @@ const SECP_SAMPLES = [
       recovery.value = BLOCK_170.recovery;
     },
   },
-] as const;
+  { label: "secret 1", op: "sign", load: () => (secpSecret.value = "1") },
+  { label: "secret n - 1", op: "sign", load: () => (secpSecret.value = TOP_SECRET) },
+];
 
-/** BIP340 samples: the vector that signs pi, the one that signs nothing, and pi's one bit off. */
-const SCHNORR_SAMPLES = [
-  {
-    label: "pi message",
-    load: () => ((schnorrKey.value = PI_VECTOR.publicKey), (schnorrMessage.value = PI_VECTOR.message), (schnorrSignature.value = PI_VECTOR.signature)),
-  },
-  {
-    label: "empty message",
-    load: () => ((schnorrKey.value = EMPTY_VECTOR.publicKey), (schnorrMessage.value = EMPTY_VECTOR.message), (schnorrSignature.value = EMPTY_VECTOR.signature)),
-  },
-  { label: "one bit off", load: () => (schnorrSignature.value = flipBit(schnorrSignature.value)) },
-] as const;
+/** The secp256k1 chips on screen. The secret ones show up where there's a secret to fill. */
+const secpSamples = computed(() => SECP_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
+
+/**
+ * Loads one BIP340 vector into every BIP340 field, secret and aux_rand included.
+ *
+ * @param vector - The vector.
+ */
+function loadSchnorr(vector: typeof PI_VECTOR | typeof EMPTY_VECTOR) {
+  schnorrSecret.value = vector.secret;
+  schnorrRandom.value = vector.random;
+  schnorrKey.value = vector.publicKey;
+  schnorrMessage.value = vector.message;
+  schnorrSignature.value = vector.signature;
+}
+
+/** BIP340 samples: the pi vector, the empty one, and two chips that wait for their op. */
+const SCHNORR_SAMPLES: readonly { label: string; op?: string; load: () => unknown }[] = [
+  { label: "pi message", load: () => loadSchnorr(PI_VECTOR) },
+  { label: "empty message", load: () => loadSchnorr(EMPTY_VECTOR) },
+  { label: "fresh random", op: "sign", load: () => (schnorrRandom.value = "") },
+  { label: "one bit off", op: "verify", load: () => (schnorrSignature.value = flipBit(schnorrSignature.value)) },
+];
+
+/** The BIP340 chips on screen: fresh random on sign, one bit off where a signature can break. */
+const schnorrSamples = computed(() => SCHNORR_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
 
 /**
  * Loads one RFC 8032 test into every Ed25519 field.
@@ -583,6 +621,7 @@ function readQuery(query: Readonly<Record<string, unknown>>) {
   request.value = { operation: current.value, args: toolArgs.value };
 }
 
+/** The state as a query. An empty random stays, so the link doesn't bring the sample's back. */
 const shareQuery = computed(() => {
   const query: Record<string, string> = { op: current.value.key };
   for (const [name, value] of Object.entries(toolArgs.value)) {
@@ -590,6 +629,7 @@ const shareQuery = computed(() => {
     if (name === "compressed") query.uncompressed = "true";
     else query[name] = typeof value === "object" && value !== null ? `${(value as { x: string }).x},${(value as { y: string }).y}` : String(value);
   }
+  if (schnorr.value && current.value.takes.includes("random") && query.random === undefined) query.random = "";
   return query;
 });
 
@@ -715,6 +755,10 @@ const shareLink = computed(() => {
               </div>
             </dl>
             <dl v-else-if="secp" class="console-readout-rows">
+              <div v-if="current.takes.includes('secret')">
+                <dt><label for="playground-secp-secret">secret</label></dt>
+                <dd><UInput id="playground-secp-secret" v-model="secpSecret" variant="none" placeholder="hex, 1 to n - 1" class="w-full" spellcheck="false" /></dd>
+              </div>
               <div v-if="current.takes.includes('point')">
                 <dt><label for="playground-secp-point">point</label></dt>
                 <dd><UInput id="playground-secp-point" v-model="secpPoint" variant="none" placeholder="SEC1 hex" class="w-full" spellcheck="false" /></dd>
@@ -763,17 +807,25 @@ const shareLink = computed(() => {
               </div>
             </dl>
             <dl v-else-if="schnorr" class="console-readout-rows">
-              <div>
+              <div v-if="current.takes.includes('secret')">
+                <dt><label for="playground-schnorr-secret">secret</label></dt>
+                <dd><UInput id="playground-schnorr-secret" v-model="schnorrSecret" variant="none" placeholder="secret, 64 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('publicKey')">
                 <dt><label for="playground-schnorr-key">publicKey</label></dt>
                 <dd><UInput id="playground-schnorr-key" v-model="schnorrKey" variant="none" placeholder="x-only key, 64 hex digits" class="w-full" spellcheck="false" /></dd>
               </div>
-              <div>
+              <div v-if="current.takes.includes('message')">
                 <dt><label for="playground-schnorr-message">message</label></dt>
                 <dd><UInput id="playground-schnorr-message" v-model="schnorrMessage" variant="none" placeholder="hex, empty is fine" class="w-full" spellcheck="false" /></dd>
               </div>
-              <div>
+              <div v-if="current.takes.includes('signature')">
                 <dt><label for="playground-schnorr-signature">signature</label></dt>
                 <dd><UInput id="playground-schnorr-signature" v-model="schnorrSignature" variant="none" placeholder="x of R then s, 128 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('random')">
+                <dt><label for="playground-schnorr-random">random</label></dt>
+                <dd><UInput id="playground-schnorr-random" v-model="schnorrRandom" variant="none" placeholder="empty draws 32 fresh bytes" class="w-full" spellcheck="false" /></dd>
               </div>
             </dl>
             <dl v-else-if="edwards" class="console-readout-rows">
@@ -859,10 +911,10 @@ const shareLink = computed(() => {
             />
           </div>
           <div v-else-if="secp" class="playground-chips" role="group" aria-label="Sample points">
-            <UButton v-for="sample in SECP_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
+            <UButton v-for="sample in secpSamples" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
           <div v-else-if="schnorr" class="playground-chips" role="group" aria-label="BIP340 test vectors">
-            <UButton v-for="sample in SCHNORR_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
+            <UButton v-for="sample in schnorrSamples" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
           <div v-else-if="edwards" class="playground-chips" role="group" aria-label="Ed25519 test vectors">
             <UButton v-for="sample in edSamples" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
@@ -881,8 +933,8 @@ const shareLink = computed(() => {
             >
             <template v-else-if="schnorr"
               >Keys and signatures are hex without 0x. The key is just the x coordinate, with even y
-              filling in the other half. Everything here is public, so the fields can sit in the address
-              bar.</template
+              filling in the other half. The BIP's secrets are public on purpose. Yours would land in
+              the address bar, so maybe don't.</template
             >
             <template v-else-if="secp"
               >Points are SEC1 hex, 33 or 65 bytes. Digests and signatures are hex without 0x. Every

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import { curvesAiTools } from "../src/ai.ts";
 import { curvesTools } from "../src/tools.ts";
-import { nobleSignatures } from "./fixtures/bip340.ts";
+import { nobleEdges, nobleSignatures } from "./fixtures/bip340.ts";
+import { nobleEdges as ecdsaEdges } from "./fixtures/ecdsa.ts";
 import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 
 describe("@agntn/curves/ai", () => {
@@ -30,6 +31,37 @@ describe("@agntn/curves/ai", () => {
     expect(await tool.execute?.(call, options)).toMatchObject({ valid: true });
     expect(await tool.execute?.({ ...call, zip215: false }, options)).toMatchObject({
       valid: false,
+    });
+  });
+
+  it("signs with ECDSA and BIP340 through the AI SDK tools", async () => {
+    const [ecdsa] = ecdsaEdges;
+    const [schnorr] = nobleEdges;
+    if (ecdsa === undefined || schnorr === undefined) throw new Error("A noble fixture shrank");
+    const options = { toolCallId: "secp256k1-sign", messages: [], context: {} };
+    const ecdsaOutput = await curvesAiTools.curves_secp256k1_compute.execute?.(
+      { operation: "sign", secret: ecdsa.secret, digest: ecdsa.digest },
+      options,
+    );
+    expect(ecdsaOutput).toMatchObject({
+      operation: "sign",
+      signature: ecdsa.signature,
+      recovery: ecdsa.recovery,
+      publicKey: ecdsa.publicKey,
+    });
+    const schnorrOutput = await curvesAiTools.curves_bip340_compute.execute?.(
+      {
+        operation: "sign",
+        secret: schnorr.secret,
+        message: schnorr.message,
+        random: "00".repeat(32),
+      },
+      { ...options, toolCallId: "bip340-sign" },
+    );
+    expect(schnorrOutput).toMatchObject({
+      operation: "sign",
+      signature: schnorr.signature,
+      publicKey: schnorr.publicKey,
     });
   });
 

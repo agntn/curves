@@ -14,6 +14,7 @@ export {
   negatePoint,
   recoverPublicKey,
   secp256k1,
+  sign,
   subtractPoints,
   subtractScalars,
   verify,
@@ -23,5 +24,7 @@ export type {
   PointEncodingOptions,
   RecoverOptions,
   Scalar,
+  Signature,
+  SignOptions,
   VerifyOptions,
 } from "./core/secp256k1.ts";

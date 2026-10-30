@@ -17,8 +17,11 @@ import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { describe, expect, it } from "vite-plus/test";
 import pkg from "../package.json" with { type: "json" };
 import { serverInfo } from "../src/server-info.ts";
-import { nobleSignatures as schnorrSignatures } from "./fixtures/bip340.ts";
-import { highS, nobleSignatures } from "./fixtures/ecdsa.ts";
+import {
+  nobleEdges as schnorrEdges,
+  nobleSignatures as schnorrSignatures,
+} from "./fixtures/bip340.ts";
+import { highS, nobleEdges, nobleSignatures } from "./fixtures/ecdsa.ts";
 import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 
 const [signed] = nobleSignatures;
@@ -53,7 +56,7 @@ describe("curves CLI", () => {
 
     expect(help.stdout).toContain("USAGE curves <command> [OPTIONS]");
     expect(help.stdout).toMatch(/^ {2}secp256k1 {2}Point math/m);
-    expect(help.stdout).toMatch(/^ {2}bip340 {5}BIP340 Schnorr/m);
+    expect(help.stdout).toMatch(/^ {2}bip340 {5}BIP340 Schnorr keys and signatures/m);
     expect(help.stdout).toMatch(/^ {2}sr25519 {4}sr25519 keys/m);
     expect(help.stdout).toMatch(/^ {2}ed25519 {4}Ed25519 keys and signatures/m);
     expect(usage.stdout).toContain("USAGE curves compute [OPTIONS] <OPERATION>");
@@ -112,6 +115,32 @@ describe("curves CLI", () => {
       code: 1,
       stderr: "No point of secp256k1 has x = r + n, so recovery 2 fails\n",
     });
+  });
+
+  it("signs a digest with ECDSA from flags, the way @noble/curves 2.4.0 did", () => {
+    for (const { secret, digest, signature, recovery, publicKey } of nobleEdges) {
+      expect(
+        run("secp256k1", "sign", "--secret", secret, "--digest", digest),
+        digest,
+      ).toMatchObject({
+        code: 0,
+        stdout: `{"operation":"sign","signature":"${signature}","recovery":${recovery},"publicKey":"${publicKey}"}\n`,
+      });
+    }
+  });
+
+  it("derives an x-only key and signs by BIP340 from flags, with aux_rand fixed", () => {
+    for (const { secret, message, signature, publicKey } of schnorrEdges) {
+      expect(run("bip340", "keypair", "--secret", secret)).toMatchObject({
+        code: 0,
+        stdout: `{"operation":"keypair","publicKey":"${publicKey}"}\n`,
+      });
+      const flags = ["--secret", secret, "--message", message, "--random", "00".repeat(32)];
+      expect(run("bip340", "sign", ...flags), message).toMatchObject({
+        code: 0,
+        stdout: `{"operation":"sign","signature":"${signature}","publicKey":"${publicKey}"}\n`,
+      });
+    }
   });
 
   it("verifies a BIP340 signature from flags, over no bytes too", () => {

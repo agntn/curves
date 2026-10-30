@@ -1,7 +1,7 @@
 /**
- * Hex and little-endian helpers for the edwards25519 code, which reads every byte string least
- * significant byte first. Written by hand, since `Uint8Array.fromHex` is too new for the
- * browsers the docs playground runs in.
+ * Hex and byte order helpers. The edwards25519 code reads every byte string least significant
+ * byte first, the secp256k1 signatures most significant first. Written by hand, since
+ * `Uint8Array.fromHex` is too new for the browsers the docs playground runs in.
  */
 
 const HEX = /^(?:[0-9a-f]{2})*$/iu;
@@ -62,6 +62,16 @@ export function numberToBytesLE(value: bigint, length: number): Uint8Array {
     rest >>= 8n;
   }
   return bytes;
+}
+
+/**
+ * Write a number as big-endian bytes, the order SEC 1, RFC 6979 and BIP340 write numbers in.
+ * @param value - From 0 to 256^length minus 1
+ * @param length - The byte count
+ * @returns {Uint8Array} The bytes
+ */
+export function numberToBytesBE(value: bigint, length: number): Uint8Array {
+  return numberToBytesLE(value, length).toReversed();
 }
 
 /**

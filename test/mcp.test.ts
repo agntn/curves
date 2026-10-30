@@ -10,8 +10,11 @@ import {
   computeSecp256k1,
   computeSr25519,
 } from "../src/tool-operations.ts";
-import { nobleSignatures as schnorrSignatures } from "./fixtures/bip340.ts";
-import { highS, nobleSignatures } from "./fixtures/ecdsa.ts";
+import {
+  nobleEdges as schnorrEdges,
+  nobleSignatures as schnorrSignatures,
+} from "./fixtures/bip340.ts";
+import { highS, nobleEdges, nobleSignatures } from "./fixtures/ecdsa.ts";
 import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 import { devAccounts, keyringPairs, scureVectors, subkeySeeds } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
@@ -62,7 +65,7 @@ function failure(response: unknown): string {
 }
 
 const paar = { a: "2", b: "2", p: "17" };
-const { g, twoG, threeG, minusG } = secp256k1Vectors;
+const { g, gUncompressed, twoG, threeG, minusG } = secp256k1Vectors;
 const [signed] = nobleSignatures;
 if (signed === undefined) throw new Error("The noble fixture lost its first signature");
 
@@ -282,6 +285,71 @@ describe("curves MCP server", () => {
     expect(
       await refused({ operation: "verify", point: `02${"00".repeat(32)}`, digest, signature }),
     ).toContain("point is not a SEC1 point of secp256k1");
+  });
+
+  it("signs a digest with ECDSA on secp256k1, with the recovery id recover takes", async () => {
+    const client = await connectTestClient();
+    const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+      answer(await client.callTool({ name: "curves_secp256k1_compute", arguments: args }));
+    const refused = async (args: Readonly<Record<string, unknown>>): Promise<string> =>
+      failure(await client.callTool({ name: "curves_secp256k1_compute", arguments: args }));
+    const [edge] = nobleEdges;
+    if (edge === undefined) throw new Error("The noble fixture lost its edges");
+    const { secret, digest, signature, recovery, publicKey } = edge;
+
+    const signedHere = { operation: "sign", signature, recovery, publicKey };
+    expect(await call({ operation: "sign", secret, digest })).toEqual(signedHere);
+    expect(await call({ operation: "sign", secret, digest, compressed: false })).toEqual({
+      ...signedHere,
+      publicKey: gUncompressed,
+    });
+    expect(await call({ operation: "recover", digest, signature, recovery })).toEqual({
+      operation: "recover",
+      point: publicKey,
+    });
+    expect(await refused({ operation: "sign", digest })).toContain("sign needs secret");
+    expect(await refused({ operation: "sign", secret, digest, point: g })).toContain(
+      "sign does not take point",
+    );
+    expect(await refused({ operation: "sign", secret: "0", digest })).toContain(
+      "Secret must be hex without 0x or a bigint, from 1 to the curve order minus 1",
+    );
+  });
+
+  it("derives an x-only key and signs by BIP340, fresh or repeatable", async () => {
+    const client = await connectTestClient();
+    const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+      answer(await client.callTool({ name: "curves_bip340_compute", arguments: args }));
+    const refused = async (args: Readonly<Record<string, unknown>>): Promise<string> =>
+      failure(await client.callTool({ name: "curves_bip340_compute", arguments: args }));
+    const [, oddKey] = schnorrEdges;
+    if (oddKey === undefined) throw new Error("The BIP340 fixture lost its edges");
+    const { secret, message, signature, publicKey } = oddKey;
+    const random = "00".repeat(32);
+
+    expect(await call({ operation: "keypair", secret })).toEqual({
+      operation: "keypair",
+      publicKey,
+    });
+    expect(await call({ operation: "sign", secret, message, random })).toEqual({
+      operation: "sign",
+      signature,
+      publicKey,
+    });
+    const fresh = await call({ operation: "sign", secret, message });
+    expect(fresh).toMatchObject({ operation: "sign", publicKey });
+    expect(fresh).not.toMatchObject({ signature });
+    const { signature: freshSignature } = fresh as { signature: string };
+    expect(
+      await call({ operation: "verify", publicKey, message, signature: freshSignature }),
+    ).toEqual({ operation: "verify", valid: true });
+    expect(await refused({ operation: "sign", secret })).toContain("sign needs message");
+    expect(await refused({ operation: "keypair", secret, message })).toContain(
+      "keypair does not take message",
+    );
+    expect(await refused({ operation: "sign", secret, message, random: "00" })).toContain(
+      "Invalid arguments at /random",
+    );
   });
 
   it("verifies a BIP340 signature, over an empty message too", async () => {
@@ -559,6 +627,9 @@ describe("curve executors", () => {
     expect(() => computeSecp256k1({ operation: "multiply", point: g })).toThrow(
       "multiply needs scalar",
     );
+    expect(() => computeSecp256k1({ operation: "sign", secret: "", digest: "00" })).toThrow(
+      "sign needs secret",
+    );
     expect(() => computeSecp256k1({ operation: "check", point: g, compressed: false })).toThrow(
       "check does not take compressed",
     );
@@ -573,6 +644,22 @@ describe("BIP340 executor", () => {
   if (signedMessage === undefined) throw new Error("The BIP340 fixture lost its first signature");
   const { message, signature, publicKey } = signedMessage;
 
+  it("reads a blank random as fresh bytes and a blank secret as missing", () => {
+    const [edge] = schnorrEdges;
+    if (edge === undefined) throw new Error("The BIP340 fixture lost its edges");
+    const { secret } = edge;
+    const fresh = computeBip340({ operation: "sign", secret, message, random: "" }).details;
+    if (fresh.operation !== "sign") throw new Error("sign answered another operation");
+    const check = { operation: "verify", publicKey: fresh.publicKey, message };
+    expect(computeBip340({ ...check, signature: fresh.signature }).details).toEqual({
+      operation: "verify",
+      valid: true,
+    });
+    expect(() => computeBip340({ operation: "sign", secret: "", message })).toThrow(
+      "sign needs secret",
+    );
+  });
+
   it("reads a blank message as the empty one and a blank key as missing", () => {
     const empty = { operation: "verify", publicKey, message: "", signature };
     expect(computeBip340(empty).details).toEqual({ operation: "verify", valid: false });
@@ -586,8 +673,8 @@ describe("BIP340 executor", () => {
 
   it("guards the contract even when a host skips schema validation", () => {
     const call = { operation: "verify", publicKey, message, signature };
-    expect(() => computeBip340({ ...call, operation: "sign" })).toThrow(
-      "operation must be one of verify",
+    expect(() => computeBip340({ ...call, operation: "recover" })).toThrow(
+      "operation must be one of keypair, sign, verify",
     );
     expect(() => computeBip340({ ...call, message: 7 })).toThrow("message must be a string");
     expect(() => computeBip340({ ...call, message: "00".repeat(4097) })).toThrow(

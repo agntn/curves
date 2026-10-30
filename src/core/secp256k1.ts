@@ -1,19 +1,21 @@
 /**
  * secp256k1 from SEC 2 v2, section 2.4.1: y^2 = x^3 + 7 over the prime field of p, cofactor 1.
  * Points travel as SEC1 hex (SEC 1 v2, sections 2.3.3 and 2.3.4) and add in projective
- * coordinates with complete formulas, so no sum needs a branch of its own. ECDSA verification
- * and public key recovery follow SEC 1 v2, sections 4.1.4 and 4.1.6. A multiply runs the same
- * additions and doublings for every scalar, and no digit stands for zero. Only verification,
- * whose scalars are public, reads G from a faster table whose time follows the digits. The
- * bigint arithmetic underneath is the JavaScript engine's, and it promises nothing about time.
+ * coordinates with complete formulas, so no sum needs a branch of its own. ECDSA signing,
+ * verification and public key recovery follow SEC 1 v2, sections 4.1.3, 4.1.4 and 4.1.6, and the
+ * signing nonce comes from RFC 6979. A multiply runs the same additions and doublings for every
+ * scalar, and no digit stands for zero. Only verification, whose scalars are public, reads G from
+ * a faster table whose time follows the digits. The bigint arithmetic underneath is the
+ * JavaScript engine's, and it promises nothing about time.
  * The messages are the ones @agntn/keys threw: keys re-exports these functions, and its tests
  * read the words.
  */
 
-import { requireOptions } from "./arguments.ts";
+import { readHex, requireOptions } from "./arguments.ts";
 import type { AffinePoint } from "./arithmetic.ts";
 import { digitsOf } from "./digits.ts";
 import { invert, mod, power } from "./field.ts";
+import { nonces } from "./rfc6979.ts";
 
 /** The domain parameters: the curve, its generator and the order of the generator. */
 export const secp256k1 = Object.freeze({
@@ -438,6 +440,16 @@ export function multiplyGenerator(scalar: Scalar, options: PointEncodingOptions 
 }
 
 /**
+ * Secret times G as x and y, through the same comb and Z^(p - 2) as {@link multiplyGenerator}.
+ * @param secret - From 1 to n minus 1
+ * @returns {Affine} The point
+ */
+export function publicPoint(secret: bigint): Affine {
+  const point = multiplyBase(secret);
+  return scale(point, power(point.z, P - 2n, P));
+}
+
+/**
  * Add two scalars mod the curve order.
  * @param a - From 0 to the curve order minus 1
  * @param b - From 0 to the curve order minus 1
@@ -530,6 +542,21 @@ const HALF_N = N >> 1n;
 
 const SIGNATURE = /^[0-9a-f]{128}$/iu;
 const DIGEST = /^(?:[0-9a-f]{2}){1,64}$/iu;
+const DIGEST_REFUSAL = "Digest must be hex without 0x, 1 to 64 bytes";
+
+/** What {@link sign} signs. */
+export interface SignOptions {
+  /** The message digest as hex, 1 to 64 bytes, read as {@link verify} reads it. */
+  readonly digest: string;
+}
+
+/** An ECDSA signature and the recovery id that brings its key back. */
+export interface Signature {
+  /** 128 hex digits, r then s, with s at most n / 2. */
+  readonly signature: string;
+  /** From 0 to 3, the id {@link recoverPublicKey} takes. */
+  readonly recovery: number;
+}
 
 /** What {@link verify} checks a signature against. */
 export interface VerifyOptions {
@@ -575,9 +602,7 @@ function readSignature(value: unknown): SignatureParts {
  * @throws {RangeError} When the value is no hex of whole bytes, or longer than 64
  */
 function readDigest(value: unknown): bigint {
-  if (typeof value !== "string" || !DIGEST.test(value)) {
-    throw new RangeError("Digest must be hex without 0x, 1 to 64 bytes");
-  }
+  if (typeof value !== "string" || !DIGEST.test(value)) throw new RangeError(DIGEST_REFUSAL);
   const extra = value.length * 4 - 256;
   const e = BigInt(`0x${value}`);
   return extra > 0 ? e >> BigInt(extra) : e;
@@ -598,6 +623,46 @@ function isScalar(value: bigint): boolean {
 export function combine(a: bigint, b: bigint, point: Affine): Affine | undefined {
   const sum = add(multiplyBasePublic(a), multiply(toProjective(point), b));
   return sum.z === 0n ? undefined : scale(sum, invert(sum.z, P));
+}
+
+/**
+ * Keep s at most n / 2. n - s signs with -k, whose R has the other y, so the parity bit flips.
+ * @param commitment - R, the point k times G
+ * @param r - The x of R mod n
+ * @param s - From 1 to n minus 1
+ * @returns {Signature} The low-S signature and its recovery id
+ */
+function lowSignature(commitment: Affine, r: bigint, s: bigint): Signature {
+  const high = s > HALF_N;
+  const parity = Number(commitment.y & 1n) ^ Number(high);
+  return {
+    signature: `${encodeScalar(r)}${encodeScalar(high ? N - s : s)}`,
+    recovery: parity | (commitment.x >= N ? 2 : 0),
+  };
+}
+
+/**
+ * ECDSA by SEC 1 v2 section 4.1.3, k from RFC 6979, low s. kG takes the same steps for any k, the
+ * math mod n doesn't promise that.
+ * @param secret - The private key, from 1 to the curve order minus 1
+ * @param options - The digest
+ * @returns {Signature} The signature as r then s, and its recovery id
+ * @throws {RangeError} When the secret or the digest is no hex or out of range
+ * @throws {TypeError} When options is not an object
+ */
+export function sign(secret: Scalar, options: SignOptions): Signature {
+  const d = decodeScalar(secret, "Secret", 1n);
+  requireOptions(options, "sign(secret, { digest })");
+  const e = readDigest(options.digest);
+  const digest = readHex(options.digest, undefined, DIGEST_REFUSAL);
+  const candidates = nonces(N, { secret: d, digest });
+  for (;;) {
+    const k = candidates.next().value;
+    const commitment = publicPoint(k);
+    const r = commitment.x % N;
+    const s = (power(k, N - 2n, N) * (e + r * d)) % N;
+    if (r !== 0n && s !== 0n) return lowSignature(commitment, r, s);
+  }
 }
 
 /**

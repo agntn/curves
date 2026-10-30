@@ -49,6 +49,7 @@ describe("@agntn/curves", () => {
       "negatePoint",
       "recoverPublicKey",
       "secp256k1",
+      "sign",
       "subtractPoints",
       "subtractScalars",
       "verify",
@@ -56,7 +57,7 @@ describe("@agntn/curves", () => {
   });
 
   it("keeps BIP340 in its own entry", () => {
-    expect(Object.keys(bip340)).toEqual(["verify"]);
+    expect(Object.keys(bip340)).toEqual(["getPublicKey", "sign", "verify"]);
   });
 
   it("keeps ed25519 in its own entry", () => {

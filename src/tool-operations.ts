@@ -79,13 +79,17 @@ export type CurveDetails =
 
 /** What the secp256k1 tool computes, by operation. */
 export type Secp256k1Details =
-  | { operation: Exclude<Secp256k1Operation, "lift" | "check" | "verify">; point: string }
+  | { operation: Exclude<Secp256k1Operation, "lift" | "check" | "sign" | "verify">; point: string }
   | { operation: "lift"; even: string; odd: string }
   | { operation: "check"; onCurve: boolean }
+  | { operation: "sign"; signature: string; recovery: number; publicKey: string }
   | { operation: "verify"; valid: boolean };
 
 /** What the BIP340 tool computes, by operation. */
-export type Bip340Details = { operation: "verify"; valid: boolean };
+export type Bip340Details =
+  | { operation: "keypair"; publicKey: string }
+  | { operation: "sign"; signature: string; publicKey: string }
+  | { operation: "verify"; valid: boolean };
 
 /** What the Ed25519 tool computes, by operation. */
 export type Ed25519Details =
@@ -407,6 +411,7 @@ const SECP256K1_ARGUMENTS: Readonly<Record<Secp256k1Operation, readonly string[]
   multiply: ["point", "scalar", "compressed"],
   lift: ["x", "compressed"],
   check: ["point"],
+  sign: ["secret", "digest", "compressed"],
   verify: ["point", "digest", "signature", "lowS"],
   recover: ["digest", "signature", "recovery", "compressed"],
 };
@@ -505,6 +510,12 @@ const SECP256K1_COMPUTATIONS: Readonly<
   }),
   lift: ({ text, encoding }) => ({ operation: "lift", ...secp256k1.liftX(text("x"), encoding) }),
   check: ({ text }) => ({ operation: "check", onCurve: secp256k1.isOnCurve(text("point")) }),
+  sign: ({ text, encoding }) => {
+    const secret = text("secret");
+    const { signature, recovery } = secp256k1.sign(secret, { digest: text("digest") });
+    const publicKey = secp256k1.multiplyGenerator(secret, encoding);
+    return { operation: "sign", signature, recovery, publicKey };
+  },
   verify: ({ args, text }) => ({
     operation: "verify",
     valid: namingPoints(args, ["point"], () =>
@@ -526,9 +537,10 @@ const SECP256K1_COMPUTATIONS: Readonly<
 };
 
 /**
- * Do math on public secp256k1 points, or verify an ECDSA signature and recover its key.
+ * Do math on public secp256k1 points, or sign a digest with ECDSA, verify a signature and recover
+ * its key.
  * @param args - Tool arguments, the operation and the ones it takes
- * @returns {ToolResult<Secp256k1Details>} The resulting point, both lifted points or the verdict
+ * @returns {ToolResult<Secp256k1Details>} A point, the lifted pair, a signature or the verdict
  */
 export function computeSecp256k1(
   args: Readonly<Record<string, unknown>>,
@@ -546,6 +558,8 @@ export function computeSecp256k1(
 
 /** The arguments each BIP340 operation takes. */
 const BIP340_ARGUMENTS: Readonly<Record<Bip340Operation, readonly string[]>> = {
+  keypair: ["secret"],
+  sign: ["secret", "message", "random"],
   verify: ["publicKey", "message", "signature"],
 };
 
@@ -568,9 +582,9 @@ function signedMessage(args: Readonly<Record<string, unknown>>, operation: strin
 }
 
 /**
- * Verify a BIP340 signature.
+ * Derive an x-only key, sign by BIP340, or verify a BIP340 signature.
  * @param args - Tool arguments, the operation and the ones it takes
- * @returns {ToolResult<Bip340Details>} The verdict
+ * @returns {ToolResult<Bip340Details>} The key, the signature with its key, or the verdict
  */
 export function computeBip340(args: Readonly<Record<string, unknown>>): ToolResult<Bip340Details> {
   const operation = oneOf(args["operation"], "operation", BIP340_OPERATIONS);
@@ -579,7 +593,16 @@ export function computeBip340(args: Readonly<Record<string, unknown>>): ToolResu
     if (isUnset(args[name])) throw new TypeError(`${operation} needs ${name}`);
     return requiredString(args[name], name);
   };
+  if (operation === "keypair") {
+    return result({ operation, publicKey: bip340.getPublicKey(text("secret")) });
+  }
   const message = signedMessage(args, operation);
+  if (operation === "sign") {
+    const secret = text("secret");
+    const random = isUnset(args["random"]) ? {} : { random: text("random") };
+    const signature = bip340.sign(secret, { message, ...random });
+    return result({ operation, signature, publicKey: bip340.getPublicKey(secret) });
+  }
   const publicKey = text("publicKey");
   const valid = bip340.verify(text("signature"), { message, publicKey });
   return result({ operation, valid });

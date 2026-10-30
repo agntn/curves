@@ -86,3 +86,39 @@ export const block170: SignedDigest = {
   publicKey:
     "0411db93e1dcdb8a016b49840f8c53bc1eb68a382e97b1482ecad7b148a6909a5cb2e0eaddfb84ccf9744464f82e160bfa9b8b64f9d4c03f999b8643f656b412a3",
 };
+
+/** A signature with the secret that made it, for the checks that sign. */
+export interface SignedBySecret extends SignedDigest {
+  readonly secret: string;
+}
+
+/**
+ * Edges signed by @noble/curves 2.4.0 with `prehash: false`: secret 1 over a digest above n, which
+ * RFC 6979 reduces before it seeds the nonce, then n - 1 over zeros and over n + 1.
+ */
+export const nobleEdges: readonly SignedBySecret[] = [
+  {
+    secret: "1",
+    digest: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    signature:
+      "7cb38cc5712e9e11a767615f6080dbc111c9cdd613eb98999fd92a86bafd45407923ca1f4d03471d2866f776ef8a6d3cac099b427331aeb245aa9dafeddcf115",
+    recovery: 0,
+    publicKey: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+  },
+  {
+    secret: "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
+    digest: "0000000000000000000000000000000000000000000000000000000000000000",
+    signature:
+      "919026f3e239ea52cf530eb6d345dc2b56ef0928f1e9ad20d8f360284dc6504814395e7137e2204f15b69239010f3c34fbb3c858a29b0d106b1fa65bc0047263",
+    recovery: 0,
+    publicKey: "0379be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+  },
+  {
+    secret: "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
+    digest: "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364142",
+    signature:
+      "eaa03e6c5cc815dd7cee2e11460df51a04bfd9b3169aa63f735c95dcf623c95d192bf170e5284efefdb0d8ce148759a48ada553bd929d3deda5451decfa5c70e",
+    recovery: 1,
+    publicKey: "0379be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+  },
+];

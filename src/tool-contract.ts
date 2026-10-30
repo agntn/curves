@@ -31,14 +31,15 @@ export const SECP256K1_OPERATIONS = [
   "multiply",
   "lift",
   "check",
+  "sign",
   "verify",
   "recover",
 ] as const;
 
 export type Secp256k1Operation = (typeof SECP256K1_OPERATIONS)[number];
 
-/** What `curves_bip340_compute` does with BIP340 Schnorr signatures. */
-export const BIP340_OPERATIONS = ["verify"] as const;
+/** What `curves_bip340_compute` does with BIP340 Schnorr keys and signatures. */
+export const BIP340_OPERATIONS = ["keypair", "sign", "verify"] as const;
 
 export type Bip340Operation = (typeof BIP340_OPERATIONS)[number];
 

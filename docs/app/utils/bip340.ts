@@ -1,5 +1,7 @@
 /** BIP340 test vector 1: the hex digits of pi as the message, signed by a key made of e's. */
 export const PI_VECTOR = {
+  secret: "b7e151628aed2a6abf7158809cf4f3c762e7160f38b4da56a784d9045190cfef",
+  random: "0000000000000000000000000000000000000000000000000000000000000001",
   publicKey: "dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659",
   message: "243f6a8885a308d313198a2e03707344a4093822299f31d0082efa98ec4e6c89",
   signature:
@@ -8,6 +10,8 @@ export const PI_VECTOR = {
 
 /** BIP340 test vector 15, a signature over no bytes at all. */
 export const EMPTY_VECTOR = {
+  secret: "0340034003400340034003400340034003400340034003400340034003400340",
+  random: "0000000000000000000000000000000000000000000000000000000000000000",
   publicKey: "778caa53b4393ac467774d09497a87224bf9fab6f6e68b23086497324d6fd117",
   message: "",
   signature:

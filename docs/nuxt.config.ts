@@ -23,8 +23,8 @@ export default defineNuxtConfig({
       /** `../src` imports them; Vite would look for them from the repo root upward. */
       dedupe: ["@agntn/hashes", "@agntn/tools"],
     },
-    /** sr25519 hashes its seeds with SHA-512 from `@agntn/hashes`, in the playground too. */
-    optimizeDeps: { include: ["@agntn/hashes/sha2"] },
+    /** Signing hashes with SHA-2 and HMAC from `@agntn/hashes`, in the playground too. */
+    optimizeDeps: { include: ["@agntn/hashes/hmac", "@agntn/hashes/sha2"] },
     server: {
       /** Dev serves the library from outside the workspace, which Vite refuses without this. */
       fs: { allow: [resolve(librarySource, "..")] },

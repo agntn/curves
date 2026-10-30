@@ -14,13 +14,15 @@ import {
   negatePoint,
   recoverPublicKey,
   secp256k1,
+  sign,
   subtractPoints,
   subtractScalars,
   verify,
   type RecoverOptions,
 } from "../src/secp256k1.ts";
+import { nonces } from "../src/core/rfc6979.ts";
 import { combine } from "../src/core/secp256k1.ts";
-import { block170, highS, nobleSignatures, overflow } from "./fixtures/ecdsa.ts";
+import { block170, highS, nobleEdges, nobleSignatures, overflow } from "./fixtures/ecdsa.ts";
 import {
   curveVectors,
   generatorMultiples,
@@ -409,5 +411,87 @@ describe("secp256k1 ECDSA", () => {
     expect(() => {
       Reflect.apply(recoverPublicKey, undefined, [signature, { digest, recovery, compressed: 1 }]);
     }).toThrow("Compressed must be a boolean");
+  });
+});
+
+/* The key behind noble signature i, by the recipe in the fixture's header. */
+function nobleKey(index: number): string {
+  return Buffer.from(sha256(Buffer.from(`agntn/curves ecdsa key ${index}`))).toString("hex");
+}
+
+/* The first k RFC 6979 draws for a key and SHA-256 of a message, on a group of the given order. */
+function firstNonce(order: bigint, secret: bigint, message: string): bigint {
+  return nonces(order, { secret, digest: sha256(Buffer.from(message)) }).next().value;
+}
+
+describe("secp256k1 ECDSA signing", () => {
+  it("signs what @noble/curves 2.4.0 signed, recovery ids and edge keys included", () => {
+    for (const [index, { digest, signature, recovery }] of nobleSignatures.entries()) {
+      expect(sign(nobleKey(index), { digest }), digest).toEqual({ signature, recovery });
+    }
+    for (const { secret, digest, signature, recovery, publicKey } of nobleEdges) {
+      expect(sign(secret, { digest }), digest).toEqual({ signature, recovery });
+      expect(sign(BigInt(`0x${secret}`), { digest }).signature).toBe(signature);
+      expect(multiplyGenerator(secret)).toBe(publicKey);
+    }
+  });
+
+  it("draws k as RFC 6979 does, past the two candidates its K-163 example throws out", () => {
+    const k163 = 0x4000000000000000000020108a2e0cc0d99f8a5efn;
+    expect(firstNonce(k163, 0x09a4d6792295a7f730fc3f2b49cbc0f62e862272fn, "sample")).toBe(
+      0x23af4074c90a02b3fe61d286d5c87f425e6bdd81bn,
+    );
+    const p256 = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
+    const x = 0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721n;
+    expect(firstNonce(p256, x, "sample")).toBe(
+      0xa6e3c57dd01abe90086538398355dd4c3b17aa873382b0f24d6129493d8aad60n,
+    );
+    expect(firstNonce(p256, x, "test")).toBe(
+      0xd16b6ae827f17175e040871a1c7ec3500192c4c92677336ec2537acaee0008e0n,
+    );
+  });
+
+  it("gives low-S signatures that verify and recover to the signer, at the digit edges too", () => {
+    for (const [index, secret] of edges.entries()) {
+      const digest = Buffer.from(sha256(new Uint8Array([index, 1]))).toString("hex");
+      const { signature, recovery } = sign(secret, { digest });
+      const publicKey = multiplyGenerator(secret);
+      expect(verify(signature, { digest, publicKey, lowS: true }), String(secret)).toBe(true);
+      expect(recoverPublicKey(signature, { digest, recovery })).toBe(publicKey);
+    }
+  });
+
+  it("signs a digest the same way every time, and one bit off another way", () => {
+    const { digest } = signed;
+    const secret = nobleKey(0);
+    expect(sign(secret, { digest })).toEqual(sign(secret, { digest: digest.toUpperCase() }));
+    const flipped = `${digest.slice(0, -1)}${(Number.parseInt(digest.slice(-1), 16) ^ 1).toString(16)}`;
+    expect(sign(secret, { digest: flipped }).signature.slice(0, 64)).not.toBe(
+      sign(secret, { digest }).signature.slice(0, 64),
+    );
+  });
+
+  it("refuses arguments in another shape, in the caller's words", () => {
+    const { digest } = signed;
+    const secret = nobleKey(0);
+    for (const malformed of ["", "0", 0n, order.toString(16), order, "0x01", "zz", null, 7]) {
+      expect(() => {
+        Reflect.apply(sign, undefined, [malformed, { digest }]);
+      }).toThrow("Secret must be hex without 0x or a bigint, from 1 to the curve order minus 1");
+    }
+    for (const malformed of ["", "0", "0x00", "00".repeat(65), null]) {
+      expect(() => {
+        Reflect.apply(sign, undefined, [secret, { digest: malformed }]);
+      }).toThrow("Digest must be hex without 0x, 1 to 64 bytes");
+    }
+    for (const options of [undefined, null, digest]) {
+      expect(() => {
+        Reflect.apply(sign, undefined, [secret, options]);
+      }).toThrow("Call it as sign(secret, { digest })");
+    }
+    const nobleShape = [Buffer.from(digest, "hex"), Buffer.from(secret, "hex")];
+    expect(() => {
+      Reflect.apply(sign, undefined, nobleShape);
+    }).toThrow("Secret must be hex without 0x or a bigint");
   });
 });
