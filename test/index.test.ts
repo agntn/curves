@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import * as bip340 from "../src/bip340.ts";
 import * as ed25519 from "../src/ed25519.ts";
 import * as root from "../src/index.ts";
+import * as p256 from "../src/p256.ts";
 import * as ristretto255 from "../src/ristretto255.ts";
 import * as secp256k1 from "../src/secp256k1.ts";
 import * as sr25519 from "../src/sr25519.ts";
@@ -52,6 +53,22 @@ describe("@agntn/curves", () => {
       "sign",
       "subtractPoints",
       "subtractScalars",
+      "verify",
+    ]);
+  });
+
+  it("keeps P-256 in its own entry, points and verification only", () => {
+    expect(Object.keys(p256).toSorted()).toEqual([
+      "INVALID_POINT",
+      "addPoints",
+      "convertPoint",
+      "isOnCurve",
+      "liftX",
+      "multiplyGenerator",
+      "multiplyPoint",
+      "negatePoint",
+      "p256",
+      "subtractPoints",
       "verify",
     ]);
   });

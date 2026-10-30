@@ -7,6 +7,7 @@ import {
   computeBip340,
   computeCurve,
   computeEd25519,
+  computeP256,
   computeSecp256k1,
   computeSr25519,
 } from "../src/tool-operations.ts";
@@ -16,6 +17,7 @@ import {
 } from "./fixtures/bip340.ts";
 import { highS, nobleEdges, nobleSignatures } from "./fixtures/ecdsa.ts";
 import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
+import { p256Rfc6979, p256Vectors } from "./fixtures/p256.ts";
 import { devAccounts, keyringPairs, scureVectors, subkeySeeds } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
@@ -89,6 +91,7 @@ describe("curves MCP server", () => {
       "curves_compute",
       "curves_secp256k1_compute",
       "curves_bip340_compute",
+      "curves_p256_compute",
       "curves_sr25519_compute",
       "curves_ed25519_compute",
     ]);
@@ -285,6 +288,46 @@ describe("curves MCP server", () => {
     expect(
       await refused({ operation: "verify", point: `02${"00".repeat(32)}`, digest, signature }),
     ).toContain("point is not a SEC1 point of secp256k1");
+  });
+
+  it("computes on P-256 and verifies the ECDSA signatures RFC 6979 prints", async () => {
+    const client = await connectTestClient();
+    const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+      answer(await client.callTool({ name: "curves_p256_compute", arguments: args }));
+    const refused = async (args: Readonly<Record<string, unknown>>): Promise<string> =>
+      failure(await client.callTool({ name: "curves_p256_compute", arguments: args }));
+    const { publicKey, signatures } = p256Rfc6979;
+    const [{ signature }] = signatures;
+    const digest = "af2bdbe1aa9b6ec1e2ade1d694f41fc71a831d0268e9891562113d8a62add1bf";
+
+    expect(await call({ operation: "add", point: p256Vectors.g, other: p256Vectors.twoG })).toEqual(
+      { operation: "add", point: p256Vectors.threeG },
+    );
+    expect(await call({ operation: "lift", x: p256Vectors.g.slice(2) })).toEqual({
+      operation: "lift",
+      even: p256Vectors.minusG,
+      odd: p256Vectors.g,
+    });
+    expect(await call({ operation: "check", point: secp256k1Vectors.g })).toEqual({
+      operation: "check",
+      onCurve: false,
+    });
+    expect(await call({ operation: "verify", point: publicKey, digest, signature })).toEqual({
+      operation: "verify",
+      valid: true,
+    });
+    expect(
+      await call({ operation: "verify", point: publicKey, digest, signature, lowS: true }),
+    ).toEqual({ operation: "verify", valid: false });
+    expect(
+      await refused({ operation: "verify", point: secp256k1Vectors.g, digest, signature }),
+    ).toContain("point is not a SEC1 point of P-256");
+    expect(
+      await refused({ operation: "lift", x: publicKey.slice(2, 66), point: publicKey }),
+    ).toContain("lift does not take point");
+    expect(await refused({ operation: "sign", point: publicKey })).toContain(
+      "Invalid arguments at /operation",
+    );
   });
 
   it("signs a digest with ECDSA on secp256k1, with the recovery id recover takes", async () => {
@@ -604,6 +647,9 @@ describe("curve executors", () => {
       operation: "negate",
       point: minusG,
     });
+    expect(computeP256({ operation: "negate", point: p256Vectors.g, scalar: " " }).details).toEqual(
+      { operation: "negate", point: p256Vectors.minusG },
+    );
   });
 
   it("guard the contract even when a host skips schema validation", () => {
@@ -636,6 +682,18 @@ describe("curve executors", () => {
     expect(() => computeSecp256k1({ operation: "negate", point: g, compressed: "yes" })).toThrow(
       "Compressed must be a boolean",
     );
+    expect(() =>
+      computeSecp256k1({ operation: "add", point: g, other: g, digest: "00", secret: "01" }),
+    ).toThrow("add does not take secret, digest");
+    expect(() => computeP256({ operation: "multiply", point: p256Vectors.g })).toThrow(
+      "multiply needs scalar",
+    );
+    expect(() => computeP256({ operation: "sign", secret: "01", digest: "00" })).toThrow(
+      "operation must be one of add, subtract, negate, multiply, lift, check, verify",
+    );
+    expect(() =>
+      computeP256({ operation: "verify", point: p256Vectors.g, digest: "00", signature: "00" }),
+    ).toThrow("Signature must be 128 hex digits");
   });
 });
 

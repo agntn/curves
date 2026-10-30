@@ -13,11 +13,14 @@
     "elliptic-curve",
     "mcp",
     "monero",
+    "nist",
+    "p256",
     "polkadot",
     "ristretto255",
     "schnorr",
     "sec1",
     "secp256k1",
+    "secp256r1",
     "sr25519",
     "substrate",
     "weierstrass"
@@ -54,6 +57,10 @@
     "./bip340": {
       "types": "./dist/bip340.d.mts",
       "import": "./dist/bip340.mjs"
+    },
+    "./p256": {
+      "types": "./dist/p256.d.mts",
+      "import": "./dist/p256.mjs"
     },
     "./ed25519": {
       "types": "./dist/ed25519.d.mts",
