@@ -12,7 +12,7 @@ import {
 } from "../src/tool-operations.ts";
 import { nobleSignatures as schnorrSignatures } from "./fixtures/bip340.ts";
 import { highS, nobleSignatures } from "./fixtures/ecdsa.ts";
-import { rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
+import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 import { devAccounts, keyringPairs, scureVectors, subkeySeeds } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
@@ -351,6 +351,37 @@ describe("curves MCP server", () => {
     ).toContain("Invalid arguments at /publicKey");
   });
 
+  it("derives an Ed25519 key and signs RFC 8032 test 2 byte for byte", async () => {
+    const client = await connectTestClient();
+    const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+      answer(await client.callTool({ name: "curves_ed25519_compute", arguments: args }));
+    const refused = async (args: Readonly<Record<string, unknown>>): Promise<string> =>
+      failure(await client.callTool({ name: "curves_ed25519_compute", arguments: args }));
+    const [, keys] = rfc8032Keys;
+    const [, test2] = rfc8032Signatures;
+    if (keys === undefined || test2 === undefined)
+      throw new Error("The RFC 8032 fixture lost test 2");
+    const [secret, publicKey] = keys;
+    const { message, signature } = test2;
+
+    expect(await call({ operation: "keypair", secret })).toEqual({
+      operation: "keypair",
+      publicKey,
+    });
+    expect(await call({ operation: "sign", secret, message })).toEqual({
+      operation: "sign",
+      signature,
+      publicKey,
+    });
+    expect(await refused({ operation: "sign", secret })).toContain("sign needs message");
+    expect(await refused({ operation: "keypair", secret: `${secret}${publicKey}` })).toContain(
+      "Invalid arguments at /secret",
+    );
+    expect(await refused({ operation: "sign", secret, message, publicKey })).toContain(
+      "sign does not take publicKey",
+    );
+  });
+
   it("makes, signs with and derives sr25519 keys", async () => {
     const client = await connectTestClient();
     const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
@@ -587,14 +618,20 @@ describe("Ed25519 executor", () => {
       message: smallOrder.message,
       signature: smallOrder.signature,
     };
-    expect(computeEd25519({ ...order8, zip215: null }).details.valid).toBe(true);
-    expect(computeEd25519({ ...order8, zip215: false }).details.valid).toBe(false);
+    expect(computeEd25519({ ...order8, zip215: null }).details).toEqual({
+      operation: "verify",
+      valid: true,
+    });
+    expect(computeEd25519({ ...order8, zip215: false }).details).toEqual({
+      operation: "verify",
+      valid: false,
+    });
     expect(() => computeEd25519({ ...call, publicKey: "" })).toThrow("verify needs publicKey");
   });
 
   it("guards the contract even when a host skips schema validation", () => {
-    expect(() => computeEd25519({ ...call, operation: "sign" })).toThrow(
-      "operation must be one of verify",
+    expect(() => computeEd25519({ ...call, operation: "derive" })).toThrow(
+      "operation must be one of keypair, sign, verify",
     );
     expect(() => computeEd25519({ ...call, zip215: "false" })).toThrow("zip215 must be a boolean");
     expect(() => computeEd25519({ ...call, message: "00".repeat(4097) })).toThrow(
@@ -602,6 +639,46 @@ describe("Ed25519 executor", () => {
     );
     expect(() => computeEd25519({ ...call, message: "0x00" })).toThrow(
       "Message must be hex without 0x",
+    );
+  });
+});
+
+describe("Ed25519 signing executor", () => {
+  const [keys] = rfc8032Keys;
+  const [empty] = rfc8032Signatures;
+  if (keys === undefined || empty === undefined)
+    throw new Error("The RFC 8032 fixture lost test 1");
+  const [secret, publicKey] = keys;
+
+  it("signs a blank message as the empty one and hands back the key", () => {
+    expect(computeEd25519({ operation: "sign", secret, message: "" }).details).toEqual({
+      operation: "sign",
+      signature: empty.signature,
+      publicKey,
+    });
+    expect(computeEd25519({ operation: "keypair", secret }).details).toEqual({
+      operation: "keypair",
+      publicKey,
+    });
+  });
+
+  it("refuses what keypair and sign don't take, in the caller's words", () => {
+    expect(() => computeEd25519({ operation: "keypair" })).toThrow("keypair needs secret");
+    expect(() => computeEd25519({ operation: "sign", message: "" })).toThrow("sign needs secret");
+    expect(() => computeEd25519({ operation: "keypair", secret, message: "00" })).toThrow(
+      "keypair does not take message",
+    );
+    expect(() => computeEd25519({ operation: "sign", secret, message: "", zip215: false })).toThrow(
+      "sign does not take zip215",
+    );
+    expect(() => computeEd25519({ operation: "verify", ...empty, secret })).toThrow(
+      "verify does not take secret",
+    );
+    expect(() => computeEd25519({ operation: "sign", secret: 7, message: "" })).toThrow(
+      "secret must be a string",
+    );
+    expect(() => computeEd25519({ operation: "sign", secret: "00", message: "" })).toThrow(
+      "Secret must be 64 hex digits without 0x, the 32 bytes RFC 8032 hashes",
     );
   });
 });

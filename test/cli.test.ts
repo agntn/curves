@@ -19,7 +19,7 @@ import pkg from "../package.json" with { type: "json" };
 import { serverInfo } from "../src/server-info.ts";
 import { nobleSignatures as schnorrSignatures } from "./fixtures/bip340.ts";
 import { highS, nobleSignatures } from "./fixtures/ecdsa.ts";
-import { rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
+import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 
 const [signed] = nobleSignatures;
 if (signed === undefined) throw new Error("The noble fixture lost its first signature");
@@ -55,7 +55,7 @@ describe("curves CLI", () => {
     expect(help.stdout).toMatch(/^ {2}secp256k1 {2}Point math/m);
     expect(help.stdout).toMatch(/^ {2}bip340 {5}BIP340 Schnorr/m);
     expect(help.stdout).toMatch(/^ {2}sr25519 {4}sr25519 keys/m);
-    expect(help.stdout).toMatch(/^ {2}ed25519 {4}Ed25519 signatures/m);
+    expect(help.stdout).toMatch(/^ {2}ed25519 {4}Ed25519 keys and signatures/m);
     expect(usage.stdout).toContain("USAGE curves compute [OPTIONS] <OPERATION>");
     expect(unknown).toMatchObject({
       code: 1,
@@ -140,6 +140,23 @@ describe("curves CLI", () => {
     expect(run("ed25519", "verify", ...flags, "--no-zip215").stdout).toBe(
       '{"operation":"verify","valid":false}\n',
     );
+  });
+
+  it("signs RFC 8032 test 3 from flags and derives its key", () => {
+    const [, , keys] = rfc8032Keys;
+    const [, , test3] = rfc8032Signatures;
+    if (keys === undefined || test3 === undefined)
+      throw new Error("The RFC 8032 fixture lost test 3");
+    const [secret, publicKey] = keys;
+    const { message, signature } = test3;
+    expect(run("ed25519", "keypair", "--secret", secret)).toMatchObject({
+      code: 0,
+      stdout: `{"operation":"keypair","publicKey":"${publicKey}"}\n`,
+    });
+    expect(run("ed25519", "sign", "--secret", secret, "--message", message)).toMatchObject({
+      code: 0,
+      stdout: `{"operation":"sign","signature":"${signature}","publicKey":"${publicKey}"}\n`,
+    });
   });
 
   it("makes an sr25519 key pair and verifies a hex message", () => {

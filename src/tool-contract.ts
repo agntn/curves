@@ -42,8 +42,8 @@ export const BIP340_OPERATIONS = ["verify"] as const;
 
 export type Bip340Operation = (typeof BIP340_OPERATIONS)[number];
 
-/** What `curves_ed25519_compute` does with Ed25519 signatures. */
-export const ED25519_OPERATIONS = ["verify"] as const;
+/** What `curves_ed25519_compute` does with Ed25519 keys and signatures. */
+export const ED25519_OPERATIONS = ["keypair", "sign", "verify"] as const;
 
 export type Ed25519Operation = (typeof ED25519_OPERATIONS)[number];
 

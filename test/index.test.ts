@@ -64,6 +64,7 @@ describe("@agntn/curves", () => {
       "INVALID_POINT",
       "addPoints",
       "ed25519",
+      "getPublicKey",
       "isIdentity",
       "isTorsionFree",
       "isValidPoint",
@@ -71,6 +72,7 @@ describe("@agntn/curves", () => {
       "multiplyPoint",
       "negatePoint",
       "reduceScalar",
+      "sign",
       "subtractPoints",
       "verify",
     ]);

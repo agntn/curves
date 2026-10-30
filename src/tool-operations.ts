@@ -88,7 +88,10 @@ export type Secp256k1Details =
 export type Bip340Details = { operation: "verify"; valid: boolean };
 
 /** What the Ed25519 tool computes, by operation. */
-export type Ed25519Details = { operation: "verify"; valid: boolean };
+export type Ed25519Details =
+  | { operation: "keypair"; publicKey: string }
+  | { operation: "sign"; signature: string; publicKey: string }
+  | { operation: "verify"; valid: boolean };
 
 /** What the sr25519 tool computes, by operation. A secret or a seed comes back only when new. */
 export type Sr25519Details =
@@ -584,6 +587,8 @@ export function computeBip340(args: Readonly<Record<string, unknown>>): ToolResu
 
 /** The arguments each Ed25519 operation takes. */
 const ED25519_ARGUMENTS: Readonly<Record<Ed25519Operation, readonly string[]>> = {
+  keypair: ["secret"],
+  sign: ["secret", "message"],
   verify: ["publicKey", "message", "signature", "zip215"],
 };
 
@@ -602,9 +607,10 @@ function zip215(value: unknown): boolean {
 }
 
 /**
- * Verify an Ed25519 signature under ZIP 215's rules, or the strict ones when zip215 is false.
+ * Derive an Ed25519 public key, sign by RFC 8032, or verify under ZIP 215's rules, or the strict
+ * ones when zip215 is false.
  * @param args - Tool arguments, the operation and the ones it takes
- * @returns {ToolResult<Ed25519Details>} The verdict
+ * @returns {ToolResult<Ed25519Details>} The public key, the signature with its key, or the verdict
  */
 export function computeEd25519(
   args: Readonly<Record<string, unknown>>,
@@ -615,7 +621,15 @@ export function computeEd25519(
     if (isUnset(args[name])) throw new TypeError(`${operation} needs ${name}`);
     return requiredString(args[name], name);
   };
+  if (operation === "keypair") {
+    return result({ operation, publicKey: ed25519.getPublicKey(text("secret")) });
+  }
   const message = signedMessage(args, operation);
+  if (operation === "sign") {
+    const secret = text("secret");
+    const signature = ed25519.sign(secret, { message });
+    return result({ operation, signature, publicKey: ed25519.getPublicKey(secret) });
+  }
   const publicKey = text("publicKey");
   const rules = zip215(args["zip215"]);
   const valid = ed25519.verify(text("signature"), { message, publicKey, zip215: rules });

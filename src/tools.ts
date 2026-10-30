@@ -399,8 +399,13 @@ export const ed25519ComputeSchema = Type.Object(
   {
     operation: Type.String({
       enum: [...ED25519_OPERATIONS],
-      description: "verify takes publicKey, message and signature, and zip215 to pick the rules",
+      description:
+        "keypair takes secret, sign takes secret and message, verify takes publicKey, message and signature, and zip215 to pick the rules",
     }),
+    secret: hexBytes(
+      32,
+      "keypair and sign only, required there: the 32-byte secret of RFC 8032, which SHA-512 turns into the scalar and the nonce prefix",
+    ),
     publicKey: hexBytes(
       32,
       "verify only, required there: the signer's key as RFC 8032 writes it, y with the sign of x in the top bit",
@@ -410,7 +415,7 @@ export const ed25519ComputeSchema = Type.Object(
         maxLength: MAX_MESSAGE_LENGTH,
         pattern: "^(?:[0-9A-Fa-f]{2})*$",
         description:
-          "verify only, required there: the exact bytes that were signed, as hex without 0x, any length, empty too. Ed25519 hashes them itself, so pass them as they are",
+          "sign and verify only, required there: the exact bytes to sign or that were signed, as hex without 0x, any length, empty too. Ed25519 hashes them itself, so pass them as they are",
       }),
     ),
     signature: hexBytes(64, "verify only, required there: R, then S"),
@@ -428,18 +433,19 @@ export const ed25519ComputeTool = defineTool({
   name: "curves_ed25519_compute",
   title: "Compute with Ed25519",
   description:
-    "Verify an Ed25519 signature, the kind Solana, Stellar, XRPL, SSH and OpenPGP keys make. The key is 32 bytes as RFC 8032 encodes it, the message is hex of any length, empty included, and the signature is 64 bytes. The cofactored equation of RFC 8032 decides, under ZIP 215's rules unless zip215 is false. An R or a key that doesn't decode fails like any bad signature.",
+    "Derive an Ed25519 public key from a 32-byte secret, sign a message, or verify a signature, the kind Solana, Stellar, XRPL, SSH and OpenPGP keys make. Keys are 32 bytes as RFC 8032 encodes them, the message is hex of any length, empty included, and the signature is 64 bytes. Signing is deterministic, so one secret and one message always give the same signature. The cofactored equation of RFC 8032 decides a verify, under ZIP 215's rules unless zip215 is false. An R or a key that doesn't decode fails like any bad signature. The secret enters the transcript, so pass only disposable keys or test vectors.",
   snippet:
-    "Use for Ed25519 signatures from Solana, Stellar, XRPL, SSH or OpenPGP, once you have the signed bytes.",
+    "Use for Ed25519 keys and signatures from Solana, Stellar, XRPL, SSH or OpenPGP, once you have the bytes.",
   guidelines: [
+    "keypair takes secret and returns publicKey; sign takes secret and message and returns signature and publicKey",
     "verify takes publicKey, message and signature and answers valid true or false",
-    "message is the signed bytes as hex, not text: Ed25519 hashes them itself",
+    "message is the bytes as hex, not text: Ed25519 hashes them itself",
     "zip215 false refuses non-canonical encodings and keys of small order, as OpenPGP asks",
   ],
   effect: "read",
   cli: {
     command: "ed25519",
-    description: "Ed25519 signatures, checked by ZIP 215's rules or strict ones",
+    description: "Ed25519 keys and signatures, checked by ZIP 215's rules or strict ones",
     positional: ["operation"],
   },
   input: ed25519ComputeSchema,
