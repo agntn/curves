@@ -30,6 +30,7 @@ import {
 import * as bip340 from "./core/bip340.ts";
 import * as brainpoolP256r1 from "./core/brainpoolp256r1.ts";
 import * as brainpoolP384r1 from "./core/brainpoolp384r1.ts";
+import * as brainpoolP512r1 from "./core/brainpoolp512r1.ts";
 import { hexToBytes } from "./core/bytes.ts";
 import * as ed25519 from "./core/ed25519.ts";
 import * as p256 from "./core/p256.ts";
@@ -41,6 +42,7 @@ import {
   BIP340_OPERATIONS,
   BRAINPOOLP256R1_OPERATIONS,
   BRAINPOOLP384R1_OPERATIONS,
+  BRAINPOOLP512R1_OPERATIONS,
   CURVE_INTEGER_PATTERN,
   CURVE_OPERATIONS,
   DEFAULT_CURVE_POINTS_SHOWN,
@@ -114,6 +116,9 @@ export type BrainpoolP256r1Details = P256Details;
 
 /** What the brainpoolP384r1 tool computes: the same answers as P-384, as hex of the same length. */
 export type BrainpoolP384r1Details = P256Details;
+
+/** What the brainpoolP512r1 tool computes: the same answers as P-256, as hex of 64 bytes a number. */
+export type BrainpoolP512r1Details = P256Details;
 
 /** What the BIP340 tool computes, by operation. */
 export type Bip340Details =
@@ -602,6 +607,9 @@ const BRAINPOOLP256R1_COMPUTATIONS = sec1Computations(brainpoolP256r1, "brainpoo
 /** How each brainpoolP384r1 operation turns the arguments into its result. */
 const BRAINPOOLP384R1_COMPUTATIONS = sec1Computations(brainpoolP384r1, "brainpoolP384r1");
 
+/** How each brainpoolP512r1 operation turns the arguments into its result. */
+const BRAINPOOLP512R1_COMPUTATIONS = sec1Computations(brainpoolP512r1, "brainpoolP512r1");
+
 /** One SEC 1 curve tool: its operations, the arguments each takes and how each runs. */
 interface Sec1Tool<Operation extends string, Details> {
   readonly operations: readonly Operation[];
@@ -713,6 +721,21 @@ export function computeBrainpoolP384r1(
     operations: BRAINPOOLP384R1_OPERATIONS,
     arguments: P256_ARGUMENTS,
     computations: BRAINPOOLP384R1_COMPUTATIONS,
+  });
+}
+
+/**
+ * Do math on public brainpoolP512r1 points, or verify an ECDSA signature over a digest.
+ * @param args - Tool arguments, the operation and the ones it takes
+ * @returns {ToolResult<BrainpoolP512r1Details>} A point, the lifted pair or the verdict
+ */
+export function computeBrainpoolP512r1(
+  args: Readonly<Record<string, unknown>>,
+): ToolResult<BrainpoolP512r1Details> {
+  return computeSec1(args, {
+    operations: BRAINPOOLP512R1_OPERATIONS,
+    arguments: P256_ARGUMENTS,
+    computations: BRAINPOOLP512R1_COMPUTATIONS,
   });
 }
 

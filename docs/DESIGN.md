@@ -24,6 +24,7 @@ The curves come from [curves.ts](app/utils/curves.ts): a few specs (a, b, p, an 
 - The RFC 6979 P-521 key from [p521.ts](app/utils/p521.ts).
 - The Wycheproof brainpoolP256r1 key from [brainpoolp256r1.ts](app/utils/brainpoolp256r1.ts).
 - The Wycheproof brainpoolP384r1 key from [brainpoolp384r1.ts](app/utils/brainpoolp384r1.ts).
+- The Wycheproof brainpoolP512r1 key from [brainpoolp512r1.ts](app/utils/brainpoolp512r1.ts).
 - sr25519 keys from [sr25519.ts](app/utils/sr25519.ts).
 - Ed25519 vectors from [ed25519.ts](app/utils/ed25519.ts).
 
@@ -35,7 +36,7 @@ The curves come from [curves.ts](app/utils/curves.ts): a few specs (a, b, p, an 
 - **Playground.** A request instrument and a response instrument.
   - Request: every operation of every tool as a lead, its count from `OPERATION_COUNT`. The fields are `UInput` with variant `none` in the readout: a, b and p for the curve tool, point fields as `x,y`.
   - Checkboxes: `compressed`, `encoding`, `hard`, and the strict rules of Ed25519 (`zip215: false`).
-  - Chips, all `UButton` variant `chip`: the key an sr25519 keypair or derive starts from as a `from` row, then one per landing curve, secp256k1 sample, BIP340 vector, P-256 sample, P-384 sample, P-521 sample, brainpoolP256r1 sample, brainpoolP384r1 sample, sr25519 sample or Ed25519 vector. CLI and tool JSON with copy.
+  - Chips, all `UButton` variant `chip`: the key an sr25519 keypair or derive starts from as a `from` row, then one per landing curve, secp256k1 sample, BIP340 vector, P-256 sample, P-384 sample, P-521 sample, brainpoolP256r1 sample, brainpoolP384r1 sample, brainpoolP512r1 sample, sr25519 sample or Ed25519 vector. CLI and tool JSON with copy.
   - Response: one subject band with a reticle by answer kind (spline, sigma, scatter, target, orbit, check, key, signature, branch, alert). The heading is the answer itself (`k = 13`, `19 points`, a point).
   - Below it: rows from the details, a points band for a listing, `03 Full tool response`, and a footer with the measured milliseconds.
 
@@ -53,7 +54,7 @@ Departures from the shared rules, recorded for the shared package:
 
 - The hero instrument draws the group, not a record dossier: the domain is points on a grid, so the first screen shows all of them and the path a scalar takes through them.
 - The readout labels keep their case. a, b, p, G and kG are names in an equation, and an uppercase A is a different thing from a.
-- Two docs sections, Guide with four pages and Math with ten. No roster: the package has no registry of entries, only its tools.
+- Two docs sections, Guide with four pages and Math with eleven. No roster: the package has no registry of entries, only its tools.
 - No network call anywhere: every instrument computes in the browser from the library, and every footer that names locality says so.
 - The version comes from the root `package.json`; there's no data version.
 - The OG images ship local Figtree and Fira Code TTFs, the keys mechanism.

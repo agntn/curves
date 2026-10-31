@@ -9,6 +9,7 @@
     "brainpool",
     "brainpoolp256r1",
     "brainpoolp384r1",
+    "brainpoolp512r1",
     "discrete-log",
     "ecc",
     "ed25519",
@@ -84,6 +85,10 @@
     "./brainpoolp384r1": {
       "types": "./dist/brainpoolp384r1.d.mts",
       "import": "./dist/brainpoolp384r1.mjs"
+    },
+    "./brainpoolp512r1": {
+      "types": "./dist/brainpoolp512r1.d.mts",
+      "import": "./dist/brainpoolp512r1.mjs"
     },
     "./ed25519": {
       "types": "./dist/ed25519.d.mts",

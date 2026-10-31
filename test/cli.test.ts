@@ -28,6 +28,7 @@ import { p384Rfc6979 } from "./fixtures/p384.ts";
 import { p521Rfc6979, p521Vectors } from "./fixtures/p521.ts";
 import { brainpoolP256r1Signature, brainpoolP256r1Vectors } from "./fixtures/brainpoolp256r1.ts";
 import { brainpoolP384r1Signature, brainpoolP384r1Vectors } from "./fixtures/brainpoolp384r1.ts";
+import { brainpoolP512r1Signature, brainpoolP512r1Vectors } from "./fixtures/brainpoolp512r1.ts";
 
 const [signed] = nobleSignatures;
 if (signed === undefined) throw new Error("The noble fixture lost its first signature");
@@ -67,6 +68,7 @@ describe("curves CLI", () => {
     expect(help.stdout).toMatch(/^ {2}p521 {13}Point math on NIST P-521/m);
     expect(help.stdout).toMatch(/^ {2}brainpoolp256r1 {2}Point math on brainpoolP256r1/m);
     expect(help.stdout).toMatch(/^ {2}brainpoolp384r1 {2}Point math on brainpoolP384r1/m);
+    expect(help.stdout).toMatch(/^ {2}brainpoolp512r1 {2}Point math on brainpoolP512r1/m);
     expect(help.stdout).toMatch(/^ {2}sr25519 {10}sr25519 keys/m);
     expect(help.stdout).toMatch(/^ {2}ed25519 {10}Ed25519 keys and signatures/m);
     expect(usage.stdout).toContain("USAGE curves compute [OPTIONS] <OPERATION>");
@@ -197,6 +199,18 @@ describe("curves CLI", () => {
     expect(
       run("brainpoolp384r1", "lift", "--x", brainpoolP384r1Vectors.xWithoutPoint),
     ).toMatchObject({ code: 1, stderr: "No point of brainpoolP384r1 has this x\n" });
+  });
+
+  it("verifies Wycheproof's brainpoolP512r1 signature and finds no point at x = 0", () => {
+    const { publicKey, digest, signature } = brainpoolP512r1Signature;
+    const flags = ["--point", publicKey, "--digest", digest, "--signature", signature];
+    expect(run("brainpoolp512r1", "verify", ...flags)).toMatchObject({
+      code: 0,
+      stdout: '{"operation":"verify","valid":true}\n',
+    });
+    expect(
+      run("brainpoolp512r1", "lift", "--x", brainpoolP512r1Vectors.xWithoutPoint),
+    ).toMatchObject({ code: 1, stderr: "No point of brainpoolP512r1 has this x\n" });
   });
 
   it("signs a digest with ECDSA from flags, the way @noble/curves 2.4.0 did", () => {
