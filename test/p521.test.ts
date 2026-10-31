@@ -154,16 +154,18 @@ describe("P-521 point math", () => {
     expect(multiplyGenerator(p521Rfc6979.secret, uncompressed)).toBe(p521Rfc6979.publicKey);
   });
 
-  it("multiplies G and another point like the affine code, at the digit edges too", () => {
-    for (const scalar of edges) {
+  /* One case per edge: all of them in one test took 3.4 s of the 5 s limit on four cores. */
+  it.each(edges)(
+    "multiplies G and another point like the affine code, at digit edge %#",
+    (scalar) => {
       const product = sec1(multiplyOnCurve(curve, p521.g, scalar));
       expect(multiplyGenerator(scalar, uncompressed)).toBe(product);
       expect(multiplyPoint(g, scalar, uncompressed)).toBe(product);
       expect(multiplyPoint(other, scalar, uncompressed)).toBe(
         sec1(multiplyOnCurve(curve, coordinates(other), scalar)),
       );
-    }
-  });
+    },
+  );
 
   /* Each entry below n, 130 rows of 15 and then 16^130 alone: several seconds, hence the limit. */
   it(
