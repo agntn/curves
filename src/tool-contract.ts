@@ -71,6 +71,11 @@ export const BRAINPOOLP384R1_OPERATIONS = P256_OPERATIONS;
 
 export type BrainpoolP384r1Operation = P256Operation;
 
+/** What `curves_brainpoolp512r1_compute` does: the same as P-256, at 64 bytes a number. */
+export const BRAINPOOLP512R1_OPERATIONS = P256_OPERATIONS;
+
+export type BrainpoolP512r1Operation = P256Operation;
+
 /** What `curves_bip340_compute` does with BIP340 Schnorr keys and signatures. */
 export const BIP340_OPERATIONS = ["keypair", "sign", "verify"] as const;
 
@@ -117,6 +122,9 @@ export const SEC1_PATTERN = "0[23][0-9A-Fa-f]{64}|04[0-9A-Fa-f]{128}";
 
 /** The same on P-384, where a coordinate takes 96 hex digits. */
 export const SEC1_P384_PATTERN = "0[23][0-9A-Fa-f]{96}|04[0-9A-Fa-f]{192}";
+
+/** The same on brainpoolP512r1, where a coordinate takes 128 hex digits. */
+export const SEC1_BRAINPOOLP512R1_PATTERN = "0[23][0-9A-Fa-f]{128}|04[0-9A-Fa-f]{256}";
 
 /** The same on P-521, where a coordinate takes 132 hex digits. */
 export const SEC1_P521_PATTERN = "0[23][0-9A-Fa-f]{132}|04[0-9A-Fa-f]{264}";

@@ -13,6 +13,7 @@ import {
   BIP340_OPERATIONS,
   BRAINPOOLP256R1_OPERATIONS,
   BRAINPOOLP384R1_OPERATIONS,
+  BRAINPOOLP512R1_OPERATIONS,
   CURVE_INTEGER_PATTERN,
   CURVE_OPERATIONS,
   DEFAULT_CURVE_POINTS_SHOWN,
@@ -30,6 +31,7 @@ import {
   P256_OPERATIONS,
   P384_OPERATIONS,
   P521_OPERATIONS,
+  SEC1_BRAINPOOLP512R1_PATTERN,
   SEC1_P384_PATTERN,
   SEC1_P521_PATTERN,
   SEC1_PATTERN,
@@ -103,6 +105,7 @@ function curvePoint(description: string): TOptional<TObject<{ x: TString; y: TSt
 const SEC1_WIDTHS = {
   32: { pattern: SEC1_PATTERN, maxLength: 130 },
   48: { pattern: SEC1_P384_PATTERN, maxLength: 194 },
+  64: { pattern: SEC1_BRAINPOOLP512R1_PATTERN, maxLength: 258 },
   66: { pattern: SEC1_P521_PATTERN, maxLength: 266 },
 } as const;
 
@@ -764,6 +767,88 @@ export const brainpoolP384r1ComputeTool = defineTool({
   execute: async (params) => (await loadOperations()).computeBrainpoolP384r1(params),
 });
 
+export const brainpoolP512r1ComputeSchema = Type.Object(
+  {
+    operation: Type.String({
+      enum: [...BRAINPOOLP512R1_OPERATIONS],
+      description:
+        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, verify takes point as the public key with digest and signature",
+    }),
+    point: sec1Point("Every operation but lift, required there; the public key for verify", 64),
+    other: sec1Point(
+      "add and subtract only, required there: the point added to point or subtracted from it",
+      64,
+    ),
+    scalar: Type.Optional(
+      Type.String({
+        maxLength: 128,
+        pattern: "^[0-9A-Fa-f]{0,128}$",
+        description:
+          "multiply only, required there: 1 to n - 1 as hex without 0x. It enters the transcript, so pass a public tweak or a disposable key",
+      }),
+    ),
+    x: Type.Optional(
+      Type.String({
+        maxLength: 128,
+        pattern: "^(?:[0-9A-Fa-f]{128})?$",
+        description: "lift only, required there: x coordinate as 128 hex digits",
+      }),
+    ),
+    signature: Type.Optional(
+      Type.String({
+        maxLength: 256,
+        pattern: "^(?:[0-9A-Fa-f]{256})?$",
+        description:
+          "verify only, required there: the ECDSA signature as r then s, 256 hex digits without 0x. X.509 sends DER and OpenPGP two MPIs, so unpack r and s and pad each to 128 digits first",
+      }),
+    ),
+    digest: Type.Optional(
+      Type.String({
+        maxLength: 128,
+        pattern: `^(?:${DIGEST_PATTERN})?$`,
+        description:
+          "verify only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. Hash the message first, with SHA-512, since OpenPGP wants a digest as wide as the curve. n has 512 bits, so all 64 bytes count",
+      }),
+    ),
+    lowS: Type.Optional(
+      Type.Boolean({
+        description: "verify only: refuse s above n / 2. Default: false, since SEC 1 takes either",
+      }),
+    ),
+    compressed: Type.Optional(
+      Type.Boolean({
+        description:
+          "Output SEC1 encoding, for every operation but check and verify. Default: true",
+      }),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const brainpoolP512r1ComputeTool = defineTool({
+  name: "curves_brainpoolp512r1_compute",
+  title: "Compute on brainpoolP512r1",
+  description:
+    "Do curve math on public points of brainpoolP512r1 from RFC 5639: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Verify an ECDSA signature over a digest, the kind OpenPGP keys and TLS certificates on Brainpool carry. Points go in and come out as SEC1 hex, 65 or 129 bytes, a width no other curve here uses, so a P-384 or P-521 key gets refused on length alone. A sum that lands on the point at infinity is refused. Scalars enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
+  snippet:
+    "Use for brainpoolP512r1 public keys and the ECDSA signatures of OpenPGP keys and certificates on it, once you have the digest.",
+  guidelines: [
+    "add and subtract take point and other; negate takes point",
+    "multiply takes point and scalar, hex from 1 to n - 1",
+    "lift takes x and returns the even and the odd point",
+    "check takes point and answers onCurve true or false",
+    "verify takes point, digest and signature and answers valid true or false; hash the message yourself",
+  ],
+  effect: "read",
+  cli: {
+    command: "brainpoolp512r1",
+    description: "Point math on brainpoolP512r1 with SEC1 hex points, and ECDSA verify",
+    positional: ["operation"],
+  },
+  input: brainpoolP512r1ComputeSchema,
+  execute: async (params) => (await loadOperations()).computeBrainpoolP512r1(params),
+});
+
 export const sr25519ComputeSchema = Type.Object(
   {
     operation: Type.String({
@@ -907,6 +992,7 @@ export const curvesTools: readonly ToolDefinition[] = [
   p521ComputeTool,
   brainpoolP256r1ComputeTool,
   brainpoolP384r1ComputeTool,
+  brainpoolP512r1ComputeTool,
   sr25519ComputeTool,
   ed25519ComputeTool,
 ];

@@ -7,6 +7,7 @@ import {
   computeBip340,
   computeBrainpoolP256r1,
   computeBrainpoolP384r1,
+  computeBrainpoolP512r1,
   computeCurve,
   computeEd25519,
   computeP256,
@@ -26,6 +27,7 @@ import { p384Rfc6979, p384Vectors } from "./fixtures/p384.ts";
 import { p521Rfc6979, p521Vectors } from "./fixtures/p521.ts";
 import { brainpoolP256r1Signature, brainpoolP256r1Vectors } from "./fixtures/brainpoolp256r1.ts";
 import { brainpoolP384r1Signature, brainpoolP384r1Vectors } from "./fixtures/brainpoolp384r1.ts";
+import { brainpoolP512r1Signature, brainpoolP512r1Vectors } from "./fixtures/brainpoolp512r1.ts";
 import { devAccounts, keyringPairs, scureVectors, subkeySeeds } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
@@ -104,6 +106,7 @@ describe("curves MCP server", () => {
       "curves_p521_compute",
       "curves_brainpoolp256r1_compute",
       "curves_brainpoolp384r1_compute",
+      "curves_brainpoolp512r1_compute",
       "curves_sr25519_compute",
       "curves_ed25519_compute",
     ]);
@@ -418,6 +421,47 @@ describe("curves MCP server", () => {
     expect(await refused({ operation: "negate", point: p384Vectors.g })).toContain(
       "Invalid arguments at /point",
     );
+    expect(await refused({ operation: "sign", point: publicKey })).toContain(
+      "Invalid arguments at /operation",
+    );
+  });
+
+  it("computes on brainpoolP512r1 and turns P-384 and P-521 points away at the schema", async () => {
+    const client = await connectTestClient();
+    const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+      answer(await client.callTool({ name: "curves_brainpoolp512r1_compute", arguments: args }));
+    const refused = async (args: Readonly<Record<string, unknown>>): Promise<string> =>
+      failure(await client.callTool({ name: "curves_brainpoolp512r1_compute", arguments: args }));
+    const { publicKey, digest, signature } = brainpoolP512r1Signature;
+    const { g, twoG, threeG, threeGUncompressed, minusG, xWithoutPoint } = brainpoolP512r1Vectors;
+
+    expect(await call({ operation: "add", point: g, other: twoG })).toEqual({
+      operation: "add",
+      point: threeG,
+    });
+    expect(await call({ operation: "lift", x: g.slice(2) })).toEqual({
+      operation: "lift",
+      even: g,
+      odd: minusG,
+    });
+    expect(
+      await call({ operation: "check", point: `${threeGUncompressed.slice(0, -1)}4` }),
+    ).toEqual({
+      operation: "check",
+      onCurve: false,
+    });
+    expect(await call({ operation: "verify", point: publicKey, digest, signature })).toEqual({
+      operation: "verify",
+      valid: true,
+    });
+    expect(await refused({ operation: "negate", point: `02${xWithoutPoint}` })).toContain(
+      "point is not a SEC1 point of brainpoolP512r1",
+    );
+    for (const point of [p384Vectors.gUncompressed, p521Vectors.g]) {
+      expect(await refused({ operation: "negate", point })).toContain(
+        "Invalid arguments at /point",
+      );
+    }
     expect(await refused({ operation: "sign", point: publicKey })).toContain(
       "Invalid arguments at /operation",
     );
@@ -883,6 +927,14 @@ describe("curve executors", () => {
         signature: "00",
       }),
     ).toThrow("Signature must be 192 hex digits");
+    expect(() =>
+      computeBrainpoolP512r1({
+        operation: "verify",
+        point: brainpoolP512r1Vectors.g,
+        digest: "00",
+        signature: "00",
+      }),
+    ).toThrow("Signature must be 256 hex digits");
     expect(() =>
       computeP256({ operation: "verify", point: p256Vectors.g, digest: "00", signature: "00" }),
     ).toThrow("Signature must be 128 hex digits");

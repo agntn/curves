@@ -12,6 +12,7 @@ import {
   bip340ComputeTool,
   brainpoolP256r1ComputeTool,
   brainpoolP384r1ComputeTool,
+  brainpoolP512r1ComputeTool,
   computeTool,
   ed25519ComputeTool,
   p256ComputeTool,
@@ -51,6 +52,7 @@ describe("omp curves extension", () => {
       "curves_p521_compute",
       "curves_brainpoolp256r1_compute",
       "curves_brainpoolp384r1_compute",
+      "curves_brainpoolp512r1_compute",
       "curves_sr25519_compute",
       "curves_ed25519_compute",
     ]);
@@ -77,6 +79,10 @@ describe("omp curves extension", () => {
     expect(host.tool("curves_brainpoolp384r1_compute").approval).toBe("read");
     expect(host.tool("curves_brainpoolp384r1_compute").parameters).toEqual(
       wireSchema(brainpoolP384r1ComputeTool),
+    );
+    expect(host.tool("curves_brainpoolp512r1_compute").approval).toBe("read");
+    expect(host.tool("curves_brainpoolp512r1_compute").parameters).toEqual(
+      wireSchema(brainpoolP512r1ComputeTool),
     );
     expect(host.tool("curves_sr25519_compute").approval).toBe("read");
     expect(host.tool("curves_sr25519_compute").parameters).toEqual(wireSchema(sr25519ComputeTool));
