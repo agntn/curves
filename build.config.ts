@@ -13,6 +13,7 @@ export default defineBuildConfig({
         "./src/p384.ts",
         "./src/p521.ts",
         "./src/brainpoolp256r1.ts",
+        "./src/brainpoolp384r1.ts",
         "./src/ristretto255.ts",
         "./src/ed25519.ts",
         "./src/sr25519.ts",

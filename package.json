@@ -8,6 +8,7 @@
     "bitcoin",
     "brainpool",
     "brainpoolp256r1",
+    "brainpoolp384r1",
     "discrete-log",
     "ecc",
     "ed25519",
@@ -79,6 +80,10 @@
     "./brainpoolp256r1": {
       "types": "./dist/brainpoolp256r1.d.mts",
       "import": "./dist/brainpoolp256r1.mjs"
+    },
+    "./brainpoolp384r1": {
+      "types": "./dist/brainpoolp384r1.d.mts",
+      "import": "./dist/brainpoolp384r1.mjs"
     },
     "./ed25519": {
       "types": "./dist/ed25519.d.mts",

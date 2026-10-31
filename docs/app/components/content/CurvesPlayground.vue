@@ -3,6 +3,7 @@ import { multiplyGenerator as p256Generator } from "@agntn/curves/p256";
 import { multiplyGenerator as p384Generator } from "@agntn/curves/p384";
 import { multiplyGenerator as p521Generator } from "@agntn/curves/p521";
 import { multiplyGenerator as brainpoolGenerator } from "@agntn/curves/brainpoolp256r1";
+import { multiplyGenerator as brainpool384Generator } from "@agntn/curves/brainpoolp384r1";
 import { invertScalar, multiplyGenerator, subtractScalars } from "@agntn/curves/secp256k1";
 import type { Ref } from "vue";
 import type { Bip340Details, CurvePointText, Ed25519Details, Secp256k1Details, Sr25519Details } from "#tool-operations";
@@ -14,6 +15,7 @@ import { RFC_6979 } from "../../utils/p256";
 import { RFC_6979_P384 } from "../../utils/p384";
 import { RFC_6979_P521 } from "../../utils/p521";
 import { WYCHEPROOF_BRAINPOOL } from "../../utils/brainpoolp256r1";
+import { WYCHEPROOF_BRAINPOOL_384 } from "../../utils/brainpoolp384r1";
 import { BLOCK_170 } from "../../utils/secp";
 import { ALICE, ALICE_HELLO, ALICE_JUNCTION, DEV_SECRET, DEV_SEED, flipBit } from "../../utils/sr25519";
 import { jsonTokens, shellTokens } from "../../utils/tokens";
@@ -65,6 +67,7 @@ const COMMANDS: Record<ToolName, string> = {
   curves_p384_compute: "p384",
   curves_p521_compute: "p521",
   curves_brainpoolp256r1_compute: "brainpoolp256r1",
+  curves_brainpoolp384r1_compute: "brainpoolp384r1",
   curves_sr25519_compute: "sr25519",
   curves_ed25519_compute: "ed25519",
 };
@@ -121,6 +124,13 @@ const OPERATIONS: readonly Operation[] = [
   { key: "brainpoolp256r1:lift", tool: "curves_brainpoolp256r1_compute", op: "lift", takes: ["x", "compressed"], about: "Find points above an x. Zero has none, one has a point." },
   { key: "brainpoolp256r1:check", tool: "curves_brainpoolp256r1_compute", op: "check", takes: ["point"], about: "Check a SEC1 point on brainpoolP256r1. P-256's compressed generator passes too, so appearances aren't enough." },
   { key: "brainpoolp256r1:verify", tool: "curves_brainpoolp256r1_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "Verify ECDSA over a digest. The default G fails. Load Wycheproof key for a matching key." },
+  { key: "brainpoolp384r1:add", tool: "curves_brainpoolp384r1_compute", op: "add", takes: ["point", "other", "compressed"], about: "Add brainpoolP384r1 points. Try G and 2G for a start." },
+  { key: "brainpoolp384r1:subtract", tool: "curves_brainpoolp384r1_compute", op: "subtract", takes: ["point", "other", "compressed"], about: "Subtract one brainpoolP384r1 point from another. The order matters." },
+  { key: "brainpoolp384r1:negate", tool: "curves_brainpoolp384r1_compute", op: "negate", takes: ["point", "compressed"], about: "Keep x, flip y. The compressed prefix flips between 02 and 03." },
+  { key: "brainpoolp384r1:multiply", tool: "curves_brainpoolp384r1_compute", op: "multiply", takes: ["point", "scalar", "compressed"], about: "Multiply a point by a scalar. It's repeated addition, not coordinate multiplication." },
+  { key: "brainpoolp384r1:lift", tool: "curves_brainpoolp384r1_compute", op: "lift", takes: ["x", "compressed"], about: "Try x = 0, 1, 2, 3. No point, point, no point, point." },
+  { key: "brainpoolp384r1:check", tool: "curves_brainpoolp384r1_compute", op: "check", takes: ["point"], about: "P-384's 2G passes this check. Same length doesn't mean same curve." },
+  { key: "brainpoolp384r1:verify", tool: "curves_brainpoolp384r1_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "The default G fails verification. Wycheproof key gives the signature its matching key." },
   { key: "sr25519:keypair", tool: "curves_sr25519_compute", op: "keypair", takes: ["source"], sources: ["seed", "secret"], about: "A 32-byte seed grows into a secret and a public key. A secret alone gives back its public key." },
   { key: "sr25519:sign", tool: "curves_sr25519_compute", op: "sign", takes: ["secret", "message", "encoding"], about: "Sign under the substrate context. Fresh randomness each time, so the bytes change and both still verify." },
   { key: "sr25519:verify", tool: "curves_sr25519_compute", op: "verify", takes: ["publicKey", "message", "encoding", "signature"], about: "Whether the key signed these bytes. A wrong signature is a plain false, not an error." },
@@ -147,6 +157,9 @@ const P521_TWO_G = p521Generator("2");
 /** G and 2G on brainpoolP256r1, compressed: 33 bytes each, the same length as P-256's. */
 const BRAINPOOL_G = brainpoolGenerator("1");
 const BRAINPOOL_TWO_G = brainpoolGenerator("2");
+/** G and 2G on brainpoolP384r1, compressed: 49 bytes each, the same length as P-384's. */
+const BRAINPOOL_384_G = brainpool384Generator("1");
+const BRAINPOOL_384_TWO_G = brainpool384Generator("2");
 /** The ids `recover` takes: bit 0 is the parity of y of R, bit 1 says its x is r + n. */
 const RECOVERY_IDS = [0, 1, 2, 3] as const;
 
@@ -207,12 +220,21 @@ const brainpoolDigest = ref<string>(WYCHEPROOF_BRAINPOOL.digest);
 const brainpoolSignature = ref<string>(WYCHEPROOF_BRAINPOOL.signature);
 /** The brainpoolP256r1 fields that are text, by the argument each one fills. */
 const BRAINPOOL_FIELDS = { point: brainpoolPoint, other: brainpoolOther, scalar: brainpoolScalar, x: brainpoolX, digest: brainpoolDigest, signature: brainpoolSignature } as const;
+const brainpool384Point = ref(BRAINPOOL_384_G);
+const brainpool384Other = ref(BRAINPOOL_384_TWO_G);
+const brainpool384Scalar = ref("3");
+const brainpool384X = ref(BRAINPOOL_384_G.slice(2));
+const brainpool384Digest = ref<string>(WYCHEPROOF_BRAINPOOL_384.digest);
+const brainpool384Signature = ref<string>(WYCHEPROOF_BRAINPOOL_384.signature);
+/** The brainpoolP384r1 fields that are text, by the argument each one fills. */
+const BRAINPOOL_384_FIELDS = { point: brainpool384Point, other: brainpool384Other, scalar: brainpool384Scalar, x: brainpool384X, digest: brainpool384Digest, signature: brainpool384Signature } as const;
 const SEC1_FIELDS = {
   curves_secp256k1_compute: SECP_FIELDS,
   curves_p256_compute: NIST_FIELDS,
   curves_p384_compute: WIDE_FIELDS,
   curves_p521_compute: P521_FIELDS,
   curves_brainpoolp256r1_compute: BRAINPOOL_FIELDS,
+  curves_brainpoolp384r1_compute: BRAINPOOL_384_FIELDS,
 } as const;
 const uncompressed = ref(false);
 const schnorrSecret = ref<string>(PI_VECTOR.secret);
@@ -255,10 +277,11 @@ const nist = computed(() => current.value.tool === "curves_p256_compute");
 const wide = computed(() => current.value.tool === "curves_p384_compute");
 const p521 = computed(() => current.value.tool === "curves_p521_compute");
 const brainpool = computed(() => current.value.tool === "curves_brainpoolp256r1_compute");
-/** The SEC1 fields on screen: secp256k1's, P-256's, P-384's, P-521's or brainpoolP256r1's. */
-const sec1Fields = computed(() => (brainpool.value ? BRAINPOOL_FIELDS : p521.value ? P521_FIELDS : wide.value ? WIDE_FIELDS : nist.value ? NIST_FIELDS : SECP_FIELDS));
+const brainpool384 = computed(() => current.value.tool === "curves_brainpoolp384r1_compute");
+/** The SEC1 fields on screen, for whichever SEC 1 curve the current tool runs on. */
+const sec1Fields = computed(() => (brainpool384.value ? BRAINPOOL_384_FIELDS : brainpool.value ? BRAINPOOL_FIELDS : p521.value ? P521_FIELDS : wide.value ? WIDE_FIELDS : nist.value ? NIST_FIELDS : SECP_FIELDS));
 /** Hex digits in a coordinate of the SEC1 curve on screen, for the placeholders. */
-const sec1Digits = computed(() => (p521.value ? 132 : wide.value ? 96 : 64));
+const sec1Digits = computed(() => (p521.value ? 132 : wide.value || brainpool384.value ? 96 : 64));
 const sr = computed(() => current.value.tool === "curves_sr25519_compute");
 const edwards = computed(() => current.value.tool === "curves_ed25519_compute");
 /** The key the operation on screen starts from: the one picked, when this operation takes it. */
@@ -683,6 +706,26 @@ const BRAINPOOL_SAMPLES: readonly { label: string; op?: string; load: () => unkn
 /** The brainpoolP256r1 chips on screen. */
 const brainpoolSamples = computed(() => BRAINPOOL_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
 
+/** brainpoolP384r1 samples: x = 0 has no point here, and P-384's compressed 2G passes check. */
+const BRAINPOOL_384_SAMPLES: readonly { label: string; op?: string; load: () => unknown }[] = [
+  { label: "G and 2G", load: () => ((brainpool384Point.value = BRAINPOOL_384_G), (brainpool384Other.value = BRAINPOOL_384_TWO_G), (brainpool384Scalar.value = "3")) },
+  { label: "x of G", load: () => (brainpool384X.value = BRAINPOOL_384_G.slice(2)) },
+  { label: "x = 0", load: () => ((brainpool384X.value = "0".repeat(96)), (brainpool384Point.value = `02${"0".repeat(96)}`)) },
+  { label: "P-384's 2G", load: () => (brainpool384Point.value = WIDE_TWO_G) },
+  {
+    label: "Wycheproof key",
+    load: () => {
+      brainpool384Point.value = WYCHEPROOF_BRAINPOOL_384.publicKey;
+      brainpool384Digest.value = WYCHEPROOF_BRAINPOOL_384.digest;
+      brainpool384Signature.value = WYCHEPROOF_BRAINPOOL_384.signature;
+    },
+  },
+  { label: "one bit off", op: "verify", load: () => (brainpool384Signature.value = flipBit(brainpool384Signature.value)) },
+];
+
+/** The brainpoolP384r1 chips on screen. */
+const brainpool384Samples = computed(() => BRAINPOOL_384_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
+
 /**
  * Loads one BIP340 vector into every BIP340 field, secret and aux_rand included.
  *
@@ -933,7 +976,7 @@ const shareLink = computed(() => {
                 <dd><UInput id="playground-limit" v-model="limit" variant="none" inputmode="numeric" placeholder="default 100" class="w-full" /></dd>
               </div>
             </dl>
-            <dl v-else-if="secp || nist || wide || p521 || brainpool" class="console-readout-rows">
+            <dl v-else-if="secp || nist || wide || p521 || brainpool || brainpool384" class="console-readout-rows">
               <div v-if="current.takes.includes('secret')">
                 <dt><label for="playground-secp-secret">secret</label></dt>
                 <dd><UInput id="playground-secp-secret" v-model="secpSecret" variant="none" placeholder="hex, 1 to n - 1" class="w-full" spellcheck="false" /></dd>
@@ -978,7 +1021,7 @@ const shareLink = computed(() => {
               </div>
               <div v-if="current.takes.includes('lowS')">
                 <dt><label for="playground-low-s">s</label></dt>
-                <dd><UCheckbox id="playground-low-s" v-model="lowS" :label="nist || wide || p521 || brainpool ? 'low s, at most n / 2' : 'low s, Bitcoin\'s stricter rule'" /></dd>
+                <dd><UCheckbox id="playground-low-s" v-model="lowS" :label="nist || wide || p521 || brainpool || brainpool384 ? 'low s, at most n / 2' : 'low s, Bitcoin\'s stricter rule'" /></dd>
               </div>
               <div v-if="current.takes.includes('compressed')">
                 <dt><label for="playground-uncompressed">output</label></dt>
@@ -1104,6 +1147,9 @@ const shareLink = computed(() => {
           <div v-else-if="brainpool" class="playground-chips" role="group" aria-label="Sample brainpoolP256r1 points">
             <UButton v-for="sample in brainpoolSamples" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
+          <div v-else-if="brainpool384" class="playground-chips" role="group" aria-label="Sample brainpoolP384r1 points">
+            <UButton v-for="sample in brainpool384Samples" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
+          </div>
           <div v-else-if="schnorr" class="playground-chips" role="group" aria-label="BIP340 test vectors">
             <UButton v-for="sample in schnorrSamples" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
@@ -1137,6 +1183,9 @@ const shareLink = computed(() => {
             >
             <template v-else-if="p521"
               >Points are SEC1 hex, 67 or 133 bytes. Digests and signatures are hex without 0x. Unpack DER or OpenPGP r and s first. Keep private scalars out: every field lands in the address bar.</template
+            >
+            <template v-else-if="brainpool384"
+              >Points are 49 or 97 bytes of SEC1 hex. Use hex without 0x. Unpack DER or OpenPGP r and s first. Keep private scalars out because every field lands in the address bar.</template
             >
             <template v-else-if="brainpool"
               >Points are SEC1 hex, 33 or 65 bytes. Use hex without 0x. Unpack DER or OpenPGP r and s first. Keep private scalars out: every field lands in the address bar.</template

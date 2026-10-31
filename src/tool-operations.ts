@@ -29,6 +29,7 @@ import {
 } from "./core/group.ts";
 import * as bip340 from "./core/bip340.ts";
 import * as brainpoolP256r1 from "./core/brainpoolp256r1.ts";
+import * as brainpoolP384r1 from "./core/brainpoolp384r1.ts";
 import { hexToBytes } from "./core/bytes.ts";
 import * as ed25519 from "./core/ed25519.ts";
 import * as p256 from "./core/p256.ts";
@@ -39,6 +40,7 @@ import * as sr25519 from "./core/sr25519.ts";
 import {
   BIP340_OPERATIONS,
   BRAINPOOLP256R1_OPERATIONS,
+  BRAINPOOLP384R1_OPERATIONS,
   CURVE_INTEGER_PATTERN,
   CURVE_OPERATIONS,
   DEFAULT_CURVE_POINTS_SHOWN,
@@ -109,6 +111,9 @@ export type P521Details = P256Details;
 
 /** What the brainpoolP256r1 tool computes: the same answers as P-256, as hex of the same length. */
 export type BrainpoolP256r1Details = P256Details;
+
+/** What the brainpoolP384r1 tool computes: the same answers as P-384, as hex of the same length. */
+export type BrainpoolP384r1Details = P256Details;
 
 /** What the BIP340 tool computes, by operation. */
 export type Bip340Details =
@@ -594,6 +599,9 @@ const P521_COMPUTATIONS = sec1Computations(p521, "P-521");
 /** How each brainpoolP256r1 operation turns the arguments into its result. */
 const BRAINPOOLP256R1_COMPUTATIONS = sec1Computations(brainpoolP256r1, "brainpoolP256r1");
 
+/** How each brainpoolP384r1 operation turns the arguments into its result. */
+const BRAINPOOLP384R1_COMPUTATIONS = sec1Computations(brainpoolP384r1, "brainpoolP384r1");
+
 /** One SEC 1 curve tool: its operations, the arguments each takes and how each runs. */
 interface Sec1Tool<Operation extends string, Details> {
   readonly operations: readonly Operation[];
@@ -690,6 +698,21 @@ export function computeBrainpoolP256r1(
     operations: BRAINPOOLP256R1_OPERATIONS,
     arguments: P256_ARGUMENTS,
     computations: BRAINPOOLP256R1_COMPUTATIONS,
+  });
+}
+
+/**
+ * Do math on public brainpoolP384r1 points, or verify an ECDSA signature over a digest.
+ * @param args - Tool arguments, the operation and the ones it takes
+ * @returns {ToolResult<BrainpoolP384r1Details>} A point, the lifted pair or the verdict
+ */
+export function computeBrainpoolP384r1(
+  args: Readonly<Record<string, unknown>>,
+): ToolResult<BrainpoolP384r1Details> {
+  return computeSec1(args, {
+    operations: BRAINPOOLP384R1_OPERATIONS,
+    arguments: P256_ARGUMENTS,
+    computations: BRAINPOOLP384R1_COMPUTATIONS,
   });
 }
 

@@ -16,6 +16,7 @@ const NAV_ICONS: Record<string, string> = {
   "/math/p384": "i-lucide-shield-check",
   "/math/p521": "i-lucide-shield-plus",
   "/math/brainpoolp256r1": "i-lucide-sprout",
+  "/math/brainpoolp384r1": "i-lucide-leaf",
   "/playground": "i-lucide-flask-conical",
 };
 
