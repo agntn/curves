@@ -1,9 +1,10 @@
 /**
- * The curves SEC 1 covers whose p and n have the same bit length: prime order, cofactor 1, p equal
- * to 3 mod 4, and a = 0 or a = -3. That's secp256k1 and P-256 in 32 bytes, P-384 in 48 and P-521
- * in 66, where the top byte keeps one bit. Every width (hex lengths, digits, the comb, the
- * verification table, the cut of a digest) comes from the curve, not from a constant. Points
- * travel as SEC1 hex (SEC 1 v2, sections
+ * The curves SEC 1 covers whose p and n have the same bit length: prime order, cofactor 1 and p
+ * equal to 3 mod 4. That's secp256k1, P-256 and brainpoolP256r1 in 32 bytes, P-384 in 48 and
+ * P-521 in 66, where the top byte keeps one bit. a = 0 and a = -3 get formulas of their own, and
+ * any other a, like Brainpool's, takes the general ones. Every width (hex lengths, digits, the
+ * comb, the verification table, the cut of a digest) comes from the curve, not from a constant.
+ * Points travel as SEC1 hex (SEC 1 v2, sections
  * 2.3.3 and 2.3.4) and add in projective coordinates with complete formulas, so no sum needs a
  * branch of its own. ECDSA signing, verification and public key recovery follow SEC 1 v2,
  * sections 4.1.3, 4.1.4 and 4.1.6, and the signing nonce comes from RFC 6979. A multiply runs the
@@ -111,11 +112,11 @@ const ROWS = 4;
 
 /**
  * Algorithms 7 and 9 of Renes, Costello and Batina (2016), for a = 0.
- * @param p - The field prime
- * @param b - The curve's b
+ * @param domain - The curve; only p and b count here
  * @returns {Formulas} Addition and doubling mod p
  */
-export function zeroAFormulas(p: bigint, b: bigint): Formulas {
+export function zeroAFormulas(domain: Sec1Domain): Formulas {
+  const { p, b } = domain;
   const b3 = 3n * b;
   return {
     a: 0n,
@@ -152,11 +153,11 @@ export function zeroAFormulas(p: bigint, b: bigint): Formulas {
 
 /**
  * Algorithms 4 and 6 of the same paper, for a = -3, written from the sums printed above them.
- * @param p - The field prime
- * @param b - The curve's b
+ * @param domain - The curve; only p and b count here
  * @returns {Formulas} Addition and doubling mod p
  */
-export function minusThreeAFormulas(p: bigint, b: bigint): Formulas {
+export function minusThreeAFormulas(domain: Sec1Domain): Formulas {
+  const { p, b } = domain;
   return {
     a: -3n,
     add: (left, right) => {
@@ -188,6 +189,54 @@ export function minusThreeAFormulas(p: bigint, b: bigint): Formulas {
       return {
         x: mod(2n * x * y * plus - 6n * y * z * rest, p),
         y: (mod(yy - shift, p) * plus + 9n * mod(xx - zz, p) * rest) % p,
+        z: (8n * yy * ((y * z) % p)) % p,
+      };
+    },
+  };
+}
+
+/**
+ * Algorithms 1 and 3 of the same paper, for any a: a few more products than the special cases.
+ * @param domain - The curve; p, a and b count here
+ * @returns {Formulas} Addition and doubling mod p
+ */
+export function anyAFormulas(domain: Sec1Domain): Formulas {
+  const { p } = domain;
+  const a = mod(domain.a, p);
+  const b3 = (3n * domain.b) % p;
+  const a2 = (a * a) % p;
+  return {
+    a,
+    add: (left, right) => {
+      const xx = (left.x * right.x) % p;
+      const yy = (left.y * right.y) % p;
+      const zz = (left.z * right.z) % p;
+      const xy = mod((left.x + left.y) * (right.x + right.y) - xx - yy, p);
+      const yz = mod((left.y + left.z) * (right.y + right.z) - yy - zz, p);
+      const xz = mod((left.x + left.z) * (right.x + right.z) - xx - zz, p);
+      const shift = (a * xz + b3 * zz) % p;
+      const plus = (yy + shift) % p;
+      const minus = mod(yy - shift, p);
+      const rest = mod(a * xx + b3 * xz - a2 * zz, p);
+      const triple = (3n * xx + a * zz) % p;
+      return {
+        x: mod(xy * minus - yz * rest, p),
+        y: (minus * plus + triple * rest) % p,
+        z: (yz * plus + xy * triple) % p,
+      };
+    },
+    double: ({ x, y, z }) => {
+      const xx = (x * x) % p;
+      const yy = (y * y) % p;
+      const zz = (z * z) % p;
+      const xz = (2n * x * z) % p;
+      const shift = (a * xz + b3 * zz) % p;
+      const plus = (yy + shift) % p;
+      const minus = mod(yy - shift, p);
+      const rest = mod(a * xx + b3 * xz - a2 * zz, p);
+      return {
+        x: mod(2n * x * y * minus - 2n * y * z * rest, p),
+        y: (minus * plus + (3n * xx + a * zz) * rest) % p,
         z: (8n * yy * ((y * z) % p)) % p,
       };
     },
@@ -245,8 +294,8 @@ export interface Sec1Curve {
 export interface Sec1CurveOptions {
   /** What refusals call the curve. */
   readonly name: string;
-  /** `zeroAFormulas` or `minusThreeAFormulas`, whichever matches a. */
-  readonly formulas: (p: bigint, b: bigint) => Formulas;
+  /** `zeroAFormulas`, `minusThreeAFormulas` or `anyAFormulas`, whichever matches a. */
+  readonly formulas: (domain: Sec1Domain) => Formulas;
 }
 
 /**
@@ -266,7 +315,7 @@ export function sec1Curve(domain: Sec1Domain, options: Sec1CurveOptions): Sec1Cu
       "A SEC1 curve here needs n as long as p in bits, an even number of bytes, p = 3 mod 4 and cofactor 1",
     );
   }
-  const { a, add, double } = options.formulas(p, b);
+  const { a, add, double } = options.formulas(domain);
   if (mod(a, p) !== mod(domain.a, p)) throw new RangeError("These formulas are for another a");
   const { name } = options;
   const invalidPoint = `Invalid SEC1 ${name} public key`;

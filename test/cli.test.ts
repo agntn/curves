@@ -26,6 +26,7 @@ import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts
 import { p256Rfc6979 } from "./fixtures/p256.ts";
 import { p384Rfc6979 } from "./fixtures/p384.ts";
 import { p521Rfc6979, p521Vectors } from "./fixtures/p521.ts";
+import { brainpoolP256r1Signature, brainpoolP256r1Vectors } from "./fixtures/brainpoolp256r1.ts";
 
 const [signed] = nobleSignatures;
 if (signed === undefined) throw new Error("The noble fixture lost its first signature");
@@ -58,13 +59,14 @@ describe("curves CLI", () => {
     const unknown = run("nope");
 
     expect(help.stdout).toContain("USAGE curves <command> [OPTIONS]");
-    expect(help.stdout).toMatch(/^ {2}secp256k1 {2}Point math/m);
-    expect(help.stdout).toMatch(/^ {2}bip340 {5}BIP340 Schnorr keys and signatures/m);
-    expect(help.stdout).toMatch(/^ {2}p256 {7}Point math on NIST P-256/m);
-    expect(help.stdout).toMatch(/^ {2}p384 {7}Point math on NIST P-384/m);
-    expect(help.stdout).toMatch(/^ {2}p521 {7}Point math on NIST P-521/m);
-    expect(help.stdout).toMatch(/^ {2}sr25519 {4}sr25519 keys/m);
-    expect(help.stdout).toMatch(/^ {2}ed25519 {4}Ed25519 keys and signatures/m);
+    expect(help.stdout).toMatch(/^ {2}secp256k1 {8}Point math/m);
+    expect(help.stdout).toMatch(/^ {2}bip340 {11}BIP340 Schnorr keys and signatures/m);
+    expect(help.stdout).toMatch(/^ {2}p256 {13}Point math on NIST P-256/m);
+    expect(help.stdout).toMatch(/^ {2}p384 {13}Point math on NIST P-384/m);
+    expect(help.stdout).toMatch(/^ {2}p521 {13}Point math on NIST P-521/m);
+    expect(help.stdout).toMatch(/^ {2}brainpoolp256r1 {2}Point math on brainpoolP256r1/m);
+    expect(help.stdout).toMatch(/^ {2}sr25519 {10}sr25519 keys/m);
+    expect(help.stdout).toMatch(/^ {2}ed25519 {10}Ed25519 keys and signatures/m);
     expect(usage.stdout).toContain("USAGE curves compute [OPTIONS] <OPERATION>");
     expect(unknown).toMatchObject({
       code: 1,
@@ -169,6 +171,18 @@ describe("curves CLI", () => {
       stderr: "No point of P-521 has this x\n",
     });
     expect(run("p521", "lift", "--x", "03".padStart(96, "0")).code).toBe(1);
+  });
+
+  it("verifies Wycheproof's brainpoolP256r1 signature and finds no point at x = 0", () => {
+    const { publicKey, digest, signature } = brainpoolP256r1Signature;
+    const flags = ["--point", publicKey, "--digest", digest, "--signature", signature];
+    expect(run("brainpoolp256r1", "verify", ...flags)).toMatchObject({
+      code: 0,
+      stdout: '{"operation":"verify","valid":true}\n',
+    });
+    expect(
+      run("brainpoolp256r1", "lift", "--x", brainpoolP256r1Vectors.xWithoutPoint),
+    ).toMatchObject({ code: 1, stderr: "No point of brainpoolP256r1 has this x\n" });
   });
 
   it("signs a digest with ECDSA from flags, the way @noble/curves 2.4.0 did", () => {

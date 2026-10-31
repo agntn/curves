@@ -5,6 +5,7 @@ import type { Static } from "@agntn/tools";
 import type { Tool } from "ai";
 import type {
   Bip340Details,
+  BrainpoolP256r1Details,
   CurveDetails,
   Ed25519Details,
   P256Details,
@@ -16,6 +17,8 @@ import type {
 import {
   bip340ComputeSchema,
   bip340ComputeTool,
+  brainpoolP256r1ComputeSchema,
+  brainpoolP256r1ComputeTool,
   computeSchema,
   computeTool,
   ed25519ComputeSchema,
@@ -62,6 +65,11 @@ export const curvesP521ComputeTool: Tool<
   AiToolOutput<P521Details>
 > = toAiTool(p521ComputeTool);
 
+export const curvesBrainpoolP256r1ComputeTool: Tool<
+  Static<typeof brainpoolP256r1ComputeSchema>,
+  AiToolOutput<BrainpoolP256r1Details>
+> = toAiTool(brainpoolP256r1ComputeTool);
+
 export const curvesSr25519ComputeTool: Tool<
   Static<typeof sr25519ComputeSchema>,
   AiToolOutput<Sr25519Details>
@@ -80,6 +88,7 @@ export const curvesAiTools = {
   curves_p256_compute: curvesP256ComputeTool,
   curves_p384_compute: curvesP384ComputeTool,
   curves_p521_compute: curvesP521ComputeTool,
+  curves_brainpoolp256r1_compute: curvesBrainpoolP256r1ComputeTool,
   curves_sr25519_compute: curvesSr25519ComputeTool,
   curves_ed25519_compute: curvesEd25519ComputeTool,
 };

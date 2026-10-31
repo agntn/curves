@@ -61,6 +61,11 @@ export const P521_OPERATIONS = P256_OPERATIONS;
 
 export type P521Operation = P256Operation;
 
+/** What `curves_brainpoolp256r1_compute` does: the same as P-256, on another curve of 32 bytes. */
+export const BRAINPOOLP256R1_OPERATIONS = P256_OPERATIONS;
+
+export type BrainpoolP256r1Operation = P256Operation;
+
 /** What `curves_bip340_compute` does with BIP340 Schnorr keys and signatures. */
 export const BIP340_OPERATIONS = ["keypair", "sign", "verify"] as const;
 

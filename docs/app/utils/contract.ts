@@ -1,5 +1,6 @@
 import {
   BIP340_OPERATIONS,
+  BRAINPOOLP256R1_OPERATIONS,
   CURVE_OPERATIONS,
   ED25519_OPERATIONS,
   MAX_COUNTED_PRIME,
@@ -14,6 +15,7 @@ import {
 
 export {
   BIP340_OPERATIONS,
+  BRAINPOOLP256R1_OPERATIONS,
   CURVE_OPERATIONS,
   ED25519_OPERATIONS,
   MAX_COUNTED_PRIME,
@@ -28,7 +30,7 @@ export {
 
 /** Every operation the tools take, in the order they list them. */
 export const OPERATION_COUNT =
-  CURVE_OPERATIONS.length + SECP256K1_OPERATIONS.length + BIP340_OPERATIONS.length + P256_OPERATIONS.length + P384_OPERATIONS.length + P521_OPERATIONS.length + SR25519_OPERATIONS.length + ED25519_OPERATIONS.length;
+  CURVE_OPERATIONS.length + SECP256K1_OPERATIONS.length + BIP340_OPERATIONS.length + P256_OPERATIONS.length + P384_OPERATIONS.length + P521_OPERATIONS.length + BRAINPOOLP256R1_OPERATIONS.length + SR25519_OPERATIONS.length + ED25519_OPERATIONS.length;
 
 /** A limit that is a power of two, as the page prints it: `2^48`. */
 export function powerOfTwo(limit: bigint): string {
