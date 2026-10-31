@@ -151,16 +151,18 @@ describe("brainpoolP512r1 point math", () => {
     expect(multiplyPoint(publicKeyA, secretB, uncompressed)).toBe(shared);
   });
 
-  it("multiplies G and another point like the affine code, at the digit edges too", () => {
-    for (const scalar of edges) {
+  /* One case per edge: all of them in one test sat at 3.2 s of the 5 s limit in CI. */
+  it.each(edges)(
+    "multiplies G and another point like the affine code, at digit edge %#",
+    (scalar) => {
       const product = sec1Hex(multiplyOnCurve(curve, brainpoolP512r1.g, scalar));
       expect(multiplyGenerator(scalar, uncompressed)).toBe(product);
       expect(multiplyPoint(g, scalar, uncompressed)).toBe(product);
       expect(multiplyPoint(other, scalar, uncompressed)).toBe(
         sec1Hex(multiplyOnCurve(curve, coordinates(other), scalar)),
       );
-    }
-  });
+    },
+  );
 
   /* 128 rows of 15 at 64 bytes a number: close to P-521's cost, so it takes P-521's limit. */
   it(
