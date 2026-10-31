@@ -126,20 +126,20 @@
     "release": "pnpm build && pnpm test && changelogen --release --push"
   },
   "dependencies": {
-    "@agntn/hashes": "0.6.7",
-    "@agntn/tools": "0.2.4",
-    "@modelcontextprotocol/server": "2.2.0"
+    "@agntn/hashes": "catalog:deps",
+    "@agntn/tools": "catalog:deps",
+    "@modelcontextprotocol/server": "catalog:deps"
   },
   "devDependencies": {
-    "@agntn/ox": "0.1.0",
-    "@earendil-works/pi-coding-agent": "1.0.2",
-    "@modelcontextprotocol/client": "2.2.0",
-    "@oh-my-pi/pi-coding-agent": "18.4.12",
-    "@types/node": "26.2.0",
-    "ai": "7.0.66",
-    "changelogen": "0.6.2",
-    "obuild": "0.4.43",
-    "typescript": "7.0.2",
+    "@agntn/ox": "catalog:dev",
+    "@earendil-works/pi-coding-agent": "catalog:dev",
+    "@modelcontextprotocol/client": "catalog:dev",
+    "@oh-my-pi/pi-coding-agent": "catalog:dev",
+    "@types/node": "catalog:dev",
+    "ai": "catalog:dev",
+    "changelogen": "catalog:dev",
+    "obuild": "catalog:dev",
+    "typescript": "catalog:dev",
     "vite": "catalog:",
     "vite-plus": "catalog:"
   },
@@ -162,7 +162,7 @@
   "engines": {
     "node": ">=26"
   },
-  "packageManager": "pnpm@11.22.0",
+  "packageManager": "pnpm@12.16.1",
   "omp": {
     "extensions": [
       "./extensions/omp/curves.ts"

@@ -2,7 +2,7 @@
 
 ## Setup
 
-The README has the commands. Install both the root and docs dependencies: `pnpm install` and `pnpm --dir docs install`. `test/docs-mcp.test.ts` loads Zod, the MCP toolkit and the SDK from `docs/node_modules`.
+The README has the commands. Run `pnpm install` at the root. That one install covers the library and the docs site, `docs/node_modules` included, where `test/docs-mcp.test.ts` finds Zod, the MCP toolkit and the SDK. The old two-install dance can retire.
 
 Build before you test. The `curves mcp` checks in `test/cli.test.ts` start `dist/cli.mjs`, and three fail against the `pnpm dev` stub. `pnpm release` and the Publish workflow build first too. `test/release.test.ts` catches either order flipping.
 
@@ -32,7 +32,8 @@ Plain Node runs `src/` as it is, so relative imports end in `.ts` and `erasableS
 ## Docs site
 
 - Workers Builds installs `docs/` alone. It takes Node.js from the root `.node-version`, not `engines`. Without the pin, the build runs Node.js 24. `test/docs.test.ts` checks it.
-- The site bundles `../src` through aliases in `docs/nuxt.config.ts`, not `dist/`. A new npm import under `src/` needs a pin in `docs/package.json` at the root's version and an entry in `vite.resolve.dedupe`. Add it to `vite.optimizeDeps.include` too when the browser loads it. Miss one and the deploy breaks.
+- The site bundles `../src` through aliases in `docs/nuxt.config.ts`, not `dist/`. A new npm import under `src/` resolves from the root, so `docs/package.json` doesn't need it. `vite.resolve.dedupe` still does, and so does `vite.optimizeDeps.include` when the browser loads it.
+- Packages the site imports itself go in `docs/package.json`, since nothing is hoisted. `test/docs-dependencies.test.ts` catches a missing one, which beats finding it at deploy time.
 - Values quoted in `docs/content/` come from the library. Check a secp256k1 point against `@noble/curves` too, outside the package.
 - Prose counts and limits come from the operation lists and `MAX_*` limits through `spellOut` and `powerOfTwo`. Frontmatter and `content/` can't call functions, so check limits written there against `src/core/limits.ts` by hand.
 - Samples stay deterministic. No `Math.random`, no clock inside a computed. The server render and hydration have to agree.
