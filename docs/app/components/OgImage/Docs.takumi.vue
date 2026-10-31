@@ -14,7 +14,7 @@ const { title, description, headline } = defineProps<{
 
 const { name: siteName } = useSiteConfig();
 
-/** The description arrives with its commas stripped, so the card cuts it at 160 characters. */
+/** The card has room for 160 characters of description, and a longer one gets cut there. */
 const subtitle = (description ?? "").slice(0, 160);
 
 const chips = TOOLS;

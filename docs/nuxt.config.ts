@@ -36,8 +36,16 @@ export default defineNuxtConfig({
     url: "https://curves.agntn.dev",
     name: "@agntn/curves",
   },
+  /** The playground has no markdown twin, so agents get the page itself, not a `/raw` 404. */
+  agentDiscovery: {
+    excludePrefixes: { extend: ["/playground"] },
+  },
+  /** Docus lists `content/` only and leaves app routes out, so the Vue pages come from here. */
+  sitemap: {
+    sources: ["/api/__sitemap__/pages"],
+  },
+  /** Spelled out, or agent discovery lumps every page into one list and titles the landing `/`. */
   llms: {
-    domain: "https://curves.agntn.dev",
     title: "@agntn/curves",
     description:
       "Arithmetic on elliptic curves: short Weierstrass curves over a prime you pick (points, orders, counts, discrete logs), secp256k1, P-256, P-384, P-521, brainpoolP256r1, brainpoolP384r1 and brainpoolP512r1 with SEC1 points and sr25519 over ristretto255 for Polkadot keys, written from the specs, as a library, a CLI, an MCP server and Pi and OMP extensions. Computed locally.",
@@ -64,6 +72,16 @@ export default defineNuxtConfig({
             description: "The library running in the page: curves_compute, curves_secp256k1_compute, curves_bip340_compute, curves_p256_compute, curves_p384_compute, curves_p521_compute, curves_brainpoolp256r1_compute, curves_brainpoolp384r1_compute, curves_brainpoolp512r1_compute, curves_sr25519_compute and curves_ed25519_compute.",
           },
         ],
+      },
+      {
+        title: "Guide",
+        contentCollection: "docs",
+        contentFilters: [{ field: "path", operator: "LIKE", value: "/guide%" }],
+      },
+      {
+        title: "Math",
+        contentCollection: "docs",
+        contentFilters: [{ field: "path", operator: "LIKE", value: "/math%" }],
       },
     ],
   },
@@ -159,14 +177,15 @@ export default defineNuxtConfig({
     compatibilityDate: "2026-09-03",
     /** Nitro compiles the server bundle for ES2019 unless told otherwise; the library uses BigInt. */
     esbuild: { options: { target: "es2024" } },
-    prerender: {
-      crawlLinks: true,
-      routes: ["/", "/playground", "/sitemap.xml", "/robots.txt", "/llms.txt", "/llms-full.txt"],
-    },
     cloudflare: {
       deployConfig: true,
       nodeCompat: true,
     },
+  },
+  /** Nuxt's own prerender option. The same keys under `nitro.prerender` are deprecated. */
+  prerender: {
+    crawlLinks: true,
+    routes: ["/", "/playground", "/sitemap.xml", "/robots.txt", "/llms.txt", "/llms-full.txt"],
   },
   compatibilityDate: "2026-09-03",
   /** Fonts live in public/fonts and app/assets/fonts.css, where nuxt-og-image reads them from. */
