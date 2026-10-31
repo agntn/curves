@@ -25,6 +25,7 @@ import { highS, nobleEdges, nobleSignatures } from "./fixtures/ecdsa.ts";
 import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 import { p256Rfc6979 } from "./fixtures/p256.ts";
 import { p384Rfc6979 } from "./fixtures/p384.ts";
+import { p521Rfc6979, p521Vectors } from "./fixtures/p521.ts";
 
 const [signed] = nobleSignatures;
 if (signed === undefined) throw new Error("The noble fixture lost its first signature");
@@ -61,6 +62,7 @@ describe("curves CLI", () => {
     expect(help.stdout).toMatch(/^ {2}bip340 {5}BIP340 Schnorr keys and signatures/m);
     expect(help.stdout).toMatch(/^ {2}p256 {7}Point math on NIST P-256/m);
     expect(help.stdout).toMatch(/^ {2}p384 {7}Point math on NIST P-384/m);
+    expect(help.stdout).toMatch(/^ {2}p521 {7}Point math on NIST P-521/m);
     expect(help.stdout).toMatch(/^ {2}sr25519 {4}sr25519 keys/m);
     expect(help.stdout).toMatch(/^ {2}ed25519 {4}Ed25519 keys and signatures/m);
     expect(usage.stdout).toContain("USAGE curves compute [OPTIONS] <OPERATION>");
@@ -150,6 +152,23 @@ describe("curves CLI", () => {
       code: 1,
       stderr: "No point of P-384 has this x\n",
     });
+  });
+
+  it("verifies RFC 6979's P-521 signature over SHA-512 and wants 132 hex digits of x", () => {
+    const { publicKey, signatures } = p521Rfc6979;
+    const { signature } = signatures[5];
+    const digest =
+      "ee26b0dd4af7e749aa1a8ee3c10ae9923f618980772e473f8819a5d4940e0db27ac185f8a0e1d5f84f88bc887fd67b143732c304cc5fa9ad8e6f57f50028a8ff";
+    const flags = ["--point", publicKey, "--digest", digest, "--signature", signature];
+    expect(run("p521", "verify", ...flags)).toMatchObject({
+      code: 0,
+      stdout: '{"operation":"verify","valid":true}\n',
+    });
+    expect(run("p521", "lift", "--x", p521Vectors.xWithoutPoint)).toMatchObject({
+      code: 1,
+      stderr: "No point of P-521 has this x\n",
+    });
+    expect(run("p521", "lift", "--x", "03".padStart(96, "0")).code).toBe(1);
   });
 
   it("signs a digest with ECDSA from flags, the way @noble/curves 2.4.0 did", () => {

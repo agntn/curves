@@ -12,6 +12,7 @@ export default defineNuxtConfig({
     "@agntn/curves/secp256k1": resolve(librarySource, "secp256k1.ts"),
     "@agntn/curves/p256": resolve(librarySource, "p256.ts"),
     "@agntn/curves/p384": resolve(librarySource, "p384.ts"),
+    "@agntn/curves/p521": resolve(librarySource, "p521.ts"),
     "@agntn/curves/sr25519": resolve(librarySource, "sr25519.ts"),
     "@agntn/curves": resolve(librarySource, "index.ts"),
     /** The text the agent tools answer with; it imports nothing beyond the library. */
@@ -42,7 +43,7 @@ export default defineNuxtConfig({
     domain: "https://curves.agntn.dev",
     title: "@agntn/curves",
     description:
-      "Arithmetic on elliptic curves: short Weierstrass curves over a prime you pick (points, orders, counts, discrete logs), secp256k1, P-256 and P-384 with SEC1 points and sr25519 over ristretto255 for Polkadot keys, written from the specs, as a library, a CLI, an MCP server and Pi and OMP extensions. Computed locally.",
+      "Arithmetic on elliptic curves: short Weierstrass curves over a prime you pick (points, orders, counts, discrete logs), secp256k1, P-256, P-384 and P-521 with SEC1 points and sr25519 over ristretto255 for Polkadot keys, written from the specs, as a library, a CLI, an MCP server and Pi and OMP extensions. Computed locally.",
     sections: [
       {
         title: "MCP Server",
@@ -63,7 +64,7 @@ export default defineNuxtConfig({
           {
             title: "Playground",
             href: "https://curves.agntn.dev/playground",
-            description: "The library running in the page: curves_compute, curves_secp256k1_compute, curves_bip340_compute, curves_p256_compute, curves_p384_compute, curves_sr25519_compute and curves_ed25519_compute.",
+            description: "The library running in the page: curves_compute, curves_secp256k1_compute, curves_bip340_compute, curves_p256_compute, curves_p384_compute, curves_p521_compute, curves_sr25519_compute and curves_ed25519_compute.",
           },
         ],
       },

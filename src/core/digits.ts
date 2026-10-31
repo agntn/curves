@@ -6,12 +6,12 @@
 import { mod } from "./field.ts";
 
 /**
- * How many hex digits a scalar below the order takes: 64 up to 2^256, 96 for P-384.
+ * Hex digits of a scalar below the order, in whole bytes: 64 up to 2^256, 132 on P-521.
  * @param order - The order of the group
  * @returns {number} The digit count, from the bit length of the order, which is public
  */
 export function digitCount(order: bigint): number {
-  return Math.ceil(order.toString(2).length / 4);
+  return 2 * Math.ceil(order.toString(2).length / 8);
 }
 
 /**
