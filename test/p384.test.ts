@@ -107,12 +107,11 @@ describe("P-384 domain parameters", () => {
     expect(multiplyOnCurve(curve, p384.g, order)).toBeNull();
   });
 
-  it("are the widest the SEC 1 code takes when n fills the bytes of p, and P-521's isn't", () => {
+  it("take 96 digits, and an n a byte shorter than p is refused", () => {
     const options = { name: "P-384", formulas: minusThreeAFormulas };
-    const refusal = "needs n as long as p in whole bytes";
-    const p521 = { ...p384, p: (1n << 521n) - 1n, n: (1n << 520n) + 1n };
-    expect(() => sec1Curve(p521, options)).toThrow(refusal);
-    expect(() => sec1Curve({ ...p384, n: p384.n >> 8n }, options)).toThrow(refusal);
+    expect(() => sec1Curve({ ...p384, n: p384.n >> 8n }, options)).toThrow(
+      "needs n as long as p in bits",
+    );
     expect(sec1Curve(p384, options).digits).toBe(96);
   });
 });

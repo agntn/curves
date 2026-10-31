@@ -4,6 +4,7 @@ import * as ed25519 from "../src/ed25519.ts";
 import * as root from "../src/index.ts";
 import * as p256 from "../src/p256.ts";
 import * as p384 from "../src/p384.ts";
+import * as p521 from "../src/p521.ts";
 import * as ristretto255 from "../src/ristretto255.ts";
 import * as secp256k1 from "../src/secp256k1.ts";
 import * as sr25519 from "../src/sr25519.ts";
@@ -78,6 +79,14 @@ describe("@agntn/curves", () => {
     expect(Object.keys(p384).toSorted()).toEqual(
       Object.keys(p256)
         .map((name) => (name === "p256" ? "p384" : name))
+        .toSorted(),
+    );
+  });
+
+  it("keeps P-521 in its own entry, with the same names as P-256", () => {
+    expect(Object.keys(p521).toSorted()).toEqual(
+      Object.keys(p256)
+        .map((name) => (name === "p256" ? "p521" : name))
         .toSorted(),
     );
   });

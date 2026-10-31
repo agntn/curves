@@ -1,8 +1,9 @@
 /**
- * The curves SEC 1 covers whose p and n fill the same whole bytes: prime order, cofactor 1, p equal
- * to 3 mod 4, and a = 0 or a = -3. That's secp256k1 and P-256 in 32 bytes and P-384 in 48. Every
- * width (hex lengths, digits, the comb, the verification table, the cut of a digest) comes from the
- * curve, not from a constant. Points travel as SEC1 hex (SEC 1 v2, sections
+ * The curves SEC 1 covers whose p and n have the same bit length: prime order, cofactor 1, p equal
+ * to 3 mod 4, and a = 0 or a = -3. That's secp256k1 and P-256 in 32 bytes, P-384 in 48 and P-521
+ * in 66, where the top byte keeps one bit. Every width (hex lengths, digits, the comb, the
+ * verification table, the cut of a digest) comes from the curve, not from a constant. Points
+ * travel as SEC1 hex (SEC 1 v2, sections
  * 2.3.3 and 2.3.4) and add in projective coordinates with complete formulas, so no sum needs a
  * branch of its own. ECDSA signing, verification and public key recovery follow SEC 1 v2,
  * sections 4.1.3, 4.1.4 and 4.1.6, and the signing nonce comes from RFC 6979. A multiply runs the
@@ -27,7 +28,7 @@ export interface Sec1Domain {
   readonly g: AffinePoint;
 }
 
-/** A scalar as hex without 0x, up to 64 digits (96 on P-384), or as a bigint. */
+/** A scalar as hex without 0x, up to 64 digits (96 on P-384, 132 on P-521), or as a bigint. */
 export type Scalar = string | bigint;
 
 /** SEC1 output encoding; this does not change the point. */
@@ -218,9 +219,9 @@ export interface Sec1Curve {
   readonly p: bigint;
   readonly n: bigint;
   readonly g: Affine;
-  /** Hex digits in one coordinate or scalar: 64 for 32 bytes, 96 for 48. */
+  /** Hex digits in one coordinate or scalar: 64 for 32 bytes, 96 for 48, 132 for 66. */
   readonly digits: number;
-  /** n's bit length, the most of a digest that ECDSA reads. */
+  /** n's bit length, the most of a digest that ECDSA reads: 521 on P-521, not 528. */
   readonly bits: bigint;
   /** Compressed or uncompressed SEC1 hex of this width. */
   readonly sec1: Shape;
@@ -253,14 +254,16 @@ export interface Sec1CurveOptions {
  * @param domain - p, a, b, G, n and h
  * @param options - The name and the formulas
  * @returns {Sec1Curve} The curve
- * @throws {RangeError} When n doesn't fill p's bytes, p isn't 3 mod 4, h isn't 1 or the formulas misfit
+ * @throws {RangeError} When n and p differ in bits, the comb rows don't split the digits, p isn't
+ * 3 mod 4, h isn't 1 or the formulas misfit
  */
 export function sec1Curve(domain: Sec1Domain, options: Sec1CurveOptions): Sec1Curve {
   const { b, p, n, g } = domain;
-  const bits = BigInt(Math.ceil(p.toString(2).length / 8) * 8);
-  if (n >> (bits - 1n) !== 1n || p % 4n !== 3n || domain.h !== 1n) {
+  const bits = n.toString(2).length;
+  const digits = digitCount(n);
+  if (bits !== p.toString(2).length || digits % ROWS !== 0 || p % 4n !== 3n || domain.h !== 1n) {
     throw new RangeError(
-      "A SEC1 curve here needs n as long as p in whole bytes, p = 3 mod 4 and cofactor 1",
+      "A SEC1 curve here needs n as long as p in bits, an even number of bytes, p = 3 mod 4 and cofactor 1",
     );
   }
   const { a, add, double } = options.formulas(p, b);
@@ -268,7 +271,6 @@ export function sec1Curve(domain: Sec1Domain, options: Sec1CurveOptions): Sec1Cu
   const { name } = options;
   const invalidPoint = `Invalid SEC1 ${name} public key`;
   const rootExponent = (p + 1n) / 4n;
-  const digits = digitCount(n);
   return {
     name,
     invalidPoint,
@@ -278,7 +280,7 @@ export function sec1Curve(domain: Sec1Domain, options: Sec1CurveOptions): Sec1Cu
     n,
     g,
     digits,
-    bits,
+    bits: BigInt(bits),
     sec1: shape(`0[23][0-9a-f]{${digits}}|04[0-9a-f]{${2 * digits}}`),
     scalar: shape(`[0-9a-f]{1,${digits}}`),
     xOnly: shape(`[0-9a-f]{${digits}}`),
@@ -293,7 +295,7 @@ export function sec1Curve(domain: Sec1Domain, options: Sec1CurveOptions): Sec1Cu
 
 /**
  * Comb rows per curve, built on the first secret multiply: row r is 1 to 16 times 16^(sr) G, with
- * s the spacing, 16 on a 32-byte curve and 24 on P-384.
+ * s the spacing, 16 on a 32-byte curve, 24 on P-384 and 33 on P-521.
  */
 const combTables = new WeakMap<Sec1Curve, readonly (readonly Projective[])[]>();
 
@@ -360,7 +362,7 @@ function readSignature(curve: Sec1Curve, value: unknown): SignatureParts {
 
 /**
  * Turn a digest into e as SEC 1 v2 section 4.1.4 step 3 does: its leftmost bits, as many as n has.
- * @param curve - The curve, 256 bits of n on secp256k1 and P-256 and 384 on P-384
+ * @param curve - The curve, 256 bits of n on secp256k1 and P-256, 384 on P-384 and 521 on P-521
  * @param value - Hex without 0x, 1 to 64 bytes
  * @returns {bigint} e, not reduced mod n
  * @throws {RangeError} When the value is no hex of whole bytes, or longer than 64
