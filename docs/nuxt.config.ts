@@ -1,13 +1,11 @@
 import { resolve } from "node:path";
 import { curvesTheme } from "./shiki-theme";
 
-/** Bundled from the checkout's sources: a deploy needs neither dist/ nor the root node_modules. */
+/** Bundled from the checkout's sources: no dist/ needed, their imports resolve from the root. */
 const librarySource = resolve(import.meta.dirname, "../src");
 
 export default defineNuxtConfig({
   extends: ["docus"],
-  /** The repo root is its own pnpm workspace; Nuxt must not treat it as this site's. */
-  workspaceDir: import.meta.dirname,
   alias: {
     "@agntn/curves/secp256k1": resolve(librarySource, "secp256k1.ts"),
     "@agntn/curves/p256": resolve(librarySource, "p256.ts"),
@@ -31,10 +29,6 @@ export default defineNuxtConfig({
     },
     /** Signing hashes with SHA-2 and HMAC from `@agntn/hashes`, in the playground too. */
     optimizeDeps: { include: ["@agntn/hashes/hmac", "@agntn/hashes/sha2"] },
-    server: {
-      /** Dev serves the library from outside the workspace, which Vite refuses without this. */
-      fs: { allow: [resolve(librarySource, "..")] },
-    },
   },
   devtools: { enabled: false },
   telemetry: false,

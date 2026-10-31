@@ -136,8 +136,7 @@ Mnemonics and addresses. That's [@agntn/keys](https://github.com/agntn/keys). Yo
 ## 🛠️ Development
 
 ```bash
-pnpm install
-pnpm --dir docs install   # the /mcp test borrows Zod, the toolkit and the SDK from here
+pnpm install     # installs the library and the docs site
 pnpm build       # dist/, the CLI and the secp256k1, bip340, p256, p384, p521, brainpoolp256r1, brainpoolp384r1, brainpoolp512r1, ristretto255, sr25519 and ed25519 subpaths
 pnpm test        # textbook curves, brute force oracles, Wycheproof, BIP340, RFC 6979, RFC 7027, RFC 9496, RFC 8032 and speccheck, frozen secp256k1, P-256, P-384, P-521, brainpoolP256r1, brainpoolP384r1, brainpoolP512r1, sr25519 and Ed25519 vectors
 pnpm lint        # vp lint and vp fmt --check

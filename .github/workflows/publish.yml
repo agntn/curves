@@ -22,15 +22,13 @@ jobs:
         with:
           ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
-      # Installs docs/ too: test/docs-mcp.test.ts takes Zod, the toolkit and the SDK from there.
+      # One install covers docs/: test/docs-mcp.test.ts takes Zod, the toolkit and the SDK from there.
       - uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
         with:
           node-version: 26.12.1
           registry-url: https://registry.npmjs.org
           run-install: |
             - cwd: .
-              args: ['--frozen-lockfile']
-            - cwd: docs
               args: ['--frozen-lockfile']
 
       - run: pnpm build
