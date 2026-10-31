@@ -1,6 +1,8 @@
 /**
- * The curves SEC 1 covers with 32-byte numbers: prime order, cofactor 1, p equal to 3 mod 4, and
- * a = 0 or a = -3. That's secp256k1 and P-256. Points travel as SEC1 hex (SEC 1 v2, sections
+ * The curves SEC 1 covers whose p and n fill the same whole bytes: prime order, cofactor 1, p equal
+ * to 3 mod 4, and a = 0 or a = -3. That's secp256k1 and P-256 in 32 bytes and P-384 in 48. Every
+ * width (hex lengths, digits, the comb, the verification table, the cut of a digest) comes from the
+ * curve, not from a constant. Points travel as SEC1 hex (SEC 1 v2, sections
  * 2.3.3 and 2.3.4) and add in projective coordinates with complete formulas, so no sum needs a
  * branch of its own. ECDSA signing, verification and public key recovery follow SEC 1 v2,
  * sections 4.1.3, 4.1.4 and 4.1.6, and the signing nonce comes from RFC 6979. A multiply runs the
@@ -11,7 +13,7 @@
 
 import { readHex, requireOptions } from "./arguments.ts";
 import type { AffinePoint } from "./arithmetic.ts";
-import { digitsOf } from "./digits.ts";
+import { digitCount, digitsOf } from "./digits.ts";
 import { invert, mod, power } from "./field.ts";
 import { nonces } from "./rfc6979.ts";
 
@@ -25,7 +27,7 @@ export interface Sec1Domain {
   readonly g: AffinePoint;
 }
 
-/** A scalar as hex without 0x, up to 64 digits, or as a bigint. */
+/** A scalar as hex without 0x, up to 64 digits (96 on P-384), or as a bigint. */
 export type Scalar = string | bigint;
 
 /** SEC1 output encoding; this does not change the point. */
@@ -56,7 +58,7 @@ export interface Signature {
 
 /** What `verify` checks a signature against. */
 export interface VerifyOptions {
-  /** The message digest as hex, 1 to 64 bytes. Past 32 bytes only the leftmost 256 bits count. */
+  /** The message digest as hex, 1 to 64 bytes. Past n's bit length only its leftmost bits count. */
   readonly digest: string;
   /** The signer's key, compressed or uncompressed SEC1 hex. */
   readonly publicKey: string;
@@ -100,18 +102,11 @@ const ZERO: Projective = { x: 0n, y: 1n, z: 0n };
 
 const INFINITY = "The result is the point at infinity, which is no public key, as with P minus P";
 
-const SEC1 = /^(?:0[23][0-9a-f]{64}|04[0-9a-f]{128})$/iu;
-const SCALAR = /^[0-9a-f]{1,64}$/iu;
-const X_ONLY = /^[0-9a-f]{64}$/iu;
-const SIGNATURE = /^[0-9a-f]{128}$/iu;
 const DIGEST = /^(?:[0-9a-f]{2}){1,64}$/iu;
 const DIGEST_REFUSAL = "Digest must be hex without 0x, 1 to 64 bytes";
 
 /** Comb rows. More rows skip doublings, but then a repeated secret runs faster. */
 const ROWS = 4;
-
-/** How far apart the digits one step of the comb picks are. */
-const SPACING = 64 / ROWS;
 
 /**
  * Algorithms 7 and 9 of Renes, Costello and Batina (2016), for a = 0.
@@ -198,6 +193,21 @@ export function minusThreeAFormulas(p: bigint, b: bigint): Formulas {
   };
 }
 
+/** Whether a whole text matches one hex layout, without the mutable `lastIndex` of a RegExp. */
+interface Shape {
+  readonly test: (text: string) => boolean;
+}
+
+/**
+ * A case-insensitive layout of hex text, anchored at both ends.
+ * @param source - The pattern between the anchors
+ * @returns {Shape} Its test
+ */
+function shape(source: string): Shape {
+  const pattern = new RegExp(`^(?:${source})$`, "iu");
+  return { test: (text) => pattern.test(text) };
+}
+
 /** One curve as the SEC 1 code runs it: its numbers, its formulas and the name its refusals use. */
 export interface Sec1Curve {
   readonly name: string;
@@ -208,6 +218,20 @@ export interface Sec1Curve {
   readonly p: bigint;
   readonly n: bigint;
   readonly g: Affine;
+  /** Hex digits in one coordinate or scalar: 64 for 32 bytes, 96 for 48. */
+  readonly digits: number;
+  /** n's bit length, the most of a digest that ECDSA reads. */
+  readonly bits: bigint;
+  /** Compressed or uncompressed SEC1 hex of this width. */
+  readonly sec1: Shape;
+  /** A scalar as up to {@link Sec1Curve.digits} hex digits. */
+  readonly scalar: Shape;
+  /** An x coordinate as exactly {@link Sec1Curve.digits} hex digits. */
+  readonly xOnly: Shape;
+  /** r then s, twice {@link Sec1Curve.digits} hex digits. */
+  readonly signature: Shape;
+  /** How far apart the digits one step of the comb picks are. */
+  readonly spacing: number;
   /** p is 3 mod 4, so a square root of a square r is r^((p + 1) / 4). */
   readonly rootExponent: bigint;
   /** The largest s a low-S signature may carry, as BIP 62 and BIP 146 count it. */
@@ -229,18 +253,22 @@ export interface Sec1CurveOptions {
  * @param domain - p, a, b, G, n and h
  * @param options - The name and the formulas
  * @returns {Sec1Curve} The curve
- * @throws {RangeError} When p or n tops 32 bytes, p isn't 3 mod 4, h isn't 1 or the formulas misfit
+ * @throws {RangeError} When n doesn't fill p's bytes, p isn't 3 mod 4, h isn't 1 or the formulas misfit
  */
 export function sec1Curve(domain: Sec1Domain, options: Sec1CurveOptions): Sec1Curve {
   const { b, p, n, g } = domain;
-  if (p >> 256n !== 0n || n >> 255n !== 1n || p % 4n !== 3n || domain.h !== 1n) {
-    throw new RangeError("A SEC1 curve here needs 32-byte p and n, p = 3 mod 4 and cofactor 1");
+  const bits = BigInt(Math.ceil(p.toString(2).length / 8) * 8);
+  if (n >> (bits - 1n) !== 1n || p % 4n !== 3n || domain.h !== 1n) {
+    throw new RangeError(
+      "A SEC1 curve here needs n as long as p in whole bytes, p = 3 mod 4 and cofactor 1",
+    );
   }
   const { a, add, double } = options.formulas(p, b);
   if (mod(a, p) !== mod(domain.a, p)) throw new RangeError("These formulas are for another a");
   const { name } = options;
   const invalidPoint = `Invalid SEC1 ${name} public key`;
   const rootExponent = (p + 1n) / 4n;
+  const digits = digitCount(n);
   return {
     name,
     invalidPoint,
@@ -249,6 +277,13 @@ export function sec1Curve(domain: Sec1Domain, options: Sec1CurveOptions): Sec1Cu
     p,
     n,
     g,
+    digits,
+    bits,
+    sec1: shape(`0[23][0-9a-f]{${digits}}|04[0-9a-f]{${2 * digits}}`),
+    scalar: shape(`[0-9a-f]{1,${digits}}`),
+    xOnly: shape(`[0-9a-f]{${digits}}`),
+    signature: shape(`[0-9a-f]{${2 * digits}}`),
+    spacing: digits / ROWS,
     rootExponent,
     halfN: n >> 1n,
     add,
@@ -256,25 +291,34 @@ export function sec1Curve(domain: Sec1Domain, options: Sec1CurveOptions): Sec1Cu
   };
 }
 
-/** Comb rows per curve, built on the first secret multiply: row r is 1 to 16 times 16^(16r) G. */
+/**
+ * Comb rows per curve, built on the first secret multiply: row r is 1 to 16 times 16^(sr) G, with
+ * s the spacing, 16 on a 32-byte curve and 24 on P-384.
+ */
 const combTables = new WeakMap<Sec1Curve, readonly (readonly Projective[])[]>();
 
-/** Each curve's verification table: entry j of row i is (j + 1) times 16^(63 - i) times G. */
+/** Each curve's verification table: entry j of row i is (j + 1) times 16^(digits - 1 - i) G. */
 const publicTables = new WeakMap<Sec1Curve, readonly (readonly Projective[])[]>();
 
 function toProjective(point: Affine): Projective {
   return { x: point.x, y: point.y, z: 1n };
 }
 
+/** A point on its way out: the curve it's on and whether to drop y for its parity. */
+interface Encoding {
+  readonly curve: Sec1Curve;
+  readonly compressed: boolean;
+}
+
 /**
  * Write a point as SEC1 hex.
  * @param point - A finite point
- * @param compressed - 33 bytes with the parity of y, or 65 with both coordinates
- * @returns {string} Lowercase SEC1 hex
+ * @param encoding - The curve, whose width pads both coordinates, and the compression
+ * @returns {string} Lowercase SEC1 hex, 33 or 65 bytes on a 32-byte curve
  */
-function encodeAffine(point: Affine, compressed: boolean): string {
-  const x = point.x.toString(16).padStart(64, "0");
-  if (!compressed) return `04${x}${point.y.toString(16).padStart(64, "0")}`;
+function encodeAffine(point: Affine, encoding: Encoding): string {
+  const x = encodeScalar(encoding.curve, point.x);
+  if (!encoding.compressed) return `04${x}${encodeScalar(encoding.curve, point.y)}`;
   return `${(point.y & 1n) === 1n ? "03" : "02"}${x}`;
 }
 
@@ -289,34 +333,43 @@ function compression(options: PointEncodingOptions): boolean {
   return compressed;
 }
 
-function encodeScalar(scalar: bigint): string {
-  return scalar.toString(16).padStart(64, "0");
+/**
+ * Write a number as many hex digits as the curve's coordinates take.
+ * @param curve - The curve
+ * @param scalar - From 0 to below 16^digits
+ * @returns {string} Zero padded lowercase hex
+ */
+function encodeScalar(curve: Sec1Curve, scalar: bigint): string {
+  return scalar.toString(16).padStart(curve.digits, "0");
 }
 
 /**
- * Read a compact signature: r, then s, 32 bytes each, big-endian.
+ * Read a compact signature: r, then s, one coordinate width each, big-endian.
+ * @param curve - The curve
  * @param value - The caller's value
  * @returns {SignatureParts} r and s, not yet checked against n
- * @throws {RangeError} When the value is no 128 hex digits
+ * @throws {RangeError} When the value is no hex of twice the width
  */
-function readSignature(value: unknown): SignatureParts {
-  if (typeof value !== "string" || !SIGNATURE.test(value)) {
-    throw new RangeError("Signature must be 128 hex digits without 0x, r then s");
+function readSignature(curve: Sec1Curve, value: unknown): SignatureParts {
+  if (typeof value !== "string" || !curve.signature.test(value)) {
+    throw new RangeError(`Signature must be ${2 * curve.digits} hex digits without 0x, r then s`);
   }
-  return { r: BigInt(`0x${value.slice(0, 64)}`), s: BigInt(`0x${value.slice(64)}`) };
+  const half = curve.digits;
+  return { r: BigInt(`0x${value.slice(0, half)}`), s: BigInt(`0x${value.slice(half)}`) };
 }
 
 /**
- * Turn a digest into e as SEC 1 v2 section 4.1.4 step 3 does: its leftmost 256 bits, n's length.
+ * Turn a digest into e as SEC 1 v2 section 4.1.4 step 3 does: its leftmost bits, as many as n has.
+ * @param curve - The curve, 256 bits of n on secp256k1 and P-256 and 384 on P-384
  * @param value - Hex without 0x, 1 to 64 bytes
  * @returns {bigint} e, not reduced mod n
  * @throws {RangeError} When the value is no hex of whole bytes, or longer than 64
  */
-function readDigest(value: unknown): bigint {
+function readDigest(curve: Sec1Curve, value: unknown): bigint {
   if (typeof value !== "string" || !DIGEST.test(value)) throw new RangeError(DIGEST_REFUSAL);
-  const extra = value.length * 4 - 256;
+  const extra = BigInt(value.length * 4) - curve.bits;
   const e = BigInt(`0x${value}`);
-  return extra > 0 ? e >> BigInt(extra) : e;
+  return extra > 0n ? e >> extra : e;
 }
 
 /**
@@ -365,13 +418,14 @@ export function liftY(curve: Sec1Curve, x: bigint, odd: boolean): bigint | undef
  * @throws {Error} When the text is no SEC1 hex, a coordinate reaches p or the point is off curve
  */
 function decodePoint(curve: Sec1Curve, text: unknown): Affine {
-  if (typeof text !== "string" || !SEC1.test(text)) throw new Error(curve.invalidPoint);
+  if (typeof text !== "string" || !curve.sec1.test(text)) throw new Error(curve.invalidPoint);
   const { p } = curve;
-  const x = BigInt(`0x${text.slice(2, 66)}`);
+  const end = 2 + curve.digits;
+  const x = BigInt(`0x${text.slice(2, end)}`);
   if (x >= p) throw new Error(curve.invalidPoint);
   const prefix = text.slice(0, 2);
   if (prefix === "04") {
-    const y = BigInt(`0x${text.slice(66)}`);
+    const y = BigInt(`0x${text.slice(end)}`);
     if (y >= p || (y * y) % p !== rightSide(curve, x)) throw new Error(curve.invalidPoint);
     return { x, y };
   }
@@ -471,7 +525,7 @@ function normalizeAll(curve: Sec1Curve, points: readonly Projective[]): Projecti
 }
 
 /**
- * Build the comb's rows, 64 points in all.
+ * Build the comb's rows, 16 points per row.
  * @param curve - The curve
  * @returns {Projective[][]} The rows, lowest first
  */
@@ -479,7 +533,7 @@ function buildCombTable(curve: Sec1Curve): Projective[][] {
   let base = toProjective(curve.g);
   const points = Array.from({ length: ROWS }, () => {
     const row = multiplesOf(curve, base);
-    for (let step = 0; step < SPACING; step++) base = timesSixteen(curve, base);
+    for (let step = 0; step < curve.spacing; step++) base = timesSixteen(curve, base);
     return row;
   }).flat();
   const normal = normalizeAll(curve, points);
@@ -487,7 +541,7 @@ function buildCombTable(curve: Sec1Curve): Projective[][] {
 }
 
 /**
- * Multiply G by a secret with a comb of 16 steps, building its table on the first call.
+ * Multiply G by a secret with a comb of one step per spacing, building its table on the first call.
  * @param curve - The curve
  * @param scalar - Zero or more
  * @returns {Projective} The product
@@ -499,25 +553,26 @@ function multiplyBase(curve: Sec1Curve, scalar: bigint): Projective {
     combTables.set(curve, table);
   }
   const digits = digitsOf(scalar, curve.n);
+  const { spacing } = curve;
   let result = ZERO;
-  for (let step = SPACING - 1; step >= 0; step--) {
+  for (let step = spacing - 1; step >= 0; step--) {
     result = timesSixteen(curve, result);
     for (const [row, multiples] of table.entries()) {
-      result = curve.add(result, multiples[digits[row * SPACING + step] ?? 0] ?? ZERO);
+      result = curve.add(result, multiples[digits[row * spacing + step] ?? 0] ?? ZERO);
     }
   }
   return result;
 }
 
 /**
- * Build the verification table, 64 rows of 15 points.
+ * Build the verification table, one row of 15 points per hex digit of a scalar.
  * @param curve - The curve
  * @returns {Projective[][]} The rows, the top hex digit's first
  */
 function buildPublicTable(curve: Sec1Curve): Projective[][] {
   const points: Projective[] = [];
   let base = toProjective(curve.g);
-  for (let row = 0; row < 64; row++) {
+  for (let row = 0; row < curve.digits; row++) {
     let multiple = base;
     for (let digit = 1; digit < 16; digit++) {
       points.push(multiple);
@@ -526,7 +581,9 @@ function buildPublicTable(curve: Sec1Curve): Projective[][] {
     base = multiple;
   }
   const normal = normalizeAll(curve, points);
-  return Array.from({ length: 64 }, (_, row) => normal.slice(row * 15, row * 15 + 15)).toReversed();
+  return Array.from({ length: curve.digits }, (_, row) =>
+    normal.slice(row * 15, row * 15 + 15),
+  ).toReversed();
 }
 
 /**
@@ -542,7 +599,7 @@ function multiplyBasePublic(curve: Sec1Curve, scalar: bigint): Projective {
     table = buildPublicTable(curve);
     publicTables.set(curve, table);
   }
-  const digits = scalar.toString(16).padStart(64, "0");
+  const digits = encodeScalar(curve, scalar);
   let result = ZERO;
   for (const [row, multiples] of table.entries()) {
     const point = multiples[Number.parseInt(digits.charAt(row), 16) - 1];
@@ -562,7 +619,10 @@ function multiplyBasePublic(curve: Sec1Curve, scalar: bigint): Projective {
 function encodePoint(curve: Sec1Curve, point: Projective, options: PointEncodingOptions): string {
   const compressed = compression(options);
   if (point.z === 0n) throw new RangeError(INFINITY);
-  return encodeAffine(scale(curve, point, power(point.z, curve.p - 2n, curve.p)), compressed);
+  return encodeAffine(scale(curve, point, power(point.z, curve.p - 2n, curve.p)), {
+    curve,
+    compressed,
+  });
 }
 
 /** What a scalar is called in a refusal, and the least value its operation takes. */
@@ -575,7 +635,7 @@ interface ScalarSlot {
 /**
  * Read a scalar and check it against the range the operation allows.
  * @param curve - The curve
- * @param value - Hex without 0x, up to 64 digits, or a bigint
+ * @param value - Hex without 0x, as many digits as the curve takes, or a bigint
  * @param slot - The name and the least value
  * @returns {bigint} The scalar
  * @throws {RangeError} When the value is no hex or bigint, or falls outside minimum to n minus 1
@@ -583,7 +643,7 @@ interface ScalarSlot {
 function decodeScalar(curve: Sec1Curve, value: unknown, slot: ScalarSlot): bigint {
   let scalar: bigint | undefined;
   if (typeof value === "bigint") scalar = value;
-  else if (typeof value === "string" && SCALAR.test(value)) scalar = BigInt(`0x${value}`);
+  else if (typeof value === "string" && curve.scalar.test(value)) scalar = BigInt(`0x${value}`);
   if (scalar === undefined || scalar < slot.minimum || scalar >= curve.n) {
     throw new RangeError(
       `${slot.name} must be hex without 0x or a bigint, from ${slot.minimum} to the curve order minus 1`,
@@ -707,64 +767,64 @@ function scalarPair(curve: Sec1Curve, pair: readonly [Scalar, Scalar]): [bigint,
  * Add two scalars mod the curve order.
  * @param curve - The curve
  * @param pair - a and b, from 0 to the curve order minus 1
- * @returns {string} The sum as 64 hex digits
+ * @returns {string} The sum as hex of the curve's width
  */
 export function addScalars(curve: Sec1Curve, pair: readonly [Scalar, Scalar]): string {
   const [a, b] = scalarPair(curve, pair);
-  return encodeScalar(mod(a + b, curve.n));
+  return encodeScalar(curve, mod(a + b, curve.n));
 }
 
 /**
  * Subtract scalar b from scalar a mod the curve order.
  * @param curve - The curve
  * @param pair - a and b, from 0 to the curve order minus 1
- * @returns {string} The difference as 64 hex digits
+ * @returns {string} The difference as hex of the curve's width
  */
 export function subtractScalars(curve: Sec1Curve, pair: readonly [Scalar, Scalar]): string {
   const [a, b] = scalarPair(curve, pair);
-  return encodeScalar(mod(a - b, curve.n));
+  return encodeScalar(curve, mod(a - b, curve.n));
 }
 
 /**
  * Multiply two scalars mod the curve order.
  * @param curve - The curve
  * @param pair - a and b, from 0 to the curve order minus 1
- * @returns {string} The product as 64 hex digits
+ * @returns {string} The product as hex of the curve's width
  */
 export function multiplyScalars(curve: Sec1Curve, pair: readonly [Scalar, Scalar]): string {
   const [a, b] = scalarPair(curve, pair);
-  return encodeScalar(mod(a * b, curve.n));
+  return encodeScalar(curve, mod(a * b, curve.n));
 }
 
 /**
  * Invert a scalar mod the curve order.
  * @param curve - The curve
  * @param scalar - From 1 to the curve order minus 1, since zero has no inverse
- * @returns {string} The inverse as 64 hex digits
+ * @returns {string} The inverse as hex of the curve's width
  */
 export function invertScalar(curve: Sec1Curve, scalar: Scalar): string {
-  return encodeScalar(invert(decodeScalar(curve, scalar, SCALAR_SLOT), curve.n));
+  return encodeScalar(curve, invert(decodeScalar(curve, scalar, SCALAR_SLOT), curve.n));
 }
 
 /**
  * Find both points above an x coordinate.
  * @param curve - The curve
- * @param x - 64 hex digits without 0x
+ * @param x - hex without 0x, as many digits as a coordinate
  * @param options - Output encoding
  * @returns {LiftedPoints} The even and odd point as SEC1 hex
- * @throws {RangeError} When x is not 64 hex digits, or no point of the curve has it
+ * @throws {RangeError} When x is not hex of that width, or no point of the curve has it
  */
 export function liftX(curve: Sec1Curve, x: string, options: PointEncodingOptions): LiftedPoints {
-  if (typeof x !== "string" || !X_ONLY.test(x)) {
-    throw new RangeError("x must be 64 hex digits without 0x");
+  if (typeof x !== "string" || !curve.xOnly.test(x)) {
+    throw new RangeError(`x must be ${curve.digits} hex digits without 0x`);
   }
   const compressed = compression(options);
   const value = BigInt(`0x${x}`);
   const y = value < curve.p ? liftY(curve, value, false) : undefined;
   if (y === undefined) throw new RangeError(`No point of ${curve.name} has this x`);
   return {
-    even: encodeAffine({ x: value, y }, compressed),
-    odd: encodeAffine({ x: value, y: mod(-y, curve.p) }, compressed),
+    even: encodeAffine({ x: value, y }, { curve, compressed }),
+    odd: encodeAffine({ x: value, y: mod(-y, curve.p) }, { curve, compressed }),
   };
 }
 
@@ -776,7 +836,7 @@ export function liftX(curve: Sec1Curve, x: string, options: PointEncodingOptions
  * @throws {Error} When the value is not SEC1 hex at all, since there is no point to check
  */
 export function isOnCurve(curve: Sec1Curve, point: string): boolean {
-  if (typeof point !== "string" || !SEC1.test(point)) throw new Error(curve.invalidPoint);
+  if (typeof point !== "string" || !curve.sec1.test(point)) throw new Error(curve.invalidPoint);
   try {
     decodePoint(curve, point);
     return true;
@@ -798,7 +858,7 @@ export function convertPoint(
   options: PointEncodingOptions,
 ): string {
   const compressed = compression(options);
-  return encodeAffine(decodePoint(curve, point), compressed);
+  return encodeAffine(decodePoint(curve, point), { curve, compressed });
 }
 
 /** The two scalars and the point of a {@link combine}. */
@@ -837,7 +897,7 @@ function lowSignature(curve: Sec1Curve, commitment: Affine, parts: SignaturePart
   const high = s > curve.halfN;
   const parity = Number(commitment.y & 1n) ^ Number(high);
   return {
-    signature: `${encodeScalar(r)}${encodeScalar(high ? n - s : s)}`,
+    signature: `${encodeScalar(curve, r)}${encodeScalar(curve, high ? n - s : s)}`,
     recovery: parity | (commitment.x >= n ? 2 : 0),
   };
 }
@@ -853,7 +913,7 @@ export function sign(curve: Sec1Curve, secret: Scalar, options: SignOptions): Si
   const { n } = curve;
   const d = decodeScalar(curve, secret, { name: "Secret", minimum: 1n });
   requireOptions(options, "sign(secret, { digest })");
-  const e = readDigest(options.digest);
+  const e = readDigest(curve, options.digest);
   const digest = readHex(options.digest, undefined, DIGEST_REFUSAL);
   const candidates = nonces(n, { secret: d, digest });
   for (;;) {
@@ -879,16 +939,16 @@ function inRange(curve: Sec1Curve, parts: SignatureParts): boolean {
 /**
  * Verify an ECDSA signature over a digest, SEC 1 v2 section 4.1.4.
  * @param curve - The curve
- * @param signature - 128 hex digits, r then s
+ * @param signature - r then s, twice the hex digits of a coordinate
  * @param options - The digest, the public key and the low-S rule
  * @returns {boolean} Whether the key signed the digest, false for r or s outside 1 to n - 1 too
  * @throws {TypeError} When lowS is no boolean
  */
 export function verify(curve: Sec1Curve, signature: string, options: VerifyOptions): boolean {
   const { n } = curve;
-  const parts = readSignature(signature);
+  const parts = readSignature(curve, signature);
   requireOptions(options, "verify(signature, { digest, publicKey })");
-  const e = readDigest(options.digest);
+  const e = readDigest(curve, options.digest);
   const point = decodePoint(curve, options.publicKey);
   const lowS = options.lowS ?? false;
   if (typeof lowS !== "boolean") throw new TypeError("lowS must be a boolean");
@@ -921,7 +981,7 @@ function liftCommitment(curve: Sec1Curve, r: bigint, recovery: number): Affine {
 /**
  * Recover the key behind an ECDSA signature, SEC 1 v2 section 4.1.6.
  * @param curve - The curve
- * @param signature - 128 hex digits, r then s
+ * @param signature - r then s, twice the hex digits of a coordinate
  * @param options - The digest, the recovery id and the output encoding
  * @returns {string} The public key as SEC1 hex, one the signature verifies under whatever it is
  * @throws {RangeError} When r or s is out of range, or the sum is the point at infinity
@@ -932,9 +992,9 @@ export function recoverPublicKey(
   options: RecoverOptions,
 ): string {
   const { n } = curve;
-  const parts = readSignature(signature);
+  const parts = readSignature(curve, signature);
   requireOptions(options, "recoverPublicKey(signature, { digest, recovery })");
-  const e = readDigest(options.digest);
+  const e = readDigest(curve, options.digest);
   const recovery = readRecovery(options.recovery);
   const compressed = compression(options);
   if (!inRange(curve, parts)) {
@@ -946,5 +1006,5 @@ export function recoverPublicKey(
   if (key === undefined) {
     throw new RangeError("This signature recovers the point at infinity, which is no public key");
   }
-  return encodeAffine(key, compressed);
+  return encodeAffine(key, { curve, compressed });
 }

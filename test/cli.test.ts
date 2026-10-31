@@ -24,6 +24,7 @@ import {
 import { highS, nobleEdges, nobleSignatures } from "./fixtures/ecdsa.ts";
 import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 import { p256Rfc6979 } from "./fixtures/p256.ts";
+import { p384Rfc6979 } from "./fixtures/p384.ts";
 
 const [signed] = nobleSignatures;
 if (signed === undefined) throw new Error("The noble fixture lost its first signature");
@@ -59,6 +60,7 @@ describe("curves CLI", () => {
     expect(help.stdout).toMatch(/^ {2}secp256k1 {2}Point math/m);
     expect(help.stdout).toMatch(/^ {2}bip340 {5}BIP340 Schnorr keys and signatures/m);
     expect(help.stdout).toMatch(/^ {2}p256 {7}Point math on NIST P-256/m);
+    expect(help.stdout).toMatch(/^ {2}p384 {7}Point math on NIST P-384/m);
     expect(help.stdout).toMatch(/^ {2}sr25519 {4}sr25519 keys/m);
     expect(help.stdout).toMatch(/^ {2}ed25519 {4}Ed25519 keys and signatures/m);
     expect(usage.stdout).toContain("USAGE curves compute [OPTIONS] <OPERATION>");
@@ -131,6 +133,22 @@ describe("curves CLI", () => {
     expect(run("p256", "lift", "--x", "01".padStart(64, "0"))).toMatchObject({
       code: 1,
       stderr: "No point of P-256 has this x\n",
+    });
+  });
+
+  it("verifies RFC 6979's P-384 signature over SHA-384 and wants 96 hex digits of x", () => {
+    const { publicKey, signatures } = p384Rfc6979;
+    const [, { signature }] = signatures;
+    const digest =
+      "9a9083505bc92276aec4be312696ef7bf3bf603f4bbd381196a029f340585312313bca4a9b5b890efee42c77b1ee25fe";
+    const flags = ["--point", publicKey, "--digest", digest, "--signature", signature];
+    expect(run("p384", "verify", ...flags)).toMatchObject({
+      code: 0,
+      stdout: '{"operation":"verify","valid":true}\n',
+    });
+    expect(run("p384", "lift", "--x", "01".padStart(96, "0"))).toMatchObject({
+      code: 1,
+      stderr: "No point of P-384 has this x\n",
     });
   });
 

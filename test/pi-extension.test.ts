@@ -8,6 +8,7 @@ import {
   computeTool,
   ed25519ComputeTool,
   p256ComputeTool,
+  p384ComputeTool,
   secp256k1ComputeTool,
   sr25519ComputeTool,
 } from "../src/tools.ts";
@@ -25,6 +26,7 @@ describe("pi curves extension", () => {
       "curves_secp256k1_compute",
       "curves_bip340_compute",
       "curves_p256_compute",
+      "curves_p384_compute",
       "curves_sr25519_compute",
       "curves_ed25519_compute",
     ]);
@@ -34,6 +36,7 @@ describe("pi curves extension", () => {
     );
     expect(host.tool("curves_bip340_compute").parameters).toEqual(wireSchema(bip340ComputeTool));
     expect(host.tool("curves_p256_compute").parameters).toEqual(wireSchema(p256ComputeTool));
+    expect(host.tool("curves_p384_compute").parameters).toEqual(wireSchema(p384ComputeTool));
     expect(host.tool("curves_sr25519_compute").parameters).toEqual(wireSchema(sr25519ComputeTool));
     expect(host.tool("curves_ed25519_compute").parameters).toEqual(wireSchema(ed25519ComputeTool));
   });

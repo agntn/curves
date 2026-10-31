@@ -8,6 +8,7 @@ import type {
   CurveDetails,
   Ed25519Details,
   P256Details,
+  P384Details,
   Secp256k1Details,
   Sr25519Details,
 } from "./tool-operations.ts";
@@ -20,6 +21,8 @@ import {
   ed25519ComputeTool,
   p256ComputeSchema,
   p256ComputeTool,
+  p384ComputeSchema,
+  p384ComputeTool,
   secp256k1ComputeSchema,
   secp256k1ComputeTool,
   sr25519ComputeSchema,
@@ -46,6 +49,11 @@ export const curvesP256ComputeTool: Tool<
   AiToolOutput<P256Details>
 > = toAiTool(p256ComputeTool);
 
+export const curvesP384ComputeTool: Tool<
+  Static<typeof p384ComputeSchema>,
+  AiToolOutput<P384Details>
+> = toAiTool(p384ComputeTool);
+
 export const curvesSr25519ComputeTool: Tool<
   Static<typeof sr25519ComputeSchema>,
   AiToolOutput<Sr25519Details>
@@ -62,6 +70,7 @@ export const curvesAiTools = {
   curves_secp256k1_compute: curvesSecp256k1ComputeTool,
   curves_bip340_compute: curvesBip340ComputeTool,
   curves_p256_compute: curvesP256ComputeTool,
+  curves_p384_compute: curvesP384ComputeTool,
   curves_sr25519_compute: curvesSr25519ComputeTool,
   curves_ed25519_compute: curvesEd25519ComputeTool,
 };

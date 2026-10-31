@@ -26,6 +26,8 @@ import {
   MAX_ORDER_PRIME,
   MESSAGE_ENCODINGS,
   P256_OPERATIONS,
+  P384_OPERATIONS,
+  SEC1_P384_PATTERN,
   SEC1_PATTERN,
   SECP256K1_OPERATIONS,
   SR25519_OPERATIONS,
@@ -93,16 +95,24 @@ function curvePoint(description: string): TOptional<TObject<{ x: TString; y: TSt
   );
 }
 
+/** SEC1 point arguments by the bytes of a coordinate: the pattern and the uncompressed length. */
+const SEC1_WIDTHS = {
+  32: { pattern: SEC1_PATTERN, maxLength: 130 },
+  48: { pattern: SEC1_P384_PATTERN, maxLength: 194 },
+} as const;
+
 /**
- * SEC1 point argument of the secp256k1 tool.
+ * SEC1 point argument of a SEC 1 curve tool.
  * @param description - The operations that take it
+ * @param bytes - Bytes in a coordinate: 32 for secp256k1 and P-256, 48 for P-384
  * @returns {TOptional<TString>} The optional argument
  */
-function sec1Point(description: string): TOptional<TString> {
+function sec1Point(description: string, bytes: keyof typeof SEC1_WIDTHS = 32): TOptional<TString> {
+  const { pattern, maxLength } = SEC1_WIDTHS[bytes];
   return Type.Optional(
     Type.String({
-      maxLength: 130,
-      pattern: `^(?:${SEC1_PATTERN})?$`,
+      maxLength,
+      pattern: `^(?:${pattern})?$`,
       description: `${description}. Compressed or uncompressed SEC1 hex, without 0x`,
     }),
   );
@@ -421,6 +431,88 @@ export const p256ComputeTool = defineTool({
   execute: async (params) => (await loadOperations()).computeP256(params),
 });
 
+export const p384ComputeSchema = Type.Object(
+  {
+    operation: Type.String({
+      enum: [...P384_OPERATIONS],
+      description:
+        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, verify takes point as the public key with digest and signature",
+    }),
+    point: sec1Point("Every operation but lift, required there; the public key for verify", 48),
+    other: sec1Point(
+      "add and subtract only, required there: the point added to point or subtracted from it",
+      48,
+    ),
+    scalar: Type.Optional(
+      Type.String({
+        maxLength: 96,
+        pattern: "^[0-9A-Fa-f]{0,96}$",
+        description:
+          "multiply only, required there: 1 to n - 1 as hex without 0x. It enters the transcript, so pass a public tweak or a disposable key",
+      }),
+    ),
+    x: Type.Optional(
+      Type.String({
+        maxLength: 96,
+        pattern: "^(?:[0-9A-Fa-f]{96})?$",
+        description: "lift only, required there: x coordinate as 96 hex digits",
+      }),
+    ),
+    signature: Type.Optional(
+      Type.String({
+        maxLength: 192,
+        pattern: "^(?:[0-9A-Fa-f]{192})?$",
+        description:
+          "verify only, required there: the ECDSA signature as r then s, 192 hex digits without 0x. X.509 sends DER, so unpack it first; a JWS ES384 signature is r then s already",
+      }),
+    ),
+    digest: Type.Optional(
+      Type.String({
+        maxLength: 128,
+        pattern: `^(?:${DIGEST_PATTERN})?$`,
+        description:
+          "verify only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. Hash the message first, with SHA-384 for ES384; past 48 bytes only the leftmost 384 bits count",
+      }),
+    ),
+    lowS: Type.Optional(
+      Type.Boolean({
+        description: "verify only: refuse s above n / 2. Default: false, since SEC 1 takes either",
+      }),
+    ),
+    compressed: Type.Optional(
+      Type.Boolean({
+        description:
+          "Output SEC1 encoding, for every operation but check and verify. Default: true",
+      }),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const p384ComputeTool = defineTool({
+  name: "curves_p384_compute",
+  title: "Compute on P-384",
+  description:
+    "Do curve math on public points of NIST P-384, also called secp384r1: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Verify an ECDSA signature over a digest, the kind ES384 tokens and TLS certificates carry. Coordinates and scalars are 48 bytes, so points are 49 or 97 bytes of SEC1 hex. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. Scalars enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
+  snippet:
+    "Use for P-384 public keys and the ECDSA signatures of ES384 tokens and certificates, once you have the digest.",
+  guidelines: [
+    "add and subtract take point and other; negate takes point",
+    "multiply takes point and scalar, hex from 1 to n - 1",
+    "lift takes x and returns the even and the odd point",
+    "check takes point and answers onCurve true or false",
+    "verify takes point, digest and signature and answers valid true or false; hash the message yourself, SHA-384 for ES384",
+  ],
+  effect: "read",
+  cli: {
+    command: "p384",
+    description: "Point math on NIST P-384 with SEC1 hex points, and ECDSA verify",
+    positional: ["operation"],
+  },
+  input: p384ComputeSchema,
+  execute: async (params) => (await loadOperations()).computeP384(params),
+});
+
 export const sr25519ComputeSchema = Type.Object(
   {
     operation: Type.String({
@@ -560,6 +652,7 @@ export const curvesTools: readonly ToolDefinition[] = [
   secp256k1ComputeTool,
   bip340ComputeTool,
   p256ComputeTool,
+  p384ComputeTool,
   sr25519ComputeTool,
   ed25519ComputeTool,
 ];
