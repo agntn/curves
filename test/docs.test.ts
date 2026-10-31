@@ -38,16 +38,6 @@ describe("docs content", () => {
     }
   });
 
-  /** Docus 5.13 names the OG file after the description: a comma splits it, `..png` is skipped. */
-  it.each(pages)(
-    "keeps commas and a closing period out of the descriptions in $path",
-    ({ text }) => {
-      for (const description of descriptions(text)) {
-        expect(description).not.toMatch(/,|\.$/u);
-      }
-    },
-  );
-
   /** A `: ` in a plain YAML value starts a mapping, and the page drops out of the prerender. */
   it.each(pages)("keeps a colon and space out of the descriptions in $path", ({ text }) => {
     for (const description of descriptions(text)) {

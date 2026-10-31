@@ -40,8 +40,9 @@ Plain Node runs `src/` as it is, so relative imports end in `.ts` and `erasableS
 - Whatever a visitor types in the playground renders as text. Never `v-html`, never evaluated.
 - The site makes no network request for its own work. The footer promises that, so don't make it a liar.
 - `public/favicon.svg` is the source. Cut the PNGs and the `.ico` from it with ImageMagick.
-- `test/docs.test.ts` guards frontmatter descriptions and list items that open with bold. Docus builds OG file names from those descriptions, so they're not just decoration.
-- `pnpm typecheck` checks the docs app too, `.vue` files included. Four green checks once missed a playground type error. Docus 5.13 ships TypeScript that flunks this check, so `pnpm --dir docs typecheck` skips errors in its source. Everything else fails, even an error with no file.
+- `test/docs.test.ts` guards descriptions and list items. A `: ` in a description is a YAML mapping, and the page falls out of prerender. A bold list opener once sent a sister site's `/llms-full.txt` into endless recursion. Commas and a closing period are fine now. Docus 5.15 hashes OG filenames.
+- Put each Vue page under `docs/app/pages/` in `PAGES` in `docs/server/api/__sitemap__/pages.ts`. Docus only lists `content/`, so the sitemap misses it otherwise. Add it to `agentDiscovery.excludePrefixes` in `docs/nuxt.config.ts` too. Drop the markdown link that `useSeo` adds, as `playground.vue` does. Otherwise agents chase a `.md` twin that doesn't exist. That's a 404, not a discovery.
+- Run `pnpm typecheck`. It checks the docs app and `.vue` files too. Four green checks once missed a playground type error. Docus 5.13 shipped TypeScript that failed this check. Docus 5.15 passes clean. `pnpm --dir docs typecheck` still skips Docus source errors, so a layer release can't block you with those. Everything else fails, even an error without a file.
 
 ## Releasing
 
