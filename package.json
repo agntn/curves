@@ -6,6 +6,8 @@
     "agent",
     "bip340",
     "bitcoin",
+    "brainpool",
+    "brainpoolp256r1",
     "discrete-log",
     "ecc",
     "ed25519",
@@ -73,6 +75,10 @@
     "./p521": {
       "types": "./dist/p521.d.mts",
       "import": "./dist/p521.mjs"
+    },
+    "./brainpoolp256r1": {
+      "types": "./dist/brainpoolp256r1.d.mts",
+      "import": "./dist/brainpoolp256r1.mjs"
     },
     "./ed25519": {
       "types": "./dist/ed25519.d.mts",

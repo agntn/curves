@@ -30,11 +30,12 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 - 🟢 **P-256 with SEC1 points.** Also called secp256r1 and prime256v1, it's the curve of passkeys, ES256 tokens and TLS. `@agntn/curves/p256` does point math and verifies ECDSA over a digest you hashed. All 262 Wycheproof vectors for P-256 with SHA-256 pass. A familiar name isn't proof. That's 262 witnesses.
 - 🔵 **P-384 with SEC1 points.** Also called secp384r1. ES384 tokens, TLS certificates and CNSA suites run on it. `@agntn/curves/p384` handles point math and verifies ECDSA over a digest you hashed. All 280 Wycheproof P-384 SHA-384 vectors pass. That's more convincing than a curve name.
 - 🟤 **P-521 with SEC1 points.** Also called secp521r1. ES512 tokens, OpenPGP keys and TLS certificates use it. `@agntn/curves/p521` handles point math and verifies ECDSA over a digest you hashed. All 318 Wycheproof P-521 SHA-512 vectors pass. That's 318 reasons to look past the name.
+- 🌱 **brainpoolP256r1 with SEC1 points.** Brainpool took the scenic route with its parameters. `@agntn/curves/brainpoolp256r1` handles point math and ECDSA verification over a digest you hashed. All 261 Wycheproof SHA-256 vectors pass. No signing here.
 - 🟣 **sr25519 for Polkadot.** Keys from a seed, signatures, `//hard` and `/soft` children. `//Alice` comes out right.
 - 🟠 **ed25519 for Monero.** Add, multiply, reduce a scalar like `sc_reduce32`. A point of order 8 decodes fine, and `isTorsionFree` still says no.
 - 🔏 **Ed25519 signatures.** Sign and verify in `@agntn/curves/ed25519`. One secret, one message, one signature. RFC 8032's own, to the byte. ZIP 215 by default, strict on request.
-- 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1, P-256, P-384 and P-521, plus RFC 6979 nonces. BIP340 for Schnorr, RFC 9496 for ristretto255, RFC 8032 for ed25519. No `@noble/curves`.
-- 🤖 **Agent tools.** Curves you define, secp256k1, BIP340, P-256, P-384, P-521, sr25519 and Ed25519. MCP, Pi, OMP and the AI SDK get the lot.
+- 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1, P-256, P-384 and P-521, RFC 5639 for brainpoolP256r1, plus RFC 6979 nonces. BIP340 for Schnorr, RFC 9496 for ristretto255, RFC 8032 for ed25519. No `@noble/curves`.
+- 🤖 **Agent tools.** Curves you define, secp256k1, BIP340, P-256, P-384, P-521, brainpoolP256r1, sr25519 and Ed25519. MCP, Pi, OMP and the AI SDK get the lot.
 
 ## 📦 Install
 
@@ -85,7 +86,7 @@ The scalar is the inverse of 2 mod n. Look at all those zeros in x. Funny, right
 | `curves ed25519 <operation>`   | keypair, sign, verify                                                 |
 | `curves mcp`                   | MCP server over stdio                                                 |
 
-Points go in as JSON for `compute`, the same `{"x":…,"y":…}` the tool takes, and as SEC1 hex for `secp256k1`, `p256`, `p384` and `p521`. `--a -3` works, it's reduced mod p. The output is the line a model reads, `--json` makes it pretty.
+Points go in as JSON for `compute`, the same `{"x":…,"y":…}` the tool takes, and as SEC1 hex for `secp256k1`, `p256`, `p384`, `p521` and `brainpoolp256r1`. `--a -3` works, it's reduced mod p. The output is the line a model reads, `--json` makes it pretty.
 
 Every flag comes from the tool schema through `runCli` of [`@agntn/tools`](https://tools.agntn.dev/guide/cli), so `curves <command> --help` never lies about what a command takes.
 
@@ -121,7 +122,7 @@ omp install @agntn/curves
 }
 ```
 
-Tools: `curves_compute`, `curves_secp256k1_compute`, `curves_bip340_compute`, `curves_p256_compute`, `curves_p384_compute`, `curves_p521_compute`, `curves_sr25519_compute` and `curves_ed25519_compute`. The AI SDK versions sit in `@agntn/curves/ai`. Integers travel as decimal or `0x` strings. Infinity comes back as `"infinity"`.
+Tools: `curves_compute`, `curves_secp256k1_compute`, `curves_bip340_compute`, `curves_p256_compute`, `curves_p384_compute`, `curves_p521_compute`, `curves_brainpoolp256r1_compute`, `curves_sr25519_compute` and `curves_ed25519_compute`. The AI SDK versions sit in `@agntn/curves/ai`. Integers travel as decimal or `0x` strings. Infinity comes back as `"infinity"`.
 
 ## 🚫 What this does not do
 
@@ -132,8 +133,8 @@ Mnemonics and addresses. That's [@agntn/keys](https://github.com/agntn/keys). Yo
 ```bash
 pnpm install
 pnpm --dir docs install   # the /mcp test borrows Zod, the toolkit and the SDK from here
-pnpm build       # dist/, the CLI and the secp256k1, bip340, p256, p384, p521, ristretto255, sr25519 and ed25519 subpaths
-pnpm test        # textbook curves, brute force oracles, Wycheproof, BIP340, RFC 6979, RFC 9496, RFC 8032 and speccheck, frozen secp256k1, P-256, P-384, P-521, sr25519 and Ed25519 vectors
+pnpm build       # dist/, the CLI and the secp256k1, bip340, p256, p384, p521, brainpoolp256r1, ristretto255, sr25519 and ed25519 subpaths
+pnpm test        # textbook curves, brute force oracles, Wycheproof, BIP340, RFC 6979, RFC 7027, RFC 9496, RFC 8032 and speccheck, frozen secp256k1, P-256, P-384, P-521, brainpoolP256r1, sr25519 and Ed25519 vectors
 pnpm lint        # vp lint and vp fmt --check
 pnpm typecheck   # src, the extensions, the tests and the docs app, including .vue files
 ```

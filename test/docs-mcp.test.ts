@@ -10,6 +10,7 @@ import { speccheck } from "./fixtures/ed25519.ts";
 import { p256Vectors } from "./fixtures/p256.ts";
 import { p384Vectors } from "./fixtures/p384.ts";
 import { p521Vectors } from "./fixtures/p521.ts";
+import { brainpoolP256r1Vectors } from "./fixtures/brainpoolp256r1.ts";
 import { devAccounts } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
@@ -121,6 +122,15 @@ const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
   ["curves_p521_compute", { operation: "lift", x: p521Vectors.g.slice(2) }],
   ["curves_p521_compute", { operation: "subtract", point: p521Vectors.g, other: p521Vectors.g }],
   ["curves_p521_compute", { operation: "check", point: p384Vectors.g }],
+  [
+    "curves_brainpoolp256r1_compute",
+    { operation: "lift", x: brainpoolP256r1Vectors.xWithoutPoint },
+  ],
+  [
+    "curves_brainpoolp256r1_compute",
+    { operation: "add", point: brainpoolP256r1Vectors.g, other: brainpoolP256r1Vectors.twoG },
+  ],
+  ["curves_brainpoolp256r1_compute", { operation: "check", point: p256Vectors.gUncompressed }],
   ["curves_sr25519_compute", { operation: "keypair", seed }],
   ["curves_sr25519_compute", { operation: "derive", publicKey: seed, chainCode: seed, hard: true }],
   ["curves_ed25519_compute", { operation: "sign", secret: seed, message: "" }],
