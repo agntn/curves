@@ -6,6 +6,7 @@ import * as p256 from "../src/p256.ts";
 import * as p384 from "../src/p384.ts";
 import * as p521 from "../src/p521.ts";
 import * as brainpoolP256r1 from "../src/brainpoolp256r1.ts";
+import * as brainpoolP384r1 from "../src/brainpoolp384r1.ts";
 import * as ristretto255 from "../src/ristretto255.ts";
 import * as secp256k1 from "../src/secp256k1.ts";
 import * as sr25519 from "../src/sr25519.ts";
@@ -96,6 +97,14 @@ describe("@agntn/curves", () => {
     expect(Object.keys(brainpoolP256r1).toSorted()).toEqual(
       Object.keys(p256)
         .map((name) => (name === "p256" ? "brainpoolP256r1" : name))
+        .toSorted(),
+    );
+  });
+
+  it("keeps brainpoolP384r1 in its own entry, with the same names as P-384", () => {
+    expect(Object.keys(brainpoolP384r1).toSorted()).toEqual(
+      Object.keys(p384)
+        .map((name) => (name === "p384" ? "brainpoolP384r1" : name))
         .toSorted(),
     );
   });

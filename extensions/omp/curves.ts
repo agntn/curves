@@ -64,6 +64,7 @@ export default async function curvesExtension(pi: ExtensionAPI): Promise<void> {
       curves_p384_compute: answerRenderer,
       curves_p521_compute: answerRenderer,
       curves_brainpoolp256r1_compute: answerRenderer,
+      curves_brainpoolp384r1_compute: answerRenderer,
     },
   });
 }
