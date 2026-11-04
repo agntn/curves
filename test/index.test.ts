@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as bip340 from "../src/bip340.ts";
 import * as ed25519 from "../src/ed25519.ts";
+import * as ed448 from "../src/ed448.ts";
 import * as root from "../src/index.ts";
 import * as p256 from "../src/p256.ts";
 import * as p384 from "../src/p384.ts";
@@ -139,6 +140,10 @@ describe("@agntn/curves", () => {
       "subtractPoints",
       "verify",
     ]);
+  });
+
+  it("keeps Ed448 in its own entry", () => {
+    expect(Object.keys(ed448).toSorted()).toEqual(["ed448", "verify"]);
   });
 
   it("keeps ristretto255 and sr25519 in entries of their own", () => {

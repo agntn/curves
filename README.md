@@ -36,8 +36,9 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 - 🟣 **sr25519 for Polkadot.** Keys from a seed, signatures, `//hard` and `/soft` children. `//Alice` comes out right.
 - 🟠 **ed25519 for Monero.** Add, multiply, reduce a scalar like `sc_reduce32`. A point of order 8 decodes fine, and `isTorsionFree` still says no.
 - 🔏 **Ed25519 signatures.** Sign and verify in `@agntn/curves/ed25519`. One secret, one message, one signature. RFC 8032's own, to the byte. ZIP 215 by default, strict on request.
-- 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1, P-256, P-384 and P-521, RFC 5639 for brainpoolP256r1, brainpoolP384r1 and brainpoolP512r1, plus RFC 6979 nonces. BIP340 for Schnorr, RFC 9496 for ristretto255, RFC 8032 for ed25519. No `@noble/curves`.
-- 🤖 **Agent tools.** Curves you define, secp256k1, BIP340, P-256, P-384, P-521, brainpoolP256r1, brainpoolP384r1, brainpoolP512r1, sr25519 and Ed25519. MCP, Pi, OMP and the AI SDK get the lot.
+- 🔐 **Ed448 signatures.** Verify RFC 8032 signatures in `@agntn/curves/ed448`. Context matters, even when it's empty. OpenPGP uses that empty context. No signing.
+- 🧾 **Written from the specs.** SEC 2 and SEC 1 for secp256k1, P-256, P-384 and P-521, RFC 5639 for brainpoolP256r1, brainpoolP384r1 and brainpoolP512r1, plus RFC 6979 nonces. BIP340 for Schnorr, RFC 9496 for ristretto255, RFC 8032 for ed25519 and Ed448. No `@noble/curves`.
+- 🤖 **Agent tools.** Curves you define, secp256k1, BIP340, P-256, P-384, P-521, brainpoolP256r1, brainpoolP384r1, brainpoolP512r1, sr25519, Ed25519 and Ed448. MCP, Pi, OMP and the AI SDK get the lot.
 
 ## 📦 Install
 
@@ -89,6 +90,7 @@ The scalar is the inverse of 2 mod n. Look at all those zeros in x. Funny, right
 | `curves brainpoolp512r1 <operation>` | add, subtract, negate, multiply, lift, check, verify                  |
 | `curves sr25519 <operation>`         | keypair, sign, verify, derive                                         |
 | `curves ed25519 <operation>`         | keypair, sign, verify                                                 |
+| `curves ed448 <operation>`           | verify                                                                |
 | `curves mcp`                         | MCP server over stdio                                                 |
 
 Points go in as JSON for `compute`, the same `{"x":…,"y":…}` the tool takes. SEC1 hex goes to `secp256k1`, `p256`, `p384`, `p521`, `brainpoolp256r1`, `brainpoolp384r1` and `brainpoolp512r1`. `--a -3` works, it's reduced mod p. The output is the line a model reads, `--json` makes it pretty.
@@ -110,7 +112,9 @@ multiplyGenerator("03"); // 02f9308a…36f9
 liftX("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798").odd; // 0379be66…1798
 ```
 
-That's most of it, really. Generic curves take bigints and give `null` for the point at infinity. secp256k1 takes and gives hex, and so does `@agntn/curves/sr25519`. `@agntn/curves/ed25519` writes points as hex and takes scalars as bigints, since its bytes read little-endian. A point off the curve throws, never a silent wrong answer. More in [curves and points](https://curves.agntn.dev/math/curves), [orders and logs](https://curves.agntn.dev/math/groups), [secp256k1](https://curves.agntn.dev/math/secp256k1), [sr25519](https://curves.agntn.dev/math/sr25519) and [ed25519](https://curves.agntn.dev/math/ed25519).
+That's most of it, really. Generic curves take bigints and give `null` for the point at infinity. secp256k1 takes and gives hex, and so does `@agntn/curves/sr25519`. `@agntn/curves/ed25519` writes points as hex and takes scalars as bigints, since its bytes read little-endian. A point off the curve throws, never a silent wrong answer.
+
+More in [curves and points](https://curves.agntn.dev/math/curves), [orders and logs](https://curves.agntn.dev/math/groups), [secp256k1](https://curves.agntn.dev/math/secp256k1), [sr25519](https://curves.agntn.dev/math/sr25519), [ed25519](https://curves.agntn.dev/math/ed25519) and [Ed448](https://curves.agntn.dev/math/ed448).
 
 ## 🤖 Agents
 
@@ -127,7 +131,7 @@ omp install @agntn/curves
 }
 ```
 
-Tools: `curves_compute`, `curves_secp256k1_compute`, `curves_bip340_compute`, `curves_p256_compute`, `curves_p384_compute`, `curves_p521_compute`, `curves_brainpoolp256r1_compute`, `curves_brainpoolp384r1_compute`, `curves_brainpoolp512r1_compute`, `curves_sr25519_compute` and `curves_ed25519_compute`. The AI SDK versions sit in `@agntn/curves/ai`. Integers travel as decimal or `0x` strings. Infinity comes back as `"infinity"`.
+Tools: `curves_compute`, `curves_secp256k1_compute`, `curves_bip340_compute`, `curves_p256_compute`, `curves_p384_compute`, `curves_p521_compute`, `curves_brainpoolp256r1_compute`, `curves_brainpoolp384r1_compute`, `curves_brainpoolp512r1_compute`, `curves_sr25519_compute`, `curves_ed25519_compute` and `curves_ed448_compute`. The AI SDK versions sit in `@agntn/curves/ai`. Integers travel as decimal or `0x` strings. Infinity comes back as `"infinity"`.
 
 ## 🚫 What this does not do
 
@@ -137,8 +141,8 @@ Mnemonics and addresses. That's [@agntn/keys](https://github.com/agntn/keys). Yo
 
 ```bash
 pnpm install     # installs the library and the docs site
-pnpm build       # dist/, the CLI and the secp256k1, bip340, p256, p384, p521, brainpoolp256r1, brainpoolp384r1, brainpoolp512r1, ristretto255, sr25519 and ed25519 subpaths
-pnpm test        # textbook curves, brute force oracles, Wycheproof, BIP340, RFC 6979, RFC 7027, RFC 9496, RFC 8032 and speccheck, frozen secp256k1, P-256, P-384, P-521, brainpoolP256r1, brainpoolP384r1, brainpoolP512r1, sr25519 and Ed25519 vectors
+pnpm build       # dist/, the CLI and the secp256k1, bip340, p256, p384, p521, brainpoolp256r1, brainpoolp384r1, brainpoolp512r1, ristretto255, sr25519, ed25519 and ed448 subpaths
+pnpm test        # textbook curves, brute force oracles, Wycheproof, BIP340, RFC 6979, RFC 7027, RFC 9496, RFC 8032 and speccheck, frozen secp256k1, P-256, P-384, P-521, brainpoolP256r1, brainpoolP384r1, brainpoolP512r1, sr25519, Ed25519 and Ed448 vectors
 pnpm lint        # vp lint and vp fmt --check
 pnpm typecheck   # src, the extensions, the tests and the docs app, including .vue files
 ```

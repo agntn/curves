@@ -13,6 +13,7 @@
     "discrete-log",
     "ecc",
     "ed25519",
+    "ed448",
     "eddsa",
     "elliptic-curve",
     "mcp",
@@ -93,6 +94,10 @@
     "./ed25519": {
       "types": "./dist/ed25519.d.mts",
       "import": "./dist/ed25519.mjs"
+    },
+    "./ed448": {
+      "types": "./dist/ed448.d.mts",
+      "import": "./dist/ed448.mjs"
     },
     "./ristretto255": {
       "types": "./dist/ristretto255.d.mts",

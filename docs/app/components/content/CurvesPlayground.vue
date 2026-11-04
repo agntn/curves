@@ -11,6 +11,7 @@ import type { Bip340Details, CurvePointText, Ed25519Details, Secp256k1Details, S
 import { EMPTY_VECTOR, PI_VECTOR } from "../../utils/bip340";
 import { CURVES, pointArgument } from "../../utils/curves";
 import { ORDER_EIGHT, RFC_TEST_1, RFC_TEST_2 } from "../../utils/ed25519";
+import { RFC_ONE_OCTET, RFC_WITH_CONTEXT } from "../../utils/ed448";
 import { shellArg } from "../../utils/format";
 import { RFC_6979 } from "../../utils/p256";
 import { RFC_6979_P384 } from "../../utils/p384";
@@ -46,6 +47,7 @@ type Field =
   | "chainCode"
   | "hard"
   | "zip215"
+  | "context"
   | "random";
 
 interface Operation {
@@ -73,6 +75,7 @@ const COMMANDS: Record<ToolName, string> = {
   curves_brainpoolp512r1_compute: "brainpoolp512r1",
   curves_sr25519_compute: "sr25519",
   curves_ed25519_compute: "ed25519",
+  curves_ed448_compute: "ed448",
 };
 
 /** Every operation of every tool, in the order the tools list them. */
@@ -148,6 +151,7 @@ const OPERATIONS: readonly Operation[] = [
   { key: "ed25519:keypair", tool: "curves_ed25519_compute", op: "keypair", takes: ["secret"], about: "32 bytes of secret in, the public key out. SHA-512 and a clamp sit in between." },
   { key: "ed25519:sign", tool: "curves_ed25519_compute", op: "sign", takes: ["secret", "message"], about: "Sign as RFC 8032 does. Same secret, same message, same bytes, every single time." },
   { key: "ed25519:verify", tool: "curves_ed25519_compute", op: "verify", takes: ["publicKey", "message", "signature", "zip215"], about: "Check an Ed25519 signature. An order 8 key can pass ZIP 215. Tick strict and watch it fail." },
+  { key: "ed448:verify", tool: "curves_ed448_compute", op: "verify", takes: ["publicKey", "message", "signature", "context"], about: "Check an Ed448 signature. The context is part of what got signed, so the wrong one fails." },
 ];
 
 const G = multiplyGenerator("1");
@@ -289,6 +293,12 @@ const edSignature = ref<string>(RFC_TEST_1.signature);
 const strict = ref(false);
 /** The Ed25519 fields that are text, by the argument each one fills. */
 const ED_FIELDS = { secret: edSecret, publicKey: edKey, message: edMessage, signature: edSignature } as const;
+const ed448Key = ref<string>(RFC_ONE_OCTET.publicKey);
+const ed448Message = ref<string>(RFC_ONE_OCTET.message);
+const ed448Signature = ref<string>(RFC_ONE_OCTET.signature);
+const ed448Context = ref<string>(RFC_ONE_OCTET.context);
+/** The Ed448 fields, by the argument each one fills. */
+const ED448_FIELDS = { publicKey: ed448Key, message: ed448Message, signature: ed448Signature, context: ed448Context } as const;
 
 const current = computed(() => OPERATIONS.find((row) => row.key === key.value) ?? OPERATIONS[0]!);
 const position = computed(() => OPERATIONS.indexOf(current.value) + 1);
@@ -307,6 +317,7 @@ const sec1Fields = computed(() => (brainpool512.value ? BRAINPOOL_512_FIELDS : b
 const sec1Digits = computed(() => (p521.value ? 132 : brainpool512.value ? 128 : wide.value || brainpool384.value ? 96 : 64));
 const sr = computed(() => current.value.tool === "curves_sr25519_compute");
 const edwards = computed(() => current.value.tool === "curves_ed25519_compute");
+const goldilocks = computed(() => current.value.tool === "curves_ed448_compute");
 /** The key the operation on screen starts from: the one picked, when this operation takes it. */
 const source = computed(() => {
   const options = current.value.sources ?? [];
@@ -373,6 +384,20 @@ function edArgs(): Record<string, unknown> {
 }
 
 /**
+ * The Ed448 arguments on screen. The message always goes along, a blank context stays out.
+ *
+ * @returns {Record<string, unknown>} The arguments, operation included.
+ */
+function ed448Args(): Record<string, unknown> {
+  const args: Record<string, unknown> = { operation: current.value.op, message: ed448Message.value.trim() };
+  for (const field of ["publicKey", "signature", "context"] as const) {
+    const value = ED448_FIELDS[field].value.trim();
+    if (value !== "") args[field] = value;
+  }
+  return args;
+}
+
+/**
  * A point typed as `x,y`, as the tool takes it, or the text as typed when it has no comma.
  *
  * @param text - The field.
@@ -388,6 +413,7 @@ const toolArgs = computed(() => {
   if (sr.value) return srArgs();
   if (schnorr.value) return schnorrArgs();
   if (edwards.value) return edArgs();
+  if (goldilocks.value) return ed448Args();
   const args: Record<string, unknown> = { operation: current.value.op };
   if (curve.value) Object.assign(args, { a: a.value.trim(), b: b.value.trim(), p: p.value.trim() });
   for (const field of current.value.takes) {
@@ -820,6 +846,26 @@ const ED_SAMPLES = [
 /** The Ed25519 chips on screen. The verify ones wait for a signature to break. */
 const edSamples = computed(() => ED_SAMPLES.filter((sample) => !sample.verify || current.value.op === "verify"));
 
+/**
+ * Loads one RFC 8032 Ed448 test into every field.
+ *
+ * @param test - The test.
+ */
+function loadEd448(test: typeof RFC_ONE_OCTET | typeof RFC_WITH_CONTEXT) {
+  ed448Key.value = test.publicKey;
+  ed448Message.value = test.message;
+  ed448Signature.value = test.signature;
+  ed448Context.value = test.context;
+}
+
+/** Ed448 samples: the RFC's one byte with and without its context, and one bit off. */
+const ED448_SAMPLES = [
+  { label: "RFC 8032, 1 octet", load: () => loadEd448(RFC_ONE_OCTET) },
+  { label: "context foo", load: () => loadEd448(RFC_WITH_CONTEXT) },
+  { label: "wrong context", load: () => (ed448Context.value = ed448Context.value === "" ? "666f6f" : "") },
+  { label: "one bit off", load: () => (ed448Signature.value = flipBit(ed448Signature.value)) },
+] as const;
+
 /** sr25519 samples: the dev seed with `//Alice`, and her signature one bit off. */
 const SR_SAMPLES = [
   {
@@ -875,6 +921,11 @@ function readQuery(query: Readonly<Record<string, unknown>>) {
       if (typeof query[name] === "string") field.value = query[name];
     }
     strict.value = query.zip215 === "false";
+  }
+  if (op?.tool === "curves_ed448_compute") {
+    for (const [name, field] of Object.entries(ED448_FIELDS)) {
+      if (typeof query[name] === "string") field.value = query[name];
+    }
   }
   const sec1 = op?.tool !== undefined && Object.hasOwn(SEC1_FIELDS, op.tool) ? SEC1_FIELDS[op.tool as keyof typeof SEC1_FIELDS] : undefined;
   for (const [name, field] of Object.entries({ ...FIELDS, ...sec1 })) {
@@ -1115,6 +1166,24 @@ const shareLink = computed(() => {
                 <dd><UCheckbox id="playground-strict" v-model="strict" label="strict rules, zip215 false" /></dd>
               </div>
             </dl>
+            <dl v-else-if="goldilocks" class="console-readout-rows">
+              <div>
+                <dt><label for="playground-ed448-key">publicKey</label></dt>
+                <dd><UInput id="playground-ed448-key" v-model="ed448Key" variant="none" placeholder="public key, 114 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div>
+                <dt><label for="playground-ed448-message">message</label></dt>
+                <dd><UInput id="playground-ed448-message" v-model="ed448Message" variant="none" placeholder="hex, empty is fine" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div>
+                <dt><label for="playground-ed448-signature">signature</label></dt>
+                <dd><UInput id="playground-ed448-signature" v-model="ed448Signature" variant="none" placeholder="R then S, 228 hex digits" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div>
+                <dt><label for="playground-ed448-context">context</label></dt>
+                <dd><UInput id="playground-ed448-context" v-model="ed448Context" variant="none" placeholder="hex, empty unless the signer set one" class="w-full" spellcheck="false" /></dd>
+              </div>
+            </dl>
             <dl v-else class="console-readout-rows">
               <div v-if="current.sources">
                 <dt>from</dt>
@@ -1202,6 +1271,9 @@ const shareLink = computed(() => {
           <div v-else-if="edwards" class="playground-chips" role="group" aria-label="Ed25519 test vectors">
             <UButton v-for="sample in edSamples" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
+          <div v-else-if="goldilocks" class="playground-chips" role="group" aria-label="Ed448 test vectors">
+            <UButton v-for="sample in ED448_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
+          </div>
           <div v-else class="playground-chips" role="group" aria-label="Sample keys">
             <UButton v-for="sample in SR_SAMPLES" :key="sample.label" variant="chip" color="neutral" :label="sample.label" @click="sample.load()" />
           </div>
@@ -1213,6 +1285,9 @@ const shareLink = computed(() => {
             >
             <template v-else-if="edwards"
               >Keys, messages and signatures are hex without 0x. Empty messages are fine. The RFC secrets are public on purpose. Yours would land in the address bar, so maybe don't.</template
+            >
+            <template v-else-if="goldilocks"
+              >Keys, messages, signatures and the context are all hex without 0x. Verify only, so there's no secret to leak here. Ed448ph hashes first and isn't on the menu.</template
             >
             <template v-else-if="schnorr"
               >Keys and signatures are hex without 0x. The key is just the x coordinate, with even y

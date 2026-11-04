@@ -7,6 +7,7 @@ import type { CallToolResult } from "../docs/node_modules/@modelcontextprotocol/
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createMcpServer, toolListings } from "../src/mcp.ts";
 import { speccheck } from "./fixtures/ed25519.ts";
+import { rfc8032Signatures as ed448Signatures } from "./fixtures/ed448.ts";
 import { p256Vectors } from "./fixtures/p256.ts";
 import { p384Vectors } from "./fixtures/p384.ts";
 import { p521Vectors } from "./fixtures/p521.ts";
@@ -86,6 +87,15 @@ const smallOrder = {
   message: caseZero.message,
   signature: caseZero.signature,
 };
+const [, , ed448Context] = ed448Signatures;
+if (ed448Context === undefined) throw new Error("The RFC 8032 Ed448 fixture lost its context");
+/** RFC 8032's Ed448 test with the context foo: true with it, false without. */
+const ed448WithContext = {
+  publicKey: ed448Context.publicKey,
+  message: ed448Context.message,
+  signature: ed448Context.signature,
+  context: ed448Context.context,
+};
 
 /** Calls that cover a plain answer, a refusal of the library and a schema miss. */
 const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
@@ -156,6 +166,9 @@ const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
   ["curves_ed25519_compute", { operation: "sign", secret: seed, message: "" }],
   ["curves_ed25519_compute", { operation: "verify", ...smallOrder, zip215: false }],
   ["curves_ed25519_compute", { operation: "verify", ...smallOrder, signature: "00" }],
+  ["curves_ed448_compute", { operation: "verify", ...ed448WithContext }],
+  ["curves_ed448_compute", { operation: "verify", ...ed448WithContext, context: "" }],
+  ["curves_ed448_compute", { operation: "verify", ...ed448WithContext, context: "00".repeat(256) }],
 ];
 
 describe("docs MCP tools", () => {

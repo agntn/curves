@@ -22,6 +22,7 @@ import {
 } from "./fixtures/bip340.ts";
 import { highS, nobleEdges, nobleSignatures } from "./fixtures/ecdsa.ts";
 import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
+import { rfc8032Signatures as ed448Signatures } from "./fixtures/ed448.ts";
 import { p256Rfc6979, p256Vectors } from "./fixtures/p256.ts";
 import { p384Rfc6979, p384Vectors } from "./fixtures/p384.ts";
 import { p521Rfc6979, p521Vectors } from "./fixtures/p521.ts";
@@ -109,6 +110,7 @@ describe("curves MCP server", () => {
       "curves_brainpoolp512r1_compute",
       "curves_sr25519_compute",
       "curves_ed25519_compute",
+      "curves_ed448_compute",
     ]);
     for (const tool of response.tools) {
       expect(tool.annotations).toMatchObject({
@@ -671,6 +673,35 @@ describe("curves MCP server", () => {
     expect(
       await refused({ operation: "verify", publicKey, message, signature, zip215: "no" }),
     ).toContain("Invalid arguments at /zip215");
+    expect(
+      await refused({ operation: "verify", publicKey: `00${publicKey}`, message, signature }),
+    ).toContain("Invalid arguments at /publicKey");
+  });
+
+  it("verifies an Ed448 signature under the context it was made with", async () => {
+    const client = await connectTestClient();
+    const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+      answer(await client.callTool({ name: "curves_ed448_compute", arguments: args }));
+    const refused = async (args: Readonly<Record<string, unknown>>): Promise<string> =>
+      failure(await client.callTool({ name: "curves_ed448_compute", arguments: args }));
+    const [, , withContext] = ed448Signatures;
+    if (withContext === undefined) throw new Error("The RFC 8032 Ed448 fixture lost its context");
+    const { message, signature, publicKey, context } = withContext;
+
+    expect(await call({ operation: "verify", publicKey, message, signature, context })).toEqual({
+      operation: "verify",
+      valid: true,
+    });
+    expect(await call({ operation: "verify", publicKey, message, signature })).toEqual({
+      operation: "verify",
+      valid: false,
+    });
+    expect(await refused({ operation: "verify", publicKey, signature })).toContain(
+      "verify needs message",
+    );
+    expect(
+      await refused({ operation: "verify", publicKey, message, signature, context: "f" }),
+    ).toContain("Invalid arguments at /context");
     expect(
       await refused({ operation: "verify", publicKey: `00${publicKey}`, message, signature }),
     ).toContain("Invalid arguments at /publicKey");

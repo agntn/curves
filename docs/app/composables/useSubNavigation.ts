@@ -12,6 +12,7 @@ const NAV_ICONS: Record<string, string> = {
   "/math/secp256k1": "i-lucide-key-round",
   "/math/sr25519": "i-lucide-fingerprint",
   "/math/ed25519": "i-lucide-shield-half",
+  "/math/ed448": "i-lucide-shield-plus",
   "/math/p256": "i-lucide-badge-check",
   "/math/p384": "i-lucide-shield-check",
   "/math/p521": "i-lucide-shield-plus",

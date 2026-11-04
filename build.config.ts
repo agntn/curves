@@ -17,6 +17,7 @@ export default defineBuildConfig({
         "./src/brainpoolp512r1.ts",
         "./src/ristretto255.ts",
         "./src/ed25519.ts",
+        "./src/ed448.ts",
         "./src/sr25519.ts",
         "./src/cli.ts",
         "./src/ai.ts",

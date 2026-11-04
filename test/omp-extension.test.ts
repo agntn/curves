@@ -15,6 +15,7 @@ import {
   brainpoolP512r1ComputeTool,
   computeTool,
   ed25519ComputeTool,
+  ed448ComputeTool,
   p256ComputeTool,
   p384ComputeTool,
   p521ComputeTool,
@@ -55,6 +56,7 @@ describe("omp curves extension", () => {
       "curves_brainpoolp512r1_compute",
       "curves_sr25519_compute",
       "curves_ed25519_compute",
+      "curves_ed448_compute",
     ]);
     expect(host.labels).toEqual(["Curves"]);
     const compute = host.tool("curves_compute");
@@ -88,6 +90,8 @@ describe("omp curves extension", () => {
     expect(host.tool("curves_sr25519_compute").parameters).toEqual(wireSchema(sr25519ComputeTool));
     expect(host.tool("curves_ed25519_compute").approval).toBe("read");
     expect(host.tool("curves_ed25519_compute").parameters).toEqual(wireSchema(ed25519ComputeTool));
+    expect(host.tool("curves_ed448_compute").approval).toBe("read");
+    expect(host.tool("curves_ed448_compute").parameters).toEqual(wireSchema(ed448ComputeTool));
   });
 
   it("refuses what the shared schema rejects", async () => {

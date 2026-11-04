@@ -7,7 +7,7 @@ import { TOOLS } from "../utils/tools";
 definePageMeta({ layout: "default" });
 
 const title = "Playground";
-const description = `All ${spellOut(OPERATION_COUNT)} operations of the ${spellOut(TOOLS.length)} tools in the browser: points, orders, counts and logs on a curve you define, secp256k1 with SEC1 points, BIP340 signatures for Taproot and Nostr, P-256, P-384, P-521, brainpoolP256r1, brainpoolP384r1 and brainpoolP512r1 points and ECDSA checks, Ed25519 signatures, and sr25519 keys and signatures for Polkadot. Same executors the CLI and the agent tools run.`;
+const description = `All ${spellOut(OPERATION_COUNT)} operations of the ${spellOut(TOOLS.length)} tools in the browser: points, orders, counts and logs on a curve you define, secp256k1 with SEC1 points, BIP340 signatures for Taproot and Nostr, P-256, P-384, P-521, brainpoolP256r1, brainpoolP384r1 and brainpoolP512r1 points and ECDSA checks, Ed25519 signatures, Ed448 checks, and sr25519 keys and signatures for Polkadot. Same executors the CLI and the agent tools run.`;
 /** The card cuts at 160 characters, so it gets a short take, not a sentence chopped mid-word. */
 const cardDescription = `Points and orders and discrete logs on any curve and on secp256k1. Polkadot signatures too. In the browser with the library itself.`;
 
@@ -67,7 +67,7 @@ defineOgImage(
           <div>
             <dt>Operations</dt>
             <dd>{{ OPERATION_COUNT }}</dd>
-            <dd class="hero-metric-sub">any curve, secp256k1, BIP340, P-256, P-384, P-521, brainpoolP256r1, brainpoolP384r1, brainpoolP512r1, sr25519 and Ed25519</dd>
+            <dd class="hero-metric-sub">any curve, secp256k1, BIP340, P-256, P-384, P-521, brainpoolP256r1, brainpoolP384r1, brainpoolP512r1, sr25519, Ed25519 and Ed448</dd>
           </div>
           <div>
             <dt>Network</dt>
