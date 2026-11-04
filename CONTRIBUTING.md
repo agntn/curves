@@ -4,7 +4,7 @@
 
 The README has the commands. Run `pnpm install` at the root. That one install covers the library and the docs site, `docs/node_modules` included, where `test/docs-mcp.test.ts` finds Zod, the MCP toolkit and the SDK. The old two-install dance can retire.
 
-Build before you test. The `curves mcp` checks in `test/cli.test.ts` start `dist/cli.mjs`, and three fail against the `pnpm dev` stub. `pnpm release` and the Publish workflow build first too. `test/release.test.ts` catches either order flipping.
+Build before you test. The `curves mcp` checks in `test/cli.test.ts` start `dist/cli.mjs`, and three fail against the `pnpm dev` stub. The tag's test job in `release.yml` builds before it tests. `test/release.test.ts` checks that order.
 
 Running `curves mcp` from a checkout? It serves `src/mcp.ts` directly. Restart the server after a change. Only an edit to `src/cli.ts` itself needs a build.
 
@@ -46,7 +46,13 @@ Plain Node runs `src/` as it is, so relative imports end in `.ts` and `erasableS
 
 ## Releasing
 
-`pnpm release` builds, tests and releases in CI's order. Publish failed? Use `gh workflow run publish.yml --ref main -f tag=vX.Y.Z`, not a rerun. A rerun takes `publish.yml` from the tag's commit, so it misses any workflow fix merged since.
+There's no release command anymore. The command is a PR now. Every push to `main` refreshes a draft release PR from [uppt](https://github.com/danielroe/uppt). The version comes from conventional commits, and the notes are already written. Check the version, then merge the PR.
+
+That tags `vX.Y.Z` and cuts the GitHub release. On the tag, `release.yml` builds, runs the full test suite, packs the tarball and stages it with `npm stage publish`. Nothing goes live until the owner approves it on npmjs.com with 2FA. That's a good place for one last pause.
+
+Release notes live in GitHub Releases. All four sections of the old `CHANGELOG.md` are already there.
+
+Publish failed? `gh workflow run release.yml --ref vX.Y.Z` runs test, pack and publish on the tag again. It uses the tag's own `release.yml`. A workflow fix merged since then only reaches the next version.
 
 ## Pull requests
 
