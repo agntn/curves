@@ -19,6 +19,7 @@ import {
   DEFAULT_CURVE_POINTS_SHOWN,
   DIGEST_PATTERN,
   ED25519_OPERATIONS,
+  ED448_OPERATIONS,
   MAX_COUNTED_PRIME,
   MAX_CURVE_INTEGER_LENGTH,
   MAX_CONTEXT_LENGTH,
@@ -983,6 +984,59 @@ export const ed25519ComputeTool = defineTool({
   execute: async (params) => (await loadOperations()).computeEd25519(params),
 });
 
+export const ed448ComputeSchema = Type.Object(
+  {
+    operation: Type.String({
+      enum: [...ED448_OPERATIONS],
+      description:
+        "verify takes publicKey, message and signature, and context when the signer set one",
+    }),
+    publicKey: hexBytes(
+      57,
+      "Required: the signer's key as RFC 8032 writes it, y with the sign of x in the top bit",
+    ),
+    message: Type.Optional(
+      Type.String({
+        maxLength: MAX_MESSAGE_LENGTH,
+        pattern: "^(?:[0-9A-Fa-f]{2})*$",
+        description:
+          "Required: the exact bytes that were signed, as hex without 0x, any length, empty too. Ed448 hashes them itself with SHAKE256, so pass them as they are",
+      }),
+    ),
+    signature: hexBytes(114, "Required: R, then S"),
+    context: Type.Optional(
+      Type.String({
+        maxLength: 510,
+        pattern: "^(?:[0-9A-Fa-f]{2}){0,255}$",
+        description:
+          "The context the signer bound in, 0 to 255 bytes as hex without 0x. OpenPGP leaves it empty, and so does the default",
+      }),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const ed448ComputeTool = defineTool({
+  name: "curves_ed448_compute",
+  title: "Verify with Ed448",
+  description:
+    "Verify an Ed448 signature by RFC 8032, the kind OpenPGP keys of algorithm 28 make. The key is 57 bytes as RFC 8032 encodes it, the message is hex of any length, empty included, the signature is 114 bytes, and an optional context of up to 255 bytes has to match the signer's byte for byte. The cofactored equation decides. An R or a key that doesn't decode, or an S at or above l, fails like any bad signature. Ed448ph, which hashes the message first, isn't here.",
+  snippet: "Use to check Ed448 signatures from OpenPGP or RFC 8032, once you have the bytes.",
+  guidelines: [
+    "verify takes publicKey, message and signature and answers valid true or false",
+    "message is the bytes as hex, not text: Ed448 hashes them itself",
+    "context is hex and empty by default, and a signature under one context fails under any other",
+  ],
+  effect: "read",
+  cli: {
+    command: "ed448",
+    description: "Ed448 signatures, checked by RFC 8032",
+    positional: ["operation"],
+  },
+  input: ed448ComputeSchema,
+  execute: async (params) => (await loadOperations()).computeEd448(params),
+});
+
 export const curvesTools: readonly ToolDefinition[] = [
   computeTool,
   secp256k1ComputeTool,
@@ -995,4 +1049,5 @@ export const curvesTools: readonly ToolDefinition[] = [
   brainpoolP512r1ComputeTool,
   sr25519ComputeTool,
   ed25519ComputeTool,
+  ed448ComputeTool,
 ];

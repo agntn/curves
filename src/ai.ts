@@ -10,6 +10,7 @@ import type {
   BrainpoolP512r1Details,
   CurveDetails,
   Ed25519Details,
+  Ed448Details,
   P256Details,
   P384Details,
   P521Details,
@@ -29,6 +30,8 @@ import {
   computeTool,
   ed25519ComputeSchema,
   ed25519ComputeTool,
+  ed448ComputeSchema,
+  ed448ComputeTool,
   p256ComputeSchema,
   p256ComputeTool,
   p384ComputeSchema,
@@ -96,6 +99,11 @@ export const curvesEd25519ComputeTool: Tool<
   AiToolOutput<Ed25519Details>
 > = toAiTool(ed25519ComputeTool);
 
+export const curvesEd448ComputeTool: Tool<
+  Static<typeof ed448ComputeSchema>,
+  AiToolOutput<Ed448Details>
+> = toAiTool(ed448ComputeTool);
+
 /** Every curve tool, keyed by the name MCP, Pi and OMP use for it. */
 export const curvesAiTools = {
   curves_compute: curvesComputeTool,
@@ -109,4 +117,5 @@ export const curvesAiTools = {
   curves_brainpoolp512r1_compute: curvesBrainpoolP512r1ComputeTool,
   curves_sr25519_compute: curvesSr25519ComputeTool,
   curves_ed25519_compute: curvesEd25519ComputeTool,
+  curves_ed448_compute: curvesEd448ComputeTool,
 };

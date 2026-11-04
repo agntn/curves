@@ -33,6 +33,7 @@ import * as brainpoolP384r1 from "./core/brainpoolp384r1.ts";
 import * as brainpoolP512r1 from "./core/brainpoolp512r1.ts";
 import { hexToBytes } from "./core/bytes.ts";
 import * as ed25519 from "./core/ed25519.ts";
+import * as ed448 from "./core/ed448.ts";
 import * as p256 from "./core/p256.ts";
 import * as p384 from "./core/p384.ts";
 import * as p521 from "./core/p521.ts";
@@ -47,6 +48,7 @@ import {
   CURVE_OPERATIONS,
   DEFAULT_CURVE_POINTS_SHOWN,
   ED25519_OPERATIONS,
+  ED448_OPERATIONS,
   MAX_CURVE_INTEGER_LENGTH,
   MAX_CURVE_POINTS_SHOWN,
   MAX_CONTEXT_LENGTH,
@@ -60,6 +62,7 @@ import {
   type Bip340Operation,
   type CurveOperation,
   type Ed25519Operation,
+  type Ed448Operation,
   type P256Operation,
   type Secp256k1Operation,
   type Sr25519Operation,
@@ -131,6 +134,9 @@ export type Ed25519Details =
   | { operation: "keypair"; publicKey: string }
   | { operation: "sign"; signature: string; publicKey: string }
   | { operation: "verify"; valid: boolean };
+
+/** What the Ed448 tool computes: a verdict, since it only verifies. */
+export type Ed448Details = { operation: "verify"; valid: boolean };
 
 /** What the sr25519 tool computes, by operation. A secret or a seed comes back only when new. */
 export type Sr25519Details =
@@ -839,6 +845,30 @@ export function computeEd25519(
   const publicKey = text("publicKey");
   const rules = zip215(args["zip215"]);
   const valid = ed25519.verify(text("signature"), { message, publicKey, zip215: rules });
+  return result({ operation, valid });
+}
+
+/** The arguments each Ed448 operation takes. */
+const ED448_ARGUMENTS: Readonly<Record<Ed448Operation, readonly string[]>> = {
+  verify: ["publicKey", "message", "signature", "context"],
+};
+
+/**
+ * Verify plain Ed448 by RFC 8032, under the context the signer bound in, empty when missing.
+ * @param args - Tool arguments, the operation and the ones it takes
+ * @returns {ToolResult<Ed448Details>} The verdict
+ */
+export function computeEd448(args: Readonly<Record<string, unknown>>): ToolResult<Ed448Details> {
+  const operation = oneOf(args["operation"], "operation", ED448_OPERATIONS);
+  refuseForeign(args, operation, ED448_ARGUMENTS.verify, ED448_ARGUMENTS[operation]);
+  const text = (name: string): string => {
+    if (isUnset(args[name])) throw new TypeError(`${operation} needs ${name}`);
+    return requiredString(args[name], name);
+  };
+  const message = signedMessage(args, operation);
+  const context = isUnset(args["context"]) ? "" : requiredString(args["context"], "context");
+  const publicKey = text("publicKey");
+  const valid = ed448.verify(text("signature"), { message, publicKey, context });
   return result({ operation, valid });
 }
 

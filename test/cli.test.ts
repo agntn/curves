@@ -23,6 +23,7 @@ import {
 } from "./fixtures/bip340.ts";
 import { highS, nobleEdges, nobleSignatures } from "./fixtures/ecdsa.ts";
 import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
+import { rfc8032Signatures as ed448Signatures } from "./fixtures/ed448.ts";
 import { p256Rfc6979 } from "./fixtures/p256.ts";
 import { p384Rfc6979 } from "./fixtures/p384.ts";
 import { p521Rfc6979, p521Vectors } from "./fixtures/p521.ts";
@@ -71,6 +72,7 @@ describe("curves CLI", () => {
     expect(help.stdout).toMatch(/^ {2}brainpoolp512r1 {2}Point math on brainpoolP512r1/m);
     expect(help.stdout).toMatch(/^ {2}sr25519 {10}sr25519 keys/m);
     expect(help.stdout).toMatch(/^ {2}ed25519 {10}Ed25519 keys and signatures/m);
+    expect(help.stdout).toMatch(/^ {2}ed448 {12}Ed448 signatures/m);
     expect(usage.stdout).toContain("USAGE curves compute [OPTIONS] <OPERATION>");
     expect(unknown).toMatchObject({
       code: 1,
@@ -265,6 +267,17 @@ describe("curves CLI", () => {
     expect(run("ed25519", "verify", ...flags, "--no-zip215").stdout).toBe(
       '{"operation":"verify","valid":false}\n',
     );
+  });
+
+  it("verifies an Ed448 signature from flags, and the wrong --context fails it", () => {
+    const [, , withContext] = ed448Signatures;
+    if (withContext === undefined) throw new Error("The RFC 8032 Ed448 fixture lost its context");
+    const { message, signature, publicKey, context } = withContext;
+    const flags = ["--public-key", publicKey, "--message", message, "--signature", signature];
+    expect(run("ed448", "verify", ...flags, "--context", context).stdout).toBe(
+      '{"operation":"verify","valid":true}\n',
+    );
+    expect(run("ed448", "verify", ...flags).stdout).toBe('{"operation":"verify","valid":false}\n');
   });
 
   it("signs RFC 8032 test 3 from flags and derives its key", () => {
