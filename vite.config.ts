@@ -25,8 +25,7 @@ const transformOverride: object = {
 
 export default defineConfig({
   oxc: { ...transformOverride },
-  /** Root CHANGELOG only: changelogen puts two spaces after a breaking ⚠️, oxfmt wants one. */
-  fmt: { ...oxfmt, ignorePatterns: ["/CHANGELOG.md", "docs"] },
+  fmt: { ...oxfmt, ignorePatterns: ["docs"] },
   lint: {
     ...oxlint,
     rules: {
