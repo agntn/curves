@@ -183,20 +183,23 @@ describe("brainpoolP256r1 point math", () => {
     }
   });
 
-  it("reads every entry of the comb and of the verification table right", () => {
-    const tables = sec1Curve(brainpoolP256r1, { name: "brainpoolP256r1", formulas: anyAFormulas });
-    for (let row = 0n; row < 64n; row++) {
-      const base = multiplyPoint(g, 16n ** row, uncompressed);
+  const tables = sec1Curve(brainpoolP256r1, { name: "brainpoolP256r1", formulas: anyAFormulas });
+  /* One case per row: 64 rows in one test left a busy runner little of the 5 s limit. */
+  it.each(Array.from({ length: 64 }, (_, row) => row))(
+    "reads row %i of the comb and of the verification table right",
+    (row) => {
+      const unit = 16n ** BigInt(row);
+      const base = multiplyPoint(g, unit, uncompressed);
       let multiple = base;
-      for (let digit = 1n; digit < 16n && digit * 16n ** row < order; digit++) {
-        expect(multiplyGenerator(digit * 16n ** row, uncompressed)).toBe(multiple);
-        expect(
-          sec1Hex(combine(tables, { a: digit * 16n ** row, b: 0n, point: brainpoolP256r1.g })),
-        ).toBe(multiple);
+      for (let digit = 1n; digit < 16n && digit * unit < order; digit++) {
+        expect(multiplyGenerator(digit * unit, uncompressed)).toBe(multiple);
+        expect(sec1Hex(combine(tables, { a: digit * unit, b: 0n, point: brainpoolP256r1.g }))).toBe(
+          multiple,
+        );
         multiple = addPoints(multiple, base, uncompressed);
       }
-    }
-  });
+    },
+  );
 
   it("takes about as long for 1 as for n - 1", () => {
     for (const run of [

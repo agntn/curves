@@ -135,17 +135,20 @@ describe("secp256k1 point math", () => {
     }
   });
 
-  it("reads every entry of the comb and of the verification table right", () => {
-    for (let row = 0n; row < 64n; row++) {
-      const base = multiplyPoint(g, 16n ** row, uncompressed);
+  /* One case per row: 64 rows in one test left a busy runner little of the 5 s limit. */
+  it.each(Array.from({ length: 64 }, (_, row) => row))(
+    "reads row %i of the comb and of the verification table right",
+    (row) => {
+      const unit = 16n ** BigInt(row);
+      const base = multiplyPoint(g, unit, uncompressed);
       let multiple = base;
       for (let digit = 1n; digit < 16n; digit++) {
-        expect(multiplyGenerator(digit * 16n ** row, uncompressed)).toBe(multiple);
-        expect(sec1(combine(digit * 16n ** row, 0n, secp256k1.g))).toBe(multiple);
+        expect(multiplyGenerator(digit * unit, uncompressed)).toBe(multiple);
+        expect(sec1(combine(digit * unit, 0n, secp256k1.g))).toBe(multiple);
         multiple = addPoints(multiple, base, uncompressed);
       }
-    }
-  });
+    },
+  );
 
   it("refuses the point at infinity instead of encoding it", () => {
     expect(() => addPoints(g, minusG)).toThrow(infinity);
