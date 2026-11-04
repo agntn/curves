@@ -4,6 +4,7 @@
 import {
   defineTool,
   Type,
+  type TBoolean,
   type TObject,
   type TOptional,
   type TString,
@@ -124,6 +125,109 @@ function sec1Point(description: string, bytes: keyof typeof SEC1_WIDTHS = 32): T
       pattern: `^(?:${pattern})?$`,
       description: `${description}. Compressed or uncompressed SEC1 hex, without 0x`,
     }),
+  );
+}
+
+/** What sets one SEC 1 curve tool apart: its width and where its inputs come from. */
+interface Sec1Curve {
+  /** Bytes in a coordinate and in a scalar. */
+  readonly bytes: keyof typeof SEC1_WIDTHS;
+  /** The enum of `operation`. */
+  readonly operations: readonly string[];
+  /** Tacked onto the digit count of x, for a curve whose top byte has rules of its own. */
+  readonly x?: string;
+  /** Where its ECDSA signatures arrive and how to get r and s out of them. */
+  readonly signature: string;
+  /** Which hash goes with the curve and how much of a long digest counts. */
+  readonly digest: string;
+}
+
+/** How every SEC 1 curve tool reads its point math; each adds its own line for verify. */
+const SEC1_GUIDELINES = [
+  "add and subtract take point and other; negate takes point",
+  "multiply takes point and scalar, hex from 1 to n - 1",
+  "lift takes x and returns the even and the odd point",
+  "check takes point and answers onCurve true or false",
+] as const;
+
+/** The arguments every SEC 1 curve tool takes, whatever its width. */
+type Sec1ComputeSchema = TObject<{
+  operation: TString;
+  point: TOptional<TString>;
+  other: TOptional<TString>;
+  scalar: TOptional<TString>;
+  x: TOptional<TString>;
+  signature: TOptional<TString>;
+  digest: TOptional<TString>;
+  lowS: TOptional<TBoolean>;
+  compressed: TOptional<TBoolean>;
+}>;
+
+/**
+ * Input of a SEC 1 curve tool, sized by its width. A new curve brings its notes, not a schema.
+ * @param curve - The width, the operations and the curve's own notes
+ * @returns {Sec1ComputeSchema} The input schema
+ */
+function sec1ComputeSchema(curve: Sec1Curve): Sec1ComputeSchema {
+  const digits = curve.bytes * 2;
+  return Type.Object(
+    {
+      operation: Type.String({
+        enum: [...curve.operations],
+        description:
+          "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, verify takes point as the public key with digest and signature",
+      }),
+      point: sec1Point(
+        "Every operation but lift, required there; the public key for verify",
+        curve.bytes,
+      ),
+      other: sec1Point(
+        "add and subtract only, required there: the point added to point or subtracted from it",
+        curve.bytes,
+      ),
+      scalar: Type.Optional(
+        Type.String({
+          maxLength: digits,
+          pattern: `^[0-9A-Fa-f]{0,${digits}}$`,
+          description:
+            "multiply only, required there: 1 to n - 1 as hex without 0x. It enters the transcript, so pass a public tweak or a disposable key",
+        }),
+      ),
+      x: Type.Optional(
+        Type.String({
+          maxLength: digits,
+          pattern: `^(?:[0-9A-Fa-f]{${digits}})?$`,
+          description: `lift only, required there: x coordinate as ${digits} hex digits${curve.x ?? ""}`,
+        }),
+      ),
+      signature: Type.Optional(
+        Type.String({
+          maxLength: 2 * digits,
+          pattern: `^(?:[0-9A-Fa-f]{${2 * digits}})?$`,
+          description: `verify only, required there: the ECDSA signature as r then s, ${2 * digits} hex digits without 0x. ${curve.signature}`,
+        }),
+      ),
+      digest: Type.Optional(
+        Type.String({
+          maxLength: 128,
+          pattern: `^(?:${DIGEST_PATTERN})?$`,
+          description: `verify only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. ${curve.digest}`,
+        }),
+      ),
+      lowS: Type.Optional(
+        Type.Boolean({
+          description:
+            "verify only: refuse s above n / 2. Default: false, since SEC 1 takes either",
+        }),
+      ),
+      compressed: Type.Optional(
+        Type.Boolean({
+          description:
+            "Output SEC1 encoding, for every operation but check and verify. Default: true",
+        }),
+      ),
+    },
+    { additionalProperties: false },
   );
 }
 
@@ -359,62 +463,14 @@ export const bip340ComputeTool = defineTool({
   execute: async (params) => (await loadOperations()).computeBip340(params),
 });
 
-export const p256ComputeSchema = Type.Object(
-  {
-    operation: Type.String({
-      enum: [...P256_OPERATIONS],
-      description:
-        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, verify takes point as the public key with digest and signature",
-    }),
-    point: sec1Point("Every operation but lift, required there; the public key for verify"),
-    other: sec1Point(
-      "add and subtract only, required there: the point added to point or subtracted from it",
-    ),
-    scalar: Type.Optional(
-      Type.String({
-        maxLength: 64,
-        pattern: "^[0-9A-Fa-f]{0,64}$",
-        description:
-          "multiply only, required there: 1 to n - 1 as hex without 0x. It enters the transcript, so pass a public tweak or a disposable key",
-      }),
-    ),
-    x: Type.Optional(
-      Type.String({
-        maxLength: 64,
-        pattern: "^(?:[0-9A-Fa-f]{64})?$",
-        description: "lift only, required there: x coordinate as 64 hex digits",
-      }),
-    ),
-    signature: Type.Optional(
-      Type.String({
-        maxLength: 128,
-        pattern: "^(?:[0-9A-Fa-f]{128})?$",
-        description:
-          "verify only, required there: the ECDSA signature as r then s, 128 hex digits without 0x. WebAuthn and X.509 send DER, so unpack it first; a JWS ES256 signature is r then s already",
-      }),
-    ),
-    digest: Type.Optional(
-      Type.String({
-        maxLength: 128,
-        pattern: `^(?:${DIGEST_PATTERN})?$`,
-        description:
-          "verify only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. Hash the message first, with SHA-256 for ES256 and WebAuthn; past 32 bytes only the leftmost 256 bits count",
-      }),
-    ),
-    lowS: Type.Optional(
-      Type.Boolean({
-        description: "verify only: refuse s above n / 2. Default: false, since SEC 1 takes either",
-      }),
-    ),
-    compressed: Type.Optional(
-      Type.Boolean({
-        description:
-          "Output SEC1 encoding, for every operation but check and verify. Default: true",
-      }),
-    ),
-  },
-  { additionalProperties: false },
-);
+export const p256ComputeSchema = sec1ComputeSchema({
+  bytes: 32,
+  operations: P256_OPERATIONS,
+  signature:
+    "WebAuthn and X.509 send DER, so unpack it first; a JWS ES256 signature is r then s already",
+  digest:
+    "Hash the message first, with SHA-256 for ES256 and WebAuthn; past 32 bytes only the leftmost 256 bits count",
+});
 
 export const p256ComputeTool = defineTool({
   name: "curves_p256_compute",
@@ -424,10 +480,7 @@ export const p256ComputeTool = defineTool({
   snippet:
     "Use for P-256 public keys and the ECDSA signatures of ES256 tokens, passkeys and certificates, once you have the digest.",
   guidelines: [
-    "add and subtract take point and other; negate takes point",
-    "multiply takes point and scalar, hex from 1 to n - 1",
-    "lift takes x and returns the even and the odd point",
-    "check takes point and answers onCurve true or false",
+    ...SEC1_GUIDELINES,
     "verify takes point, digest and signature and answers valid true or false; hash the message yourself, SHA-256 for ES256",
   ],
   effect: "read",
@@ -440,63 +493,13 @@ export const p256ComputeTool = defineTool({
   execute: async (params) => (await loadOperations()).computeP256(params),
 });
 
-export const p384ComputeSchema = Type.Object(
-  {
-    operation: Type.String({
-      enum: [...P384_OPERATIONS],
-      description:
-        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, verify takes point as the public key with digest and signature",
-    }),
-    point: sec1Point("Every operation but lift, required there; the public key for verify", 48),
-    other: sec1Point(
-      "add and subtract only, required there: the point added to point or subtracted from it",
-      48,
-    ),
-    scalar: Type.Optional(
-      Type.String({
-        maxLength: 96,
-        pattern: "^[0-9A-Fa-f]{0,96}$",
-        description:
-          "multiply only, required there: 1 to n - 1 as hex without 0x. It enters the transcript, so pass a public tweak or a disposable key",
-      }),
-    ),
-    x: Type.Optional(
-      Type.String({
-        maxLength: 96,
-        pattern: "^(?:[0-9A-Fa-f]{96})?$",
-        description: "lift only, required there: x coordinate as 96 hex digits",
-      }),
-    ),
-    signature: Type.Optional(
-      Type.String({
-        maxLength: 192,
-        pattern: "^(?:[0-9A-Fa-f]{192})?$",
-        description:
-          "verify only, required there: the ECDSA signature as r then s, 192 hex digits without 0x. X.509 sends DER, so unpack it first; a JWS ES384 signature is r then s already",
-      }),
-    ),
-    digest: Type.Optional(
-      Type.String({
-        maxLength: 128,
-        pattern: `^(?:${DIGEST_PATTERN})?$`,
-        description:
-          "verify only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. Hash the message first, with SHA-384 for ES384; past 48 bytes only the leftmost 384 bits count",
-      }),
-    ),
-    lowS: Type.Optional(
-      Type.Boolean({
-        description: "verify only: refuse s above n / 2. Default: false, since SEC 1 takes either",
-      }),
-    ),
-    compressed: Type.Optional(
-      Type.Boolean({
-        description:
-          "Output SEC1 encoding, for every operation but check and verify. Default: true",
-      }),
-    ),
-  },
-  { additionalProperties: false },
-);
+export const p384ComputeSchema = sec1ComputeSchema({
+  bytes: 48,
+  operations: P384_OPERATIONS,
+  signature: "X.509 sends DER, so unpack it first; a JWS ES384 signature is r then s already",
+  digest:
+    "Hash the message first, with SHA-384 for ES384; past 48 bytes only the leftmost 384 bits count",
+});
 
 export const p384ComputeTool = defineTool({
   name: "curves_p384_compute",
@@ -506,10 +509,7 @@ export const p384ComputeTool = defineTool({
   snippet:
     "Use for P-384 public keys and the ECDSA signatures of ES384 tokens and certificates, once you have the digest.",
   guidelines: [
-    "add and subtract take point and other; negate takes point",
-    "multiply takes point and scalar, hex from 1 to n - 1",
-    "lift takes x and returns the even and the odd point",
-    "check takes point and answers onCurve true or false",
+    ...SEC1_GUIDELINES,
     "verify takes point, digest and signature and answers valid true or false; hash the message yourself, SHA-384 for ES384",
   ],
   effect: "read",
@@ -522,64 +522,15 @@ export const p384ComputeTool = defineTool({
   execute: async (params) => (await loadOperations()).computeP384(params),
 });
 
-export const p521ComputeSchema = Type.Object(
-  {
-    operation: Type.String({
-      enum: [...P521_OPERATIONS],
-      description:
-        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, verify takes point as the public key with digest and signature",
-    }),
-    point: sec1Point("Every operation but lift, required there; the public key for verify", 66),
-    other: sec1Point(
-      "add and subtract only, required there: the point added to point or subtracted from it",
-      66,
-    ),
-    scalar: Type.Optional(
-      Type.String({
-        maxLength: 132,
-        pattern: "^[0-9A-Fa-f]{0,132}$",
-        description:
-          "multiply only, required there: 1 to n - 1 as hex without 0x. It enters the transcript, so pass a public tweak or a disposable key",
-      }),
-    ),
-    x: Type.Optional(
-      Type.String({
-        maxLength: 132,
-        pattern: "^(?:[0-9A-Fa-f]{132})?$",
-        description:
-          "lift only, required there: x coordinate as 132 hex digits, the first two 00 or 01",
-      }),
-    ),
-    signature: Type.Optional(
-      Type.String({
-        maxLength: 264,
-        pattern: "^(?:[0-9A-Fa-f]{264})?$",
-        description:
-          "verify only, required there: the ECDSA signature as r then s, 264 hex digits without 0x. X.509 sends DER and OpenPGP two MPIs, so unpack r and s and pad each to 132 digits first; a JWS ES512 signature is r then s already",
-      }),
-    ),
-    digest: Type.Optional(
-      Type.String({
-        maxLength: 128,
-        pattern: `^(?:${DIGEST_PATTERN})?$`,
-        description:
-          "verify only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. Hash the message first, with SHA-512 for ES512; every digest up to 64 bytes counts whole, since n has 521 bits",
-      }),
-    ),
-    lowS: Type.Optional(
-      Type.Boolean({
-        description: "verify only: refuse s above n / 2. Default: false, since SEC 1 takes either",
-      }),
-    ),
-    compressed: Type.Optional(
-      Type.Boolean({
-        description:
-          "Output SEC1 encoding, for every operation but check and verify. Default: true",
-      }),
-    ),
-  },
-  { additionalProperties: false },
-);
+export const p521ComputeSchema = sec1ComputeSchema({
+  bytes: 66,
+  operations: P521_OPERATIONS,
+  x: ", the first two 00 or 01",
+  signature:
+    "X.509 sends DER and OpenPGP two MPIs, so unpack r and s and pad each to 132 digits first; a JWS ES512 signature is r then s already",
+  digest:
+    "Hash the message first, with SHA-512 for ES512; every digest up to 64 bytes counts whole, since n has 521 bits",
+});
 
 export const p521ComputeTool = defineTool({
   name: "curves_p521_compute",
@@ -589,10 +540,7 @@ export const p521ComputeTool = defineTool({
   snippet:
     "Use for P-521 public keys and the ECDSA signatures of ES512 tokens, OpenPGP keys and certificates, once you have the digest.",
   guidelines: [
-    "add and subtract take point and other; negate takes point",
-    "multiply takes point and scalar, hex from 1 to n - 1",
-    "lift takes x and returns the even and the odd point",
-    "check takes point and answers onCurve true or false",
+    ...SEC1_GUIDELINES,
     "verify takes point, digest and signature and answers valid true or false; hash the message yourself, SHA-512 for ES512",
   ],
   effect: "read",
@@ -605,62 +553,13 @@ export const p521ComputeTool = defineTool({
   execute: async (params) => (await loadOperations()).computeP521(params),
 });
 
-export const brainpoolP256r1ComputeSchema = Type.Object(
-  {
-    operation: Type.String({
-      enum: [...BRAINPOOLP256R1_OPERATIONS],
-      description:
-        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, verify takes point as the public key with digest and signature",
-    }),
-    point: sec1Point("Every operation but lift, required there; the public key for verify"),
-    other: sec1Point(
-      "add and subtract only, required there: the point added to point or subtracted from it",
-    ),
-    scalar: Type.Optional(
-      Type.String({
-        maxLength: 64,
-        pattern: "^[0-9A-Fa-f]{0,64}$",
-        description:
-          "multiply only, required there: 1 to n - 1 as hex without 0x. It enters the transcript, so pass a public tweak or a disposable key",
-      }),
-    ),
-    x: Type.Optional(
-      Type.String({
-        maxLength: 64,
-        pattern: "^(?:[0-9A-Fa-f]{64})?$",
-        description: "lift only, required there: x coordinate as 64 hex digits",
-      }),
-    ),
-    signature: Type.Optional(
-      Type.String({
-        maxLength: 128,
-        pattern: "^(?:[0-9A-Fa-f]{128})?$",
-        description:
-          "verify only, required there: the ECDSA signature as r then s, 128 hex digits without 0x. X.509 sends DER and OpenPGP two MPIs, so unpack r and s and pad each to 64 digits first",
-      }),
-    ),
-    digest: Type.Optional(
-      Type.String({
-        maxLength: 128,
-        pattern: `^(?:${DIGEST_PATTERN})?$`,
-        description:
-          "verify only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. Hash the message first; past 32 bytes only the leftmost 256 bits count",
-      }),
-    ),
-    lowS: Type.Optional(
-      Type.Boolean({
-        description: "verify only: refuse s above n / 2. Default: false, since SEC 1 takes either",
-      }),
-    ),
-    compressed: Type.Optional(
-      Type.Boolean({
-        description:
-          "Output SEC1 encoding, for every operation but check and verify. Default: true",
-      }),
-    ),
-  },
-  { additionalProperties: false },
-);
+export const brainpoolP256r1ComputeSchema = sec1ComputeSchema({
+  bytes: 32,
+  operations: BRAINPOOLP256R1_OPERATIONS,
+  signature:
+    "X.509 sends DER and OpenPGP two MPIs, so unpack r and s and pad each to 64 digits first",
+  digest: "Hash the message first; past 32 bytes only the leftmost 256 bits count",
+});
 
 export const brainpoolP256r1ComputeTool = defineTool({
   name: "curves_brainpoolp256r1_compute",
@@ -670,10 +569,7 @@ export const brainpoolP256r1ComputeTool = defineTool({
   snippet:
     "Use for brainpoolP256r1 public keys and the ECDSA signatures of OpenPGP keys and certificates on it, once you have the digest.",
   guidelines: [
-    "add and subtract take point and other; negate takes point",
-    "multiply takes point and scalar, hex from 1 to n - 1",
-    "lift takes x and returns the even and the odd point",
-    "check takes point and answers onCurve true or false",
+    ...SEC1_GUIDELINES,
     "verify takes point, digest and signature and answers valid true or false; hash the message yourself",
   ],
   effect: "read",
@@ -686,63 +582,14 @@ export const brainpoolP256r1ComputeTool = defineTool({
   execute: async (params) => (await loadOperations()).computeBrainpoolP256r1(params),
 });
 
-export const brainpoolP384r1ComputeSchema = Type.Object(
-  {
-    operation: Type.String({
-      enum: [...BRAINPOOLP384R1_OPERATIONS],
-      description:
-        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, verify takes point as the public key with digest and signature",
-    }),
-    point: sec1Point("Every operation but lift, required there; the public key for verify", 48),
-    other: sec1Point(
-      "add and subtract only, required there: the point added to point or subtracted from it",
-      48,
-    ),
-    scalar: Type.Optional(
-      Type.String({
-        maxLength: 96,
-        pattern: "^[0-9A-Fa-f]{0,96}$",
-        description:
-          "multiply only, required there: 1 to n - 1 as hex without 0x. It enters the transcript, so pass a public tweak or a disposable key",
-      }),
-    ),
-    x: Type.Optional(
-      Type.String({
-        maxLength: 96,
-        pattern: "^(?:[0-9A-Fa-f]{96})?$",
-        description: "lift only, required there: x coordinate as 96 hex digits",
-      }),
-    ),
-    signature: Type.Optional(
-      Type.String({
-        maxLength: 192,
-        pattern: "^(?:[0-9A-Fa-f]{192})?$",
-        description:
-          "verify only, required there: the ECDSA signature as r then s, 192 hex digits without 0x. X.509 sends DER and OpenPGP two MPIs, so unpack r and s and pad each to 96 digits first",
-      }),
-    ),
-    digest: Type.Optional(
-      Type.String({
-        maxLength: 128,
-        pattern: `^(?:${DIGEST_PATTERN})?$`,
-        description:
-          "verify only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. Hash the message first, with SHA-384 as OpenPGP and TLS pair it; past 48 bytes only the leftmost 384 bits count",
-      }),
-    ),
-    lowS: Type.Optional(
-      Type.Boolean({
-        description: "verify only: refuse s above n / 2. Default: false, since SEC 1 takes either",
-      }),
-    ),
-    compressed: Type.Optional(
-      Type.Boolean({
-        description:
-          "Output SEC1 encoding, for every operation but check and verify. Default: true",
-      }),
-    ),
-  },
-  { additionalProperties: false },
-);
+export const brainpoolP384r1ComputeSchema = sec1ComputeSchema({
+  bytes: 48,
+  operations: BRAINPOOLP384R1_OPERATIONS,
+  signature:
+    "X.509 sends DER and OpenPGP two MPIs, so unpack r and s and pad each to 96 digits first",
+  digest:
+    "Hash the message first, with SHA-384 as OpenPGP and TLS pair it; past 48 bytes only the leftmost 384 bits count",
+});
 
 export const brainpoolP384r1ComputeTool = defineTool({
   name: "curves_brainpoolp384r1_compute",
@@ -752,10 +599,7 @@ export const brainpoolP384r1ComputeTool = defineTool({
   snippet:
     "Use for brainpoolP384r1 public keys and the ECDSA signatures of OpenPGP keys and certificates on it, once you have the digest.",
   guidelines: [
-    "add and subtract take point and other; negate takes point",
-    "multiply takes point and scalar, hex from 1 to n - 1",
-    "lift takes x and returns the even and the odd point",
-    "check takes point and answers onCurve true or false",
+    ...SEC1_GUIDELINES,
     "verify takes point, digest and signature and answers valid true or false; hash the message yourself",
   ],
   effect: "read",
@@ -768,63 +612,14 @@ export const brainpoolP384r1ComputeTool = defineTool({
   execute: async (params) => (await loadOperations()).computeBrainpoolP384r1(params),
 });
 
-export const brainpoolP512r1ComputeSchema = Type.Object(
-  {
-    operation: Type.String({
-      enum: [...BRAINPOOLP512R1_OPERATIONS],
-      description:
-        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, verify takes point as the public key with digest and signature",
-    }),
-    point: sec1Point("Every operation but lift, required there; the public key for verify", 64),
-    other: sec1Point(
-      "add and subtract only, required there: the point added to point or subtracted from it",
-      64,
-    ),
-    scalar: Type.Optional(
-      Type.String({
-        maxLength: 128,
-        pattern: "^[0-9A-Fa-f]{0,128}$",
-        description:
-          "multiply only, required there: 1 to n - 1 as hex without 0x. It enters the transcript, so pass a public tweak or a disposable key",
-      }),
-    ),
-    x: Type.Optional(
-      Type.String({
-        maxLength: 128,
-        pattern: "^(?:[0-9A-Fa-f]{128})?$",
-        description: "lift only, required there: x coordinate as 128 hex digits",
-      }),
-    ),
-    signature: Type.Optional(
-      Type.String({
-        maxLength: 256,
-        pattern: "^(?:[0-9A-Fa-f]{256})?$",
-        description:
-          "verify only, required there: the ECDSA signature as r then s, 256 hex digits without 0x. X.509 sends DER and OpenPGP two MPIs, so unpack r and s and pad each to 128 digits first",
-      }),
-    ),
-    digest: Type.Optional(
-      Type.String({
-        maxLength: 128,
-        pattern: `^(?:${DIGEST_PATTERN})?$`,
-        description:
-          "verify only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. Hash the message first, with SHA-512, since OpenPGP wants a digest as wide as the curve. n has 512 bits, so all 64 bytes count",
-      }),
-    ),
-    lowS: Type.Optional(
-      Type.Boolean({
-        description: "verify only: refuse s above n / 2. Default: false, since SEC 1 takes either",
-      }),
-    ),
-    compressed: Type.Optional(
-      Type.Boolean({
-        description:
-          "Output SEC1 encoding, for every operation but check and verify. Default: true",
-      }),
-    ),
-  },
-  { additionalProperties: false },
-);
+export const brainpoolP512r1ComputeSchema = sec1ComputeSchema({
+  bytes: 64,
+  operations: BRAINPOOLP512R1_OPERATIONS,
+  signature:
+    "X.509 sends DER and OpenPGP two MPIs, so unpack r and s and pad each to 128 digits first",
+  digest:
+    "Hash the message first, with SHA-512, since OpenPGP wants a digest as wide as the curve. n has 512 bits, so all 64 bytes count",
+});
 
 export const brainpoolP512r1ComputeTool = defineTool({
   name: "curves_brainpoolp512r1_compute",
@@ -834,10 +629,7 @@ export const brainpoolP512r1ComputeTool = defineTool({
   snippet:
     "Use for brainpoolP512r1 public keys and the ECDSA signatures of OpenPGP keys and certificates on it, once you have the digest.",
   guidelines: [
-    "add and subtract take point and other; negate takes point",
-    "multiply takes point and scalar, hex from 1 to n - 1",
-    "lift takes x and returns the even and the odd point",
-    "check takes point and answers onCurve true or false",
+    ...SEC1_GUIDELINES,
     "verify takes point, digest and signature and answers valid true or false; hash the message yourself",
   ],
   effect: "read",
