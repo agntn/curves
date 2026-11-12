@@ -16,144 +16,14 @@ import { shellArg } from "../../utils/format";
 import { RFC_6979 } from "../../utils/p256";
 import { RFC_6979_P384 } from "../../utils/p384";
 import { RFC_6979_P521 } from "../../utils/p521";
-import { WYCHEPROOF_BRAINPOOL } from "../../utils/brainpoolp256r1";
-import { WYCHEPROOF_BRAINPOOL_384 } from "../../utils/brainpoolp384r1";
-import { WYCHEPROOF_BRAINPOOL_512 } from "../../utils/brainpoolp512r1";
+import { COMMANDS, OPERATIONS, type KeySource, type Operation } from "../../utils/playground";
+import { RFC_7027_SECRET, WYCHEPROOF_BRAINPOOL } from "../../utils/brainpoolp256r1";
+import { RFC_7027_SECRET_384, WYCHEPROOF_BRAINPOOL_384 } from "../../utils/brainpoolp384r1";
+import { RFC_7027_SECRET_512, WYCHEPROOF_BRAINPOOL_512 } from "../../utils/brainpoolp512r1";
 import { BLOCK_170 } from "../../utils/secp";
 import { ALICE, ALICE_HELLO, ALICE_JUNCTION, DEV_SECRET, DEV_SEED, flipBit } from "../../utils/sr25519";
 import { jsonTokens, shellTokens } from "../../utils/tokens";
 import { runTool, type ToolDetails, type ToolName } from "../../utils/tools";
-
-/** An sr25519 key the operation can start from. The tool takes exactly one. */
-type KeySource = "seed" | "secret" | "publicKey";
-
-type Field =
-  | "point"
-  | "other"
-  | "scalar"
-  | "order"
-  | "limit"
-  | "x"
-  | "compressed"
-  | "source"
-  | "secret"
-  | "publicKey"
-  | "message"
-  | "encoding"
-  | "signature"
-  | "digest"
-  | "recovery"
-  | "lowS"
-  | "chainCode"
-  | "hard"
-  | "zip215"
-  | "context"
-  | "random";
-
-interface Operation {
-  /** `compute:log`, `secp256k1:lift` or `sr25519:sign`, unique across the tools. */
-  readonly key: string;
-  readonly tool: ToolName;
-  /** The `operation` argument. */
-  readonly op: string;
-  readonly takes: readonly Field[];
-  /** The keys `source` picks from, the first one by default. */
-  readonly sources?: readonly KeySource[];
-  readonly about: string;
-}
-
-/** The CLI command of each tool, which is also its name in the operation list. */
-const COMMANDS: Record<ToolName, string> = {
-  curves_compute: "compute",
-  curves_secp256k1_compute: "secp256k1",
-  curves_bip340_compute: "bip340",
-  curves_p256_compute: "p256",
-  curves_p384_compute: "p384",
-  curves_p521_compute: "p521",
-  curves_brainpoolp256r1_compute: "brainpoolp256r1",
-  curves_brainpoolp384r1_compute: "brainpoolp384r1",
-  curves_brainpoolp512r1_compute: "brainpoolp512r1",
-  curves_sr25519_compute: "sr25519",
-  curves_ed25519_compute: "ed25519",
-  curves_ed448_compute: "ed448",
-};
-
-/** Every operation of every tool, in the order the tools list them. */
-const OPERATIONS: readonly Operation[] = [
-  { key: "compute:add", tool: "curves_compute", op: "add", takes: ["point", "other"], about: "Add two points of the curve." },
-  { key: "compute:double", tool: "curves_compute", op: "double", takes: ["point"], about: "Twice a point, infinity for a point with y = 0." },
-  { key: "compute:negate", tool: "curves_compute", op: "negate", takes: ["point"], about: "Same x, the other y." },
-  { key: "compute:multiply", tool: "curves_compute", op: "multiply", takes: ["point", "scalar"], about: "A point times any integer, a negative one multiplies the negation." },
-  { key: "compute:lift", tool: "curves_compute", op: "lift", takes: ["x"], about: "Every point above an x, smaller y first. A compressed point is just x and a parity bit." },
-  { key: "compute:check", tool: "curves_compute", op: "check", takes: ["point"], about: "Whether a point lies on the curve." },
-  { key: "compute:order", tool: "curves_compute", op: "order", takes: ["point"], about: "The smallest n with n times the point at infinity." },
-  { key: "compute:count", tool: "curves_compute", op: "count", takes: [], about: "How many points the curve has, infinity included." },
-  { key: "compute:points", tool: "curves_compute", op: "points", takes: ["order", "limit"], about: "Infinity, then the points by x then y. With an order, only the points of that order." },
-  { key: "compute:log", tool: "curves_compute", op: "log", takes: ["point", "other"], about: "The smallest k with k times the base equal to the target." },
-  { key: "secp256k1:add", tool: "curves_secp256k1_compute", op: "add", takes: ["point", "other", "compressed"], about: "The sum of two secp256k1 points." },
-  { key: "secp256k1:subtract", tool: "curves_secp256k1_compute", op: "subtract", takes: ["point", "other", "compressed"], about: "The offset between two known points." },
-  { key: "secp256k1:negate", tool: "curves_secp256k1_compute", op: "negate", takes: ["point", "compressed"], about: "Same x, the other y. Only the prefix changes." },
-  { key: "secp256k1:multiply", tool: "curves_secp256k1_compute", op: "multiply", takes: ["point", "scalar", "compressed"], about: "A point times a scalar from 1 to n - 1. G times a private key is its public key." },
-  { key: "secp256k1:lift", tool: "curves_secp256k1_compute", op: "lift", takes: ["x", "compressed"], about: "Both points above an x. The even one is what a BIP340 key stands for." },
-  { key: "secp256k1:check", tool: "curves_secp256k1_compute", op: "check", takes: ["point"], about: "Whether a SEC1 point lies on secp256k1." },
-  { key: "secp256k1:sign", tool: "curves_secp256k1_compute", op: "sign", takes: ["secret", "digest", "compressed"], about: "Sign a digest with ECDSA. RFC 6979 picks k from the key and the digest, so the bytes never change. Low s, recovery id included." },
-  { key: "secp256k1:nonce", tool: "curves_secp256k1_compute", op: "nonce", takes: ["secret", "digest"], about: "Read the secp256k1 signing nonce. It belongs in test vectors, not public logs. Anyone with it and the signature can walk away with the key." },
-  { key: "secp256k1:verify", tool: "curves_secp256k1_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "Check whether a key signed a digest. G didn't. The block 170 chip loads Satoshi's key, which did." },
-  { key: "secp256k1:recover", tool: "curves_secp256k1_compute", op: "recover", takes: ["digest", "signature", "recovery", "compressed"], about: "Recover a verifying key from a digest, signature and id. For block 170, ids 0 and 1 both verify, but only 1 is Satoshi's." },
-  { key: "bip340:keypair", tool: "curves_bip340_compute", op: "keypair", takes: ["secret"], about: "A 32-byte secret in, the x-only key out. y doesn't make the trip, it's whichever one is even." },
-  { key: "bip340:sign", tool: "curves_bip340_compute", op: "sign", takes: ["secret", "message", "random"], about: "Sign the BIP340 way. Leave random empty and fresh bytes go in, so every signature differs and all of them verify." },
-  { key: "bip340:verify", tool: "curves_bip340_compute", op: "verify", takes: ["publicKey", "message", "signature"], about: "The pi message comes with a signature. Flip a bit and see what verify says." },
-  { key: "p256:add", tool: "curves_p256_compute", op: "add", takes: ["point", "other", "compressed"], about: "The sum of two P-256 points." },
-  { key: "p256:subtract", tool: "curves_p256_compute", op: "subtract", takes: ["point", "other", "compressed"], about: "The offset between two P-256 points." },
-  { key: "p256:negate", tool: "curves_p256_compute", op: "negate", takes: ["point", "compressed"], about: "Same x, the other y. Only the SEC1 prefix changes." },
-  { key: "p256:multiply", tool: "curves_p256_compute", op: "multiply", takes: ["point", "scalar", "compressed"], about: "A point times a scalar from 1 to n - 1. G times a private key is its public key." },
-  { key: "p256:lift", tool: "curves_p256_compute", op: "lift", takes: ["x", "compressed"], about: "Both points above an x. Try x = 1. Nobody's home." },
-  { key: "p256:check", tool: "curves_p256_compute", op: "check", takes: ["point"], about: "Check a SEC1 point on P-256. secp256k1's G is on the wrong curve." },
-  { key: "p256:verify", tool: "curves_p256_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "Check ECDSA over a digest. The default signature doesn't verify with G. The RFC 6979 key chip loads the key that does." },
-  { key: "p384:add", tool: "curves_p384_compute", op: "add", takes: ["point", "other", "compressed"], about: "Add two P-384 points. The coordinates brought 48 bytes each." },
-  { key: "p384:subtract", tool: "curves_p384_compute", op: "subtract", takes: ["point", "other", "compressed"], about: "Subtract one P-384 point from another. The result is another point." },
-  { key: "p384:negate", tool: "curves_p384_compute", op: "negate", takes: ["point", "compressed"], about: "Same x, opposite y. In compressed form, only the prefix changes. Efficient, frankly." },
-  { key: "p384:multiply", tool: "curves_p384_compute", op: "multiply", takes: ["point", "scalar", "compressed"], about: "Multiply by a scalar from 1 to n - 1. The default is 3." },
-  { key: "p384:lift", tool: "curves_p384_compute", op: "lift", takes: ["x", "compressed"], about: "Find both points above an x, even and odd. At x = 1, neither shows up." },
-  { key: "p384:check", tool: "curves_p384_compute", op: "check", takes: ["point"], about: "Check whether a SEC1 point lies on P-384. A P-256 point is 16 bytes short." },
-  { key: "p384:verify", tool: "curves_p384_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "Check ECDSA over a digest. G didn't sign this one. The RFC 6979 key chip loads the key that did." },
-  { key: "p521:add", tool: "curves_p521_compute", op: "add", takes: ["point", "other", "compressed"], about: "Add two P-521 points. Each coordinate gets 66 bytes." },
-  { key: "p521:subtract", tool: "curves_p521_compute", op: "subtract", takes: ["point", "other", "compressed"], about: "Subtract one P-521 point from another. Order matters." },
-  { key: "p521:negate", tool: "curves_p521_compute", op: "negate", takes: ["point", "compressed"], about: "Keep x and flip y. The compressed prefix does the talking." },
-  { key: "p521:multiply", tool: "curves_p521_compute", op: "multiply", takes: ["point", "scalar", "compressed"], about: "Multiply a point by a scalar. The default is 3." },
-  { key: "p521:lift", tool: "curves_p521_compute", op: "lift", takes: ["x", "compressed"], about: "Find both points above an x. 0, 1 and 2 all have some. Knock on 3 and nobody answers." },
-  { key: "p521:check", tool: "curves_p521_compute", op: "check", takes: ["point"], about: "Check whether a SEC1 point lies on P-521. A compressed P-384 point is 18 bytes short." },
-  { key: "p521:verify", tool: "curves_p521_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "Check ECDSA over a digest. The default signature doesn't verify with G. The RFC 6979 key chip loads the key that did." },
-  { key: "brainpoolp256r1:add", tool: "curves_brainpoolp256r1_compute", op: "add", takes: ["point", "other", "compressed"], about: "Add two brainpoolP256r1 points. G and 2G gives you a start." },
-  { key: "brainpoolp256r1:subtract", tool: "curves_brainpoolp256r1_compute", op: "subtract", takes: ["point", "other", "compressed"], about: "Take one brainpoolP256r1 point away from another. Order matters." },
-  { key: "brainpoolp256r1:negate", tool: "curves_brainpoolp256r1_compute", op: "negate", takes: ["point", "compressed"], about: "Flip y while keeping x. The compressed prefix changes." },
-  { key: "brainpoolp256r1:multiply", tool: "curves_brainpoolp256r1_compute", op: "multiply", takes: ["point", "scalar", "compressed"], about: "Multiply a brainpoolP256r1 point by a scalar. That's repeated addition, not coordinate multiplication." },
-  { key: "brainpoolp256r1:lift", tool: "curves_brainpoolp256r1_compute", op: "lift", takes: ["x", "compressed"], about: "Find points above an x. Zero has none, one has a point." },
-  { key: "brainpoolp256r1:check", tool: "curves_brainpoolp256r1_compute", op: "check", takes: ["point"], about: "Check a SEC1 point on brainpoolP256r1. P-256's compressed generator passes too, so appearances aren't enough." },
-  { key: "brainpoolp256r1:verify", tool: "curves_brainpoolp256r1_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "Verify ECDSA over a digest. The default G fails. Load Wycheproof key for a matching key." },
-  { key: "brainpoolp384r1:add", tool: "curves_brainpoolp384r1_compute", op: "add", takes: ["point", "other", "compressed"], about: "Add brainpoolP384r1 points. Try G and 2G for a start." },
-  { key: "brainpoolp384r1:subtract", tool: "curves_brainpoolp384r1_compute", op: "subtract", takes: ["point", "other", "compressed"], about: "Subtract one brainpoolP384r1 point from another. The order matters." },
-  { key: "brainpoolp384r1:negate", tool: "curves_brainpoolp384r1_compute", op: "negate", takes: ["point", "compressed"], about: "Keep x, flip y. The compressed prefix flips between 02 and 03." },
-  { key: "brainpoolp384r1:multiply", tool: "curves_brainpoolp384r1_compute", op: "multiply", takes: ["point", "scalar", "compressed"], about: "Multiply a point by a scalar. It's repeated addition, not coordinate multiplication." },
-  { key: "brainpoolp384r1:lift", tool: "curves_brainpoolp384r1_compute", op: "lift", takes: ["x", "compressed"], about: "Try x = 0, 1, 2, 3. No point, point, no point, point." },
-  { key: "brainpoolp384r1:check", tool: "curves_brainpoolp384r1_compute", op: "check", takes: ["point"], about: "P-384's 2G passes this check. Same length doesn't mean same curve." },
-  { key: "brainpoolp384r1:verify", tool: "curves_brainpoolp384r1_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "The default G fails verification. Wycheproof key gives the signature its matching key." },
-  { key: "brainpoolp512r1:add", tool: "curves_brainpoolp512r1_compute", op: "add", takes: ["point", "other", "compressed"], about: "Add brainpoolP512r1 points. G and 2G make a good starting pair." },
-  { key: "brainpoolp512r1:subtract", tool: "curves_brainpoolp512r1_compute", op: "subtract", takes: ["point", "other", "compressed"], about: "Order matters here. Swap the points and you change the subtraction." },
-  { key: "brainpoolp512r1:negate", tool: "curves_brainpoolp512r1_compute", op: "negate", takes: ["point", "compressed"], about: "Flip y, keep x. The compressed prefix switches between 02 and 03." },
-  { key: "brainpoolp512r1:multiply", tool: "curves_brainpoolp512r1_compute", op: "multiply", takes: ["point", "scalar", "compressed"], about: "A scalar repeats point addition. It doesn't multiply the coordinates." },
-  { key: "brainpoolp512r1:lift", tool: "curves_brainpoolp512r1_compute", op: "lift", takes: ["x", "compressed"], about: "Zero, one, two miss. At x = 3, you finally get two points." },
-  { key: "brainpoolp512r1:check", tool: "curves_brainpoolp512r1_compute", op: "check", takes: ["point"], about: "No other curve here shares this point width. A matching length still isn't enough." },
-  { key: "brainpoolp512r1:verify", tool: "curves_brainpoolp512r1_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "G fails with the default signature. The Wycheproof key gets a true." },
-  { key: "sr25519:keypair", tool: "curves_sr25519_compute", op: "keypair", takes: ["source"], sources: ["seed", "secret"], about: "A 32-byte seed grows into a secret and a public key. A secret alone gives back its public key." },
-  { key: "sr25519:sign", tool: "curves_sr25519_compute", op: "sign", takes: ["secret", "message", "encoding"], about: "Sign under the substrate context. Fresh randomness each time, so the bytes change and both still verify." },
-  { key: "sr25519:verify", tool: "curves_sr25519_compute", op: "verify", takes: ["publicKey", "message", "encoding", "signature"], about: "Whether the key signed these bytes. A wrong signature is a plain false, not an error." },
-  { key: "sr25519:derive", tool: "curves_sr25519_compute", op: "derive", takes: ["source", "chainCode", "hard"], sources: ["seed", "secret", "publicKey"], about: "A child as Substrate HDKD makes it. Hard needs the seed or secret. Soft follows from the public key too." },
-  { key: "ed25519:keypair", tool: "curves_ed25519_compute", op: "keypair", takes: ["secret"], about: "32 bytes of secret in, the public key out. SHA-512 and a clamp sit in between." },
-  { key: "ed25519:sign", tool: "curves_ed25519_compute", op: "sign", takes: ["secret", "message"], about: "Sign as RFC 8032 does. Same secret, same message, same bytes, every single time." },
-  { key: "ed25519:verify", tool: "curves_ed25519_compute", op: "verify", takes: ["publicKey", "message", "signature", "zip215"], about: "Check an Ed25519 signature. An order 8 key can pass ZIP 215. Tick strict and watch it fail." },
-  { key: "ed448:verify", tool: "curves_ed448_compute", op: "verify", takes: ["publicKey", "message", "signature", "context"], about: "Check an Ed448 signature. The context is part of what got signed, so the wrong one fails." },
-];
 
 const G = multiplyGenerator("1");
 const TWO_G = multiplyGenerator("2");
@@ -180,6 +50,8 @@ const BRAINPOOL_512_G = brainpool512Generator("1");
 const BRAINPOOL_512_TWO_G = brainpool512Generator("2");
 /** The ids `recover` takes: bit 0 is the parity of y of R, bit 1 says its x is r + n. */
 const RECOVERY_IDS = [0, 1, 2, 3] as const;
+/** The operations with a secret to fill. */
+const SIGNING = ["sign", "nonce"] as const;
 
 const route = useRoute();
 const router = useRouter();
@@ -201,7 +73,6 @@ const secpSecret = ref("1");
 const x = ref(G.slice(2));
 const secpDigest = ref<string>(BLOCK_170.digest);
 const secpSignature = ref<string>(BLOCK_170.signature);
-const recovery = ref<number>(BLOCK_170.recovery);
 const lowS = ref(false);
 /** The secp256k1 fields that are text, by the argument each one fills. */
 const SECP_FIELDS = { point: secpPoint, other: secpOther, scalar: secpScalar, secret: secpSecret, x, digest: secpDigest, signature: secpSignature } as const;
@@ -211,49 +82,55 @@ const nistScalar = ref("3");
 const nistX = ref(NIST_G.slice(2));
 const nistDigest = ref<string>(RFC_6979.digest);
 const nistSignature = ref<string>(RFC_6979.signature);
+const nistSecret = ref<string>(RFC_6979.secret);
 /** The P-256 fields that are text, by the argument each one fills. */
-const NIST_FIELDS = { point: nistPoint, other: nistOther, scalar: nistScalar, x: nistX, digest: nistDigest, signature: nistSignature } as const;
+const NIST_FIELDS = { point: nistPoint, other: nistOther, scalar: nistScalar, secret: nistSecret, x: nistX, digest: nistDigest, signature: nistSignature } as const;
 const widePoint = ref(WIDE_G);
 const wideOther = ref(WIDE_TWO_G);
 const wideScalar = ref("3");
 const wideX = ref(WIDE_G.slice(2));
 const wideDigest = ref<string>(RFC_6979_P384.digest);
 const wideSignature = ref<string>(RFC_6979_P384.signature);
+const wideSecret = ref<string>(RFC_6979_P384.secret);
 /** The P-384 fields that are text, by the argument each one fills. */
-const WIDE_FIELDS = { point: widePoint, other: wideOther, scalar: wideScalar, x: wideX, digest: wideDigest, signature: wideSignature } as const;
-/** The text fields of every SEC1 tool, by tool. */
+const WIDE_FIELDS = { point: widePoint, other: wideOther, scalar: wideScalar, secret: wideSecret, x: wideX, digest: wideDigest, signature: wideSignature } as const;
 const p521Point = ref(P521_G);
 const p521Other = ref(P521_TWO_G);
 const p521Scalar = ref("3");
 const p521X = ref(P521_G.slice(2));
 const p521Digest = ref<string>(RFC_6979_P521.digest);
 const p521Signature = ref<string>(RFC_6979_P521.signature);
+const p521Secret = ref<string>(RFC_6979_P521.secret);
 /** The P-521 fields that are text, by the argument each one fills. */
-const P521_FIELDS = { point: p521Point, other: p521Other, scalar: p521Scalar, x: p521X, digest: p521Digest, signature: p521Signature } as const;
+const P521_FIELDS = { point: p521Point, other: p521Other, scalar: p521Scalar, secret: p521Secret, x: p521X, digest: p521Digest, signature: p521Signature } as const;
 const brainpoolPoint = ref(BRAINPOOL_G);
 const brainpoolOther = ref(BRAINPOOL_TWO_G);
 const brainpoolScalar = ref("3");
 const brainpoolX = ref(BRAINPOOL_G.slice(2));
 const brainpoolDigest = ref<string>(WYCHEPROOF_BRAINPOOL.digest);
 const brainpoolSignature = ref<string>(WYCHEPROOF_BRAINPOOL.signature);
+const brainpoolSecret = ref("1");
 /** The brainpoolP256r1 fields that are text, by the argument each one fills. */
-const BRAINPOOL_FIELDS = { point: brainpoolPoint, other: brainpoolOther, scalar: brainpoolScalar, x: brainpoolX, digest: brainpoolDigest, signature: brainpoolSignature } as const;
+const BRAINPOOL_FIELDS = { point: brainpoolPoint, other: brainpoolOther, scalar: brainpoolScalar, secret: brainpoolSecret, x: brainpoolX, digest: brainpoolDigest, signature: brainpoolSignature } as const;
 const brainpool384Point = ref(BRAINPOOL_384_G);
 const brainpool384Other = ref(BRAINPOOL_384_TWO_G);
 const brainpool384Scalar = ref("3");
 const brainpool384X = ref(BRAINPOOL_384_G.slice(2));
 const brainpool384Digest = ref<string>(WYCHEPROOF_BRAINPOOL_384.digest);
 const brainpool384Signature = ref<string>(WYCHEPROOF_BRAINPOOL_384.signature);
+const brainpool384Secret = ref("1");
 /** The brainpoolP384r1 fields that are text, by the argument each one fills. */
-const BRAINPOOL_384_FIELDS = { point: brainpool384Point, other: brainpool384Other, scalar: brainpool384Scalar, x: brainpool384X, digest: brainpool384Digest, signature: brainpool384Signature } as const;
+const BRAINPOOL_384_FIELDS = { point: brainpool384Point, other: brainpool384Other, scalar: brainpool384Scalar, secret: brainpool384Secret, x: brainpool384X, digest: brainpool384Digest, signature: brainpool384Signature } as const;
 const brainpool512Point = ref(BRAINPOOL_512_G);
 const brainpool512Other = ref(BRAINPOOL_512_TWO_G);
 const brainpool512Scalar = ref("3");
 const brainpool512X = ref(BRAINPOOL_512_G.slice(2));
 const brainpool512Digest = ref<string>(WYCHEPROOF_BRAINPOOL_512.digest);
 const brainpool512Signature = ref<string>(WYCHEPROOF_BRAINPOOL_512.signature);
+const brainpool512Secret = ref("1");
 /** The brainpoolP512r1 fields that are text, by the argument each one fills. */
-const BRAINPOOL_512_FIELDS = { point: brainpool512Point, other: brainpool512Other, scalar: brainpool512Scalar, x: brainpool512X, digest: brainpool512Digest, signature: brainpool512Signature } as const;
+const BRAINPOOL_512_FIELDS = { point: brainpool512Point, other: brainpool512Other, scalar: brainpool512Scalar, secret: brainpool512Secret, x: brainpool512X, digest: brainpool512Digest, signature: brainpool512Signature } as const;
+/** The text fields of every SEC1 tool, by tool. */
 const SEC1_FIELDS = {
   curves_secp256k1_compute: SECP_FIELDS,
   curves_p256_compute: NIST_FIELDS,
@@ -263,6 +140,17 @@ const SEC1_FIELDS = {
   curves_brainpoolp384r1_compute: BRAINPOOL_384_FIELDS,
   curves_brainpoolp512r1_compute: BRAINPOOL_512_FIELDS,
 } as const;
+type Sec1Tool = keyof typeof SEC1_FIELDS;
+/** The recovery id each SEC1 tool shows, the one that finds its sample's key. */
+const RECOVERIES = reactive<Record<Sec1Tool, number>>({
+  curves_secp256k1_compute: BLOCK_170.recovery,
+  curves_p256_compute: RFC_6979.recovery,
+  curves_p384_compute: RFC_6979_P384.recovery,
+  curves_p521_compute: RFC_6979_P521.recovery,
+  curves_brainpoolp256r1_compute: WYCHEPROOF_BRAINPOOL.recovery,
+  curves_brainpoolp384r1_compute: WYCHEPROOF_BRAINPOOL_384.recovery,
+  curves_brainpoolp512r1_compute: WYCHEPROOF_BRAINPOOL_512.recovery,
+});
 const uncompressed = ref(false);
 const schnorrSecret = ref<string>(PI_VECTOR.secret);
 const schnorrRandom = ref<string>(PI_VECTOR.random);
@@ -301,6 +189,16 @@ const ed448Context = ref<string>(RFC_ONE_OCTET.context);
 /** The Ed448 fields, by the argument each one fills. */
 const ED448_FIELDS = { publicKey: ed448Key, message: ed448Message, signature: ed448Signature, context: ed448Context } as const;
 
+/**
+ * Whether a tool takes SEC1 points.
+ *
+ * @param {string} tool - A tool name.
+ * @returns {boolean} True for secp256k1, the NIST curves and Brainpool.
+ */
+function isSec1Tool(tool: string): tool is Sec1Tool {
+  return Object.hasOwn(SEC1_FIELDS, tool);
+}
+
 const current = computed(() => OPERATIONS.find((row) => row.key === key.value) ?? OPERATIONS[0]!);
 const position = computed(() => OPERATIONS.indexOf(current.value) + 1);
 const curve = computed(() => current.value.tool === "curves_compute");
@@ -312,8 +210,20 @@ const p521 = computed(() => current.value.tool === "curves_p521_compute");
 const brainpool = computed(() => current.value.tool === "curves_brainpoolp256r1_compute");
 const brainpool384 = computed(() => current.value.tool === "curves_brainpoolp384r1_compute");
 const brainpool512 = computed(() => current.value.tool === "curves_brainpoolp512r1_compute");
+/** The SEC1 tool on screen. Other tools fall back to secp256k1. */
+const sec1Tool = computed<Sec1Tool>(() => {
+  const tool: string = current.value.tool;
+  return isSec1Tool(tool) ? tool : "curves_secp256k1_compute";
+});
 /** The SEC1 fields on screen, for whichever SEC 1 curve the current tool runs on. */
-const sec1Fields = computed(() => (brainpool512.value ? BRAINPOOL_512_FIELDS : brainpool384.value ? BRAINPOOL_384_FIELDS : brainpool.value ? BRAINPOOL_FIELDS : p521.value ? P521_FIELDS : wide.value ? WIDE_FIELDS : nist.value ? NIST_FIELDS : SECP_FIELDS));
+const sec1Fields = computed(() => SEC1_FIELDS[sec1Tool.value]);
+/** The recovery id on screen. Each curve keeps its own. */
+const recovery = computed({
+  get: () => RECOVERIES[sec1Tool.value],
+  set: (id: number) => {
+    RECOVERIES[sec1Tool.value] = id;
+  },
+});
 /** Hex digits in a coordinate of the SEC1 curve on screen, for the placeholders. */
 const sec1Digits = computed(() => (p521.value ? 132 : brainpool512.value ? 128 : wide.value || brainpool384.value ? 96 : 64));
 const sr = computed(() => current.value.tool === "curves_sr25519_compute");
@@ -661,8 +571,25 @@ function loadCurve(index: number) {
   scalar.value = String(sample.scalar);
 }
 
-/** secp256k1 samples, each a different kind of point to start from, and two keys for sign alone. */
-const SECP_SAMPLES: readonly { label: string; op?: string; load: () => unknown }[] = [
+/** A chip that fills fields. With `ops`, it shows up on those operations alone. */
+interface Sample {
+  readonly label: string;
+  readonly ops?: readonly string[];
+  readonly load: () => unknown;
+}
+
+/**
+ * The chips the operation on screen has a use for.
+ *
+ * @param {readonly Sample[]} samples - Every chip of the tool.
+ * @returns {Sample[]} The ones to show.
+ */
+function onScreen(samples: readonly Sample[]): Sample[] {
+  return samples.filter((sample) => sample.ops?.includes(current.value.op) ?? true);
+}
+
+/** secp256k1 samples, each a different kind of point to start from, and two keys to sign with. */
+const SECP_SAMPLES: readonly Sample[] = [
   { label: "G and 2G", load: () => ((secpPoint.value = G), (secpOther.value = TWO_G), (secpScalar.value = "3")) },
   { label: "half of G", load: () => ((secpPoint.value = G), (secpScalar.value = HALF)) },
   { label: "x of G", load: () => (x.value = G.slice(2)) },
@@ -676,17 +603,15 @@ const SECP_SAMPLES: readonly { label: string; op?: string; load: () => unknown }
       recovery.value = BLOCK_170.recovery;
     },
   },
-  { label: "secret 1", op: "sign", load: () => (secpSecret.value = "1") },
-  { label: "secret n - 1", op: "sign", load: () => (secpSecret.value = TOP_SECRET) },
-  { label: "secret 1", op: "nonce", load: () => (secpSecret.value = "1") },
-  { label: "secret n - 1", op: "nonce", load: () => (secpSecret.value = TOP_SECRET) },
+  { label: "secret 1", ops: SIGNING, load: () => (secpSecret.value = "1") },
+  { label: "secret n - 1", ops: SIGNING, load: () => (secpSecret.value = TOP_SECRET) },
 ];
 
 /** The secp256k1 chips on screen. The secret ones show up where there's a secret to fill. */
-const secpSamples = computed(() => SECP_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
+const secpSamples = computed(() => onScreen(SECP_SAMPLES));
 
-/** P-256 samples: G and 2G, an x no point has, the RFC 6979 key, and one bit off on verify. */
-const NIST_SAMPLES: readonly { label: string; op?: string; load: () => unknown }[] = [
+/** P-256 samples: G and 2G, an x no point has, the RFC 6979 key pair, and one bit off. */
+const NIST_SAMPLES: readonly Sample[] = [
   { label: "G and 2G", load: () => ((nistPoint.value = NIST_G), (nistOther.value = NIST_TWO_G), (nistScalar.value = "3")) },
   { label: "x of G", load: () => (nistX.value = NIST_G.slice(2)) },
   { label: "x = 1", load: () => ((nistX.value = "1".padStart(64, "0")), (nistPoint.value = `02${"1".padStart(64, "0")}`)) },
@@ -696,16 +621,19 @@ const NIST_SAMPLES: readonly { label: string; op?: string; load: () => unknown }
       nistPoint.value = RFC_6979.publicKey;
       nistDigest.value = RFC_6979.digest;
       nistSignature.value = RFC_6979.signature;
+      nistSecret.value = RFC_6979.secret;
+      recovery.value = RFC_6979.recovery;
     },
   },
-  { label: "one bit off", op: "verify", load: () => (nistSignature.value = flipBit(nistSignature.value)) },
+  { label: "secret 1", ops: SIGNING, load: () => (nistSecret.value = "1") },
+  { label: "one bit off", ops: ["verify"], load: () => (nistSignature.value = flipBit(nistSignature.value)) },
 ];
 
 /** The P-256 chips on screen. `one bit off` waits for a signature to break. */
-const nistSamples = computed(() => NIST_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
+const nistSamples = computed(() => onScreen(NIST_SAMPLES));
 
-/** P-384 samples, the same five as P-256 at 48 bytes: the RFC key signs with SHA-384 here. */
-const WIDE_SAMPLES: readonly { label: string; op?: string; load: () => unknown }[] = [
+/** P-384 samples, the same as P-256 at 48 bytes: the RFC key signs with SHA-384 here. */
+const WIDE_SAMPLES: readonly Sample[] = [
   { label: "G and 2G", load: () => ((widePoint.value = WIDE_G), (wideOther.value = WIDE_TWO_G), (wideScalar.value = "3")) },
   { label: "x of G", load: () => (wideX.value = WIDE_G.slice(2)) },
   { label: "x = 1", load: () => ((wideX.value = "1".padStart(96, "0")), (widePoint.value = `02${"1".padStart(96, "0")}`)) },
@@ -715,16 +643,19 @@ const WIDE_SAMPLES: readonly { label: string; op?: string; load: () => unknown }
       widePoint.value = RFC_6979_P384.publicKey;
       wideDigest.value = RFC_6979_P384.digest;
       wideSignature.value = RFC_6979_P384.signature;
+      wideSecret.value = RFC_6979_P384.secret;
+      recovery.value = RFC_6979_P384.recovery;
     },
   },
-  { label: "one bit off", op: "verify", load: () => (wideSignature.value = flipBit(wideSignature.value)) },
+  { label: "secret 1", ops: SIGNING, load: () => (wideSecret.value = "1") },
+  { label: "one bit off", ops: ["verify"], load: () => (wideSignature.value = flipBit(wideSignature.value)) },
 ];
 
 /** The P-384 chips on screen. */
-const wideSamples = computed(() => WIDE_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
+const wideSamples = computed(() => onScreen(WIDE_SAMPLES));
 
-/** P-521 samples, the same five again, except x = 3: x = 0, 1 and 2 all have points here. */
-const P521_SAMPLES: readonly { label: string; op?: string; load: () => unknown }[] = [
+/** P-521 samples, the same again, except x = 3: x = 0, 1 and 2 all have points here. */
+const P521_SAMPLES: readonly Sample[] = [
   { label: "G and 2G", load: () => ((p521Point.value = P521_G), (p521Other.value = P521_TWO_G), (p521Scalar.value = "3")) },
   { label: "x of G", load: () => (p521X.value = P521_G.slice(2)) },
   { label: "x = 3", load: () => ((p521X.value = "3".padStart(132, "0")), (p521Point.value = `02${"3".padStart(132, "0")}`)) },
@@ -734,16 +665,19 @@ const P521_SAMPLES: readonly { label: string; op?: string; load: () => unknown }
       p521Point.value = RFC_6979_P521.publicKey;
       p521Digest.value = RFC_6979_P521.digest;
       p521Signature.value = RFC_6979_P521.signature;
+      p521Secret.value = RFC_6979_P521.secret;
+      recovery.value = RFC_6979_P521.recovery;
     },
   },
-  { label: "one bit off", op: "verify", load: () => (p521Signature.value = flipBit(p521Signature.value)) },
+  { label: "secret 1", ops: SIGNING, load: () => (p521Secret.value = "1") },
+  { label: "one bit off", ops: ["verify"], load: () => (p521Signature.value = flipBit(p521Signature.value)) },
 ];
 
 /** The P-521 chips on screen. */
-const p521Samples = computed(() => P521_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
+const p521Samples = computed(() => onScreen(P521_SAMPLES));
 
 /** brainpoolP256r1 samples: x = 0 has no point here, and P-256's compressed G passes check. */
-const BRAINPOOL_SAMPLES: readonly { label: string; op?: string; load: () => unknown }[] = [
+const BRAINPOOL_SAMPLES: readonly Sample[] = [
   { label: "G and 2G", load: () => ((brainpoolPoint.value = BRAINPOOL_G), (brainpoolOther.value = BRAINPOOL_TWO_G), (brainpoolScalar.value = "3")) },
   { label: "x of G", load: () => (brainpoolX.value = BRAINPOOL_G.slice(2)) },
   { label: "x = 0", load: () => ((brainpoolX.value = "0".repeat(64)), (brainpoolPoint.value = `02${"0".repeat(64)}`)) },
@@ -754,16 +688,19 @@ const BRAINPOOL_SAMPLES: readonly { label: string; op?: string; load: () => unkn
       brainpoolPoint.value = WYCHEPROOF_BRAINPOOL.publicKey;
       brainpoolDigest.value = WYCHEPROOF_BRAINPOOL.digest;
       brainpoolSignature.value = WYCHEPROOF_BRAINPOOL.signature;
+      recovery.value = WYCHEPROOF_BRAINPOOL.recovery;
     },
   },
-  { label: "one bit off", op: "verify", load: () => (brainpoolSignature.value = flipBit(brainpoolSignature.value)) },
+  { label: "secret 1", ops: SIGNING, load: () => (brainpoolSecret.value = "1") },
+  { label: "RFC 7027 key", ops: SIGNING, load: () => (brainpoolSecret.value = RFC_7027_SECRET) },
+  { label: "one bit off", ops: ["verify"], load: () => (brainpoolSignature.value = flipBit(brainpoolSignature.value)) },
 ];
 
 /** The brainpoolP256r1 chips on screen. */
-const brainpoolSamples = computed(() => BRAINPOOL_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
+const brainpoolSamples = computed(() => onScreen(BRAINPOOL_SAMPLES));
 
 /** brainpoolP384r1 samples: x = 0 has no point here, and P-384's compressed 2G passes check. */
-const BRAINPOOL_384_SAMPLES: readonly { label: string; op?: string; load: () => unknown }[] = [
+const BRAINPOOL_384_SAMPLES: readonly Sample[] = [
   { label: "G and 2G", load: () => ((brainpool384Point.value = BRAINPOOL_384_G), (brainpool384Other.value = BRAINPOOL_384_TWO_G), (brainpool384Scalar.value = "3")) },
   { label: "x of G", load: () => (brainpool384X.value = BRAINPOOL_384_G.slice(2)) },
   { label: "x = 0", load: () => ((brainpool384X.value = "0".repeat(96)), (brainpool384Point.value = `02${"0".repeat(96)}`)) },
@@ -774,16 +711,19 @@ const BRAINPOOL_384_SAMPLES: readonly { label: string; op?: string; load: () => 
       brainpool384Point.value = WYCHEPROOF_BRAINPOOL_384.publicKey;
       brainpool384Digest.value = WYCHEPROOF_BRAINPOOL_384.digest;
       brainpool384Signature.value = WYCHEPROOF_BRAINPOOL_384.signature;
+      recovery.value = WYCHEPROOF_BRAINPOOL_384.recovery;
     },
   },
-  { label: "one bit off", op: "verify", load: () => (brainpool384Signature.value = flipBit(brainpool384Signature.value)) },
+  { label: "secret 1", ops: SIGNING, load: () => (brainpool384Secret.value = "1") },
+  { label: "RFC 7027 key", ops: SIGNING, load: () => (brainpool384Secret.value = RFC_7027_SECRET_384) },
+  { label: "one bit off", ops: ["verify"], load: () => (brainpool384Signature.value = flipBit(brainpool384Signature.value)) },
 ];
 
 /** The brainpoolP384r1 chips on screen. */
-const brainpool384Samples = computed(() => BRAINPOOL_384_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
+const brainpool384Samples = computed(() => onScreen(BRAINPOOL_384_SAMPLES));
 
 /** brainpoolP512r1 samples: x = 0, 1 and 2 have no point here, and 3 is the first that does. */
-const BRAINPOOL_512_SAMPLES: readonly { label: string; op?: string; load: () => unknown }[] = [
+const BRAINPOOL_512_SAMPLES: readonly Sample[] = [
   { label: "G and 2G", load: () => ((brainpool512Point.value = BRAINPOOL_512_G), (brainpool512Other.value = BRAINPOOL_512_TWO_G), (brainpool512Scalar.value = "3")) },
   { label: "x of G", load: () => (brainpool512X.value = BRAINPOOL_512_G.slice(2)) },
   { label: "x = 0", load: () => ((brainpool512X.value = "0".repeat(128)), (brainpool512Point.value = `02${"0".repeat(128)}`)) },
@@ -794,13 +734,16 @@ const BRAINPOOL_512_SAMPLES: readonly { label: string; op?: string; load: () => 
       brainpool512Point.value = WYCHEPROOF_BRAINPOOL_512.publicKey;
       brainpool512Digest.value = WYCHEPROOF_BRAINPOOL_512.digest;
       brainpool512Signature.value = WYCHEPROOF_BRAINPOOL_512.signature;
+      recovery.value = WYCHEPROOF_BRAINPOOL_512.recovery;
     },
   },
-  { label: "one bit off", op: "verify", load: () => (brainpool512Signature.value = flipBit(brainpool512Signature.value)) },
+  { label: "secret 1", ops: SIGNING, load: () => (brainpool512Secret.value = "1") },
+  { label: "RFC 7027 key", ops: SIGNING, load: () => (brainpool512Secret.value = RFC_7027_SECRET_512) },
+  { label: "one bit off", ops: ["verify"], load: () => (brainpool512Signature.value = flipBit(brainpool512Signature.value)) },
 ];
 
 /** The brainpoolP512r1 chips on screen. */
-const brainpool512Samples = computed(() => BRAINPOOL_512_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
+const brainpool512Samples = computed(() => onScreen(BRAINPOOL_512_SAMPLES));
 
 /**
  * Loads one BIP340 vector into every BIP340 field, secret and aux_rand included.
@@ -816,15 +759,15 @@ function loadSchnorr(vector: typeof PI_VECTOR | typeof EMPTY_VECTOR) {
 }
 
 /** BIP340 samples: the pi vector, the empty one, and two chips that wait for their op. */
-const SCHNORR_SAMPLES: readonly { label: string; op?: string; load: () => unknown }[] = [
+const SCHNORR_SAMPLES: readonly Sample[] = [
   { label: "pi message", load: () => loadSchnorr(PI_VECTOR) },
   { label: "empty message", load: () => loadSchnorr(EMPTY_VECTOR) },
-  { label: "fresh random", op: "sign", load: () => (schnorrRandom.value = "") },
-  { label: "one bit off", op: "verify", load: () => (schnorrSignature.value = flipBit(schnorrSignature.value)) },
+  { label: "fresh random", ops: ["sign"], load: () => (schnorrRandom.value = "") },
+  { label: "one bit off", ops: ["verify"], load: () => (schnorrSignature.value = flipBit(schnorrSignature.value)) },
 ];
 
 /** The BIP340 chips on screen: fresh random on sign, one bit off where a signature can break. */
-const schnorrSamples = computed(() => SCHNORR_SAMPLES.filter((sample) => sample.op === undefined || sample.op === current.value.op));
+const schnorrSamples = computed(() => onScreen(SCHNORR_SAMPLES));
 
 /**
  * Loads one RFC 8032 test into every Ed25519 field.
@@ -934,7 +877,7 @@ function readQuery(query: Readonly<Record<string, unknown>>) {
       if (typeof query[name] === "string") field.value = query[name];
     }
   }
-  const sec1 = op?.tool !== undefined && Object.hasOwn(SEC1_FIELDS, op.tool) ? SEC1_FIELDS[op.tool as keyof typeof SEC1_FIELDS] : undefined;
+  const sec1 = op !== undefined && isSec1Tool(op.tool) ? SEC1_FIELDS[op.tool] : undefined;
   for (const [name, field] of Object.entries({ ...FIELDS, ...sec1 })) {
     if (typeof query[name] === "string") field.value = query[name];
   }
@@ -1080,7 +1023,7 @@ const shareLink = computed(() => {
             <dl v-else-if="secp || nist || wide || p521 || brainpool || brainpool384 || brainpool512" class="console-readout-rows">
               <div v-if="current.takes.includes('secret')">
                 <dt><label for="playground-secp-secret">secret</label></dt>
-                <dd><UInput id="playground-secp-secret" v-model="secpSecret" variant="none" placeholder="hex, 1 to n - 1" class="w-full" spellcheck="false" /></dd>
+                <dd><UInput id="playground-secp-secret" v-model="sec1Fields.secret.value" variant="none" placeholder="hex, 1 to n - 1" class="w-full" spellcheck="false" /></dd>
               </div>
               <div v-if="current.takes.includes('point')">
                 <dt><label for="playground-secp-point">point</label></dt>
@@ -1126,7 +1069,7 @@ const shareLink = computed(() => {
               </div>
               <div v-if="current.takes.includes('compressed')">
                 <dt><label for="playground-uncompressed">output</label></dt>
-                <dd><UCheckbox id="playground-uncompressed" v-model="uncompressed" label="uncompressed, 65 bytes" /></dd>
+                <dd><UCheckbox id="playground-uncompressed" v-model="uncompressed" :label="`uncompressed, ${sec1Digits + 1} bytes`" /></dd>
               </div>
             </dl>
             <dl v-else-if="schnorr" class="console-readout-rows">
