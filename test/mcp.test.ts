@@ -130,7 +130,8 @@ async function signsThrough(signer: SignedVector): Promise<void> {
   expect(
     await call({ operation: "recover", digest, signature: low, recovery, compressed: false }),
   ).toEqual({ operation: "recover", point: publicKey });
-  expect(await call({ operation: "sign", secret, digest })).not.toEqual(signedHere);
+  const byDefault = await call({ operation: "sign", secret, digest, compressed: false });
+  expect((byDefault as { signature: string }).signature).not.toBe(low);
   expect(await refused({ operation: "sign", secret, digest, hash: "md5" })).toContain(
     "Invalid arguments at /hash",
   );
