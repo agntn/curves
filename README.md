@@ -24,6 +24,7 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 - 🔢 **Counting and listing.** Every point of a small curve, or just the ones of one order.
 - 📏 **Point orders.** Baby step giant step over the Hasse interval, fields up to 2⁴⁸.
 - 🕵️ **Discrete logs.** The smallest k, one prime of the order at a time. A 40-bit order made of small primes? About 20 ms. Only a prime above 2³⁶ stops it. No k? You get `undefined`, not a guess.
+- ➗ **Modular arithmetic from the package root.** Reduce, invert and find roots with BigInt. A composite modulus gets a refusal where a root search could otherwise loop forever. That's better than waiting for a square that may never show up.
 - 🔑 **secp256k1 with SEC1 points.** Add, subtract, multiply, lift an x, convert between 33 and 65 bytes.
 - 🔍 **ECDSA signing, verification and recovery.** RFC 6979 picks the nonce, so a key and a digest always sign the same way. Low s and a recovery id come with it. The block 170 signature that paid Hal Finney 10 BTC? Checks out. Recovery hands back Satoshi's key.
 - ✍️ **BIP340 signatures.** Taproot and Nostr, signed and checked against 32-byte x-only keys. It lives in `@agntn/curves/bip340`. Fresh aux_rand by default, or yours. One BIP vector signs pi's hex digits with a key made of e's. Same bytes here.
@@ -114,7 +115,7 @@ liftX("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798").odd; /
 
 That's most of it, really. Generic curves take bigints and give `null` for the point at infinity. secp256k1 takes and gives hex, and so does `@agntn/curves/sr25519`. `@agntn/curves/ed25519` writes points as hex and takes scalars as bigints, since its bytes read little-endian. A point off the curve throws, never a silent wrong answer.
 
-More in [curves and points](https://curves.agntn.dev/math/curves), [orders and logs](https://curves.agntn.dev/math/groups), [secp256k1](https://curves.agntn.dev/math/secp256k1), [sr25519](https://curves.agntn.dev/math/sr25519), [ed25519](https://curves.agntn.dev/math/ed25519) and [Ed448](https://curves.agntn.dev/math/ed448).
+More in [curves and points](https://curves.agntn.dev/math/curves), [orders and logs](https://curves.agntn.dev/math/groups), [modular arithmetic](https://curves.agntn.dev/math/field), [secp256k1](https://curves.agntn.dev/math/secp256k1), [sr25519](https://curves.agntn.dev/math/sr25519), [ed25519](https://curves.agntn.dev/math/ed25519) and [Ed448](https://curves.agntn.dev/math/ed448).
 
 ## 🤖 Agents
 

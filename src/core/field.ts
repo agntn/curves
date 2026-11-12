@@ -31,10 +31,10 @@ export function power(base: bigint, exponent: bigint, p: bigint): bigint {
 
 /**
  * Invert a value mod p with the extended Euclidean algorithm.
- * @param value - Not a multiple of p
- * @param p - The modulus
+ * @param value - Coprime to p
+ * @param p - The modulus, 2 or more
  * @returns {bigint} The inverse
- * @throws {RangeError} When the value shares a factor with p, so p is no prime
+ * @throws {RangeError} When the value shares a factor with p, named in the message
  */
 export function invert(value: bigint, p: bigint): bigint {
   let [low, high] = [mod(value, p), p];
@@ -44,7 +44,8 @@ export function invert(value: bigint, p: bigint): bigint {
     [low, high] = [high - quotient * low, low];
     [lowFactor, highFactor] = [highFactor - quotient * lowFactor, lowFactor];
   }
-  if (low === 0n) throw new RangeError("No inverse exists mod p, so p is not prime");
+  if (low === 0n)
+    throw new RangeError(`No inverse exists mod ${p}: the value shares the factor ${high} with it`);
   return mod(lowFactor, p);
 }
 
@@ -90,7 +91,7 @@ function passesRound(n: bigint, witness: bigint): boolean {
  * @param bottom - An odd positive integer
  * @returns {number} 1, -1, or 0 when they share a factor
  */
-function jacobi(top: bigint, bottom: bigint): number {
+export function jacobi(top: bigint, bottom: bigint): number {
   let [a, n] = [mod(top, bottom), bottom];
   let result = 1;
   while (a !== 0n) {
