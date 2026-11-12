@@ -48,7 +48,7 @@ import {
   brainpoolP512r1Vectors,
 } from "./fixtures/brainpoolp512r1.ts";
 import { devAccounts, keyringPairs, scureVectors, subkeySeeds } from "./fixtures/sr25519.ts";
-import { secp256k1Vectors } from "./fixtures/vectors.ts";
+import { curveVectors, secp256k1Vectors } from "./fixtures/vectors.ts";
 
 const openConnections: Array<{ close(): Promise<void> }> = [];
 
@@ -256,6 +256,83 @@ describe("curves MCP server", () => {
       order: "1099513053442",
       scalar: "987654321987",
     });
+  });
+
+  it("finds a log between lo and hi, on a 256-bit curve too, and says which k it tried", async () => {
+    const client = await connectTestClient();
+    const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+      answer(await client.callTool({ name: "curves_compute", arguments: args }));
+    const log = {
+      ...paar,
+      operation: "log",
+      point: { x: "5", y: "1" },
+      other: { x: "16", y: "4" },
+    };
+
+    expect(await call({ ...log, lo: "14", hi: "0x28" })).toEqual({
+      operation: "log",
+      lo: "14",
+      hi: "40",
+      scalar: "32",
+    });
+    expect(await call({ ...log, lo: "-30", hi: "200", residue: "-1", modulus: "3" })).toEqual({
+      operation: "log",
+      lo: "-30",
+      hi: "200",
+      residue: "2",
+      modulus: "3",
+      scalar: "-25",
+    });
+    expect(await call({ ...log, lo: "14", hi: "31" })).toEqual({
+      operation: "log",
+      lo: "14",
+      hi: "31",
+      scalar: null,
+    });
+    const { far } = curveVectors.secp256k1;
+    const lo = 2n ** 200n;
+    expect(
+      await call({
+        operation: "log",
+        a: "0",
+        b: "7",
+        p: `0x${curveVectors.secp256k1.p.toString(16)}`,
+        point: { x: `${curveVectors.secp256k1.g.x}`, y: `${curveVectors.secp256k1.g.y}` },
+        other: { x: `${far.x}`, y: `${far.y}` },
+        lo: `${lo}`,
+        hi: `${lo + 2n ** 30n}`,
+      }),
+    ).toEqual({
+      operation: "log",
+      lo: `${lo}`,
+      hi: `${lo + 2n ** 30n}`,
+      scalar: `${far.scalar}`,
+    });
+  });
+
+  it("refuses half a log interval, a residue class on its own and more k than a call tries", async () => {
+    const client = await connectTestClient();
+    const refusal = async (args: Readonly<Record<string, unknown>>): Promise<string> =>
+      failure(await client.callTool({ name: "curves_compute", arguments: { ...paar, ...args } }));
+    const log = { operation: "log", point: { x: "5", y: "1" }, other: { x: "16", y: "4" } };
+
+    const together = "log takes lo and hi together, and residue and modulus only with them";
+    expect(await refusal({ ...log, lo: "0" })).toContain(together);
+    expect(await refusal({ ...log, hi: "18" })).toContain(together);
+    expect(await refusal({ ...log, residue: "1", modulus: "3" })).toContain(together);
+    expect(await refusal({ ...log, lo: "0", hi: "18", residue: "1" })).toContain(
+      "log takes residue and modulus together",
+    );
+    expect(await refusal({ ...log, lo: "0", hi: "18", residue: "1", modulus: "0" })).toContain(
+      "modulus must be 1 or more",
+    );
+    expect(await refusal({ ...log, lo: "19", hi: "18" })).toContain("lo must not pass hi");
+    expect(await refusal({ ...log, lo: "0", hi: "68719476736" })).toContain(
+      "The interval holds 68719476737 scalars to try, and a table of 262144 points covers 68719476736; narrow it or split it",
+    );
+    expect(await refusal({ operation: "order", point: log.point, lo: "0" })).toContain(
+      "order does not take lo",
+    );
   });
 
   it("refuses an argument the operation does not take and a point off the curve", async () => {

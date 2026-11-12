@@ -116,6 +116,8 @@ liftX("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798").odd; /
 
 That's most of it, really. Generic curves take bigints and give `null` for the point at infinity. secp256k1 takes and gives hex, and so does `@agntn/curves/sr25519`. `@agntn/curves/ed25519` writes points as hex and takes scalars as bigints, since its bytes read little-endian. A point off the curve throws, never a silent wrong answer.
 
+Know roughly where `k` lives? `discreteLogInInterval` searches just that stretch on a curve of any size, secp256k1 included.
+
 More in [curves and points](https://curves.agntn.dev/math/curves), [orders and logs](https://curves.agntn.dev/math/groups), [modular arithmetic](https://curves.agntn.dev/math/field), [secp256k1](https://curves.agntn.dev/math/secp256k1), [sr25519](https://curves.agntn.dev/math/sr25519), [ed25519](https://curves.agntn.dev/math/ed25519) and [Ed448](https://curves.agntn.dev/math/ed448).
 
 ## 🤖 Agents

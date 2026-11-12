@@ -14,3 +14,6 @@ export const MAX_ORDER_PRIME = 1n << 48n;
 
 /** Largest prime in the order of a log's base. The search takes one prime at a time. */
 export const MAX_LOG_ORDER = 1n << 36n;
+
+/** Most points a log inside an interval tabulates. The search covers that many scalars, squared. */
+export const MAX_INTERVAL_TABLE = 1 << 20;

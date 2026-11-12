@@ -27,6 +27,8 @@ import {
   samplePoints,
   type PointSample,
 } from "./core/group.ts";
+import { mod } from "./core/field.ts";
+import { discreteLogInInterval } from "./core/interval.ts";
 import * as bip340 from "./core/bip340.ts";
 import * as brainpoolP256r1 from "./core/brainpoolp256r1.ts";
 import * as brainpoolP384r1 from "./core/brainpoolp384r1.ts";
@@ -45,6 +47,7 @@ import {
   BRAINPOOLP384R1_OPERATIONS,
   BRAINPOOLP512R1_OPERATIONS,
   CURVE_INTEGER_PATTERN,
+  CURVE_LOG_TABLE,
   CURVE_OPERATIONS,
   DEFAULT_CURVE_POINTS_SHOWN,
   ED25519_OPERATIONS,
@@ -92,7 +95,15 @@ export type CurveDetails =
   | { operation: "order"; order: string }
   | { operation: "count"; count: string }
   | { operation: "points"; total: string; points: CurvePointText[]; truncated: boolean }
-  | { operation: "log"; order: string; scalar: string | null };
+  | { operation: "log"; order: string; scalar: string | null }
+  | {
+      operation: "log";
+      lo: string;
+      hi: string;
+      residue?: string;
+      modulus?: string;
+      scalar: string | null;
+    };
 
 /** What the secp256k1 tool computes, by operation. */
 export type Secp256k1Details =
@@ -208,7 +219,7 @@ const CURVE_ARGUMENTS: Readonly<Record<CurveOperation, readonly string[]>> = {
   order: ["point"],
   count: [],
   points: ["order", "limit"],
-  log: ["point", "other"],
+  log: ["point", "other", "lo", "hi", "residue", "modulus"],
 };
 
 /** Every optional argument of the curve tool, so the refusal covers each one a table names. */
@@ -361,10 +372,64 @@ function listCurvePoints(
 }
 
 /**
- * Find a discrete log and name the order it was searched in.
+ * Read the residue class a log stays in, when the caller names one.
+ * @param args - Tool arguments
+ * @returns {{ residue: bigint; modulus: bigint } | undefined} The class, undefined for every k
+ */
+function curveLogClass(
+  args: Readonly<Record<string, unknown>>,
+): { residue: bigint; modulus: bigint } | undefined {
+  const unset = [isUnset(args["residue"]), isUnset(args["modulus"])];
+  if (unset.every(Boolean)) return undefined;
+  if (unset.some(Boolean)) throw new TypeError("log takes residue and modulus together");
+  return {
+    residue: curveInteger(args["residue"], "residue"),
+    modulus: curveInteger(args["modulus"], "modulus"),
+  };
+}
+
+/**
+ * Find a discrete log among the k from lo to hi, and say which ones were tried.
+ * @param curve - A checked curve
+ * @param args - Tool arguments, lo or hi among them
+ * @param points - The base and the target, both on the curve
+ * @returns {CurveDetails} The k tried and the one that fits, or null when none does
+ */
+function findCurveLogBetween(
+  curve: Readonly<WeierstrassCurve>,
+  args: Readonly<Record<string, unknown>>,
+  points: Readonly<{ base: AffinePoint; target: AffinePoint }>,
+): CurveDetails {
+  if (isUnset(args["lo"]) || isUnset(args["hi"])) {
+    throw new TypeError("log takes lo and hi together, and residue and modulus only with them");
+  }
+  const lo = curveInteger(args["lo"], "lo");
+  const hi = curveInteger(args["hi"], "hi");
+  const kept = curveLogClass(args);
+  const scalar = discreteLogInInterval(curve, {
+    ...points,
+    lo,
+    hi,
+    ...kept,
+    tableLimit: CURVE_LOG_TABLE,
+  });
+  return {
+    operation: "log",
+    lo: lo.toString(),
+    hi: hi.toString(),
+    ...(kept && {
+      residue: mod(kept.residue, kept.modulus).toString(),
+      modulus: kept.modulus.toString(),
+    }),
+    scalar: scalar === undefined ? null : scalar.toString(),
+  };
+}
+
+/**
+ * Find a discrete log: below the order of the base, or between lo and hi when those come.
  * @param curve - A checked curve
  * @param args - Tool arguments
- * @returns {CurveDetails} The order of the base and k, or null when the target is no multiple
+ * @returns {CurveDetails} k or null, with the order of the base or the k tried
  */
 function findCurveLog(
   curve: Readonly<WeierstrassCurve>,
@@ -372,6 +437,9 @@ function findCurveLog(
 ): CurveDetails {
   const base = curvePointOn(curve, args, "log", "point");
   const target = curvePointOn(curve, args, "log", "other");
+  if (["lo", "hi", "residue", "modulus"].some((name) => !isUnset(args[name]))) {
+    return findCurveLogBetween(curve, args, { base, target });
+  }
   const { order, scalar } = findLog(curve, base, target);
   return {
     operation: "log",

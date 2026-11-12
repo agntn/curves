@@ -26,6 +26,10 @@ type Field =
   | "scalar"
   | "order"
   | "limit"
+  | "lo"
+  | "hi"
+  | "residue"
+  | "modulus"
   | "x"
   | "compressed"
   | "source"
@@ -66,7 +70,7 @@ export const OPERATIONS: readonly Operation[] = [
   { key: "compute:order", tool: "curves_compute", op: "order", takes: ["point"], about: "The smallest n with n times the point at infinity." },
   { key: "compute:count", tool: "curves_compute", op: "count", takes: [], about: "How many points the curve has, infinity included." },
   { key: "compute:points", tool: "curves_compute", op: "points", takes: ["order", "limit"], about: "Infinity, then the points by x then y. With an order, only the points of that order." },
-  { key: "compute:log", tool: "curves_compute", op: "log", takes: ["point", "other"], about: "The smallest k with k times the base equal to the target." },
+  { key: "compute:log", tool: "curves_compute", op: "log", takes: ["point", "other", "lo", "hi", "residue", "modulus"], about: "The smallest k with k times the base equal to the target. Give it lo and hi, and field size doesn't matter." },
   { key: "secp256k1:add", tool: "curves_secp256k1_compute", op: "add", takes: ["point", "other", "compressed"], about: "The sum of two secp256k1 points." },
   { key: "secp256k1:subtract", tool: "curves_secp256k1_compute", op: "subtract", takes: ["point", "other", "compressed"], about: "The offset between two known points." },
   { key: "secp256k1:negate", tool: "curves_secp256k1_compute", op: "negate", takes: ["point", "compressed"], about: "Same x, the other y. Only the prefix changes." },

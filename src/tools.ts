@@ -18,6 +18,7 @@ import {
   BRAINPOOLP512R1_OPERATIONS,
   CURVE_HASHES,
   CURVE_INTEGER_PATTERN,
+  CURVE_LOG_TABLE,
   CURVE_OPERATIONS,
   DEFAULT_CURVE_POINTS_SHOWN,
   DIGEST_PATTERN,
@@ -281,7 +282,7 @@ export const computeSchema = Type.Object(
     operation: Type.String({
       enum: [...CURVE_OPERATIONS],
       description:
-        "add takes point and other, double, negate and order take point, multiply takes point and scalar, lift takes x and lists the points above it, check takes point and answers whether it lies on the curve, count counts the points, points lists them with infinity first, log takes point as the base and other as the target",
+        "add takes point and other, double, negate and order take point, multiply takes point and scalar, lift takes x and lists the points above it, check takes point and answers whether it lies on the curve, count counts the points, points lists them with infinity first, log takes point as the base and other as the target, plus lo and hi to search between them",
     }),
     a: curveInteger("a in y^2 = x^3 + ax + b, reduced mod p, so -3 works"),
     b: curveInteger("b in y^2 = x^3 + ax + b, reduced mod p"),
@@ -306,6 +307,14 @@ export const computeSchema = Type.Object(
         description: `points only: most points to list, from 1 to ${MAX_CURVE_POINTS_SHOWN}. Default: ${DEFAULT_CURVE_POINTS_SHOWN}`,
       }),
     ),
+    lo: optionalCurveInteger(
+      "log only, with hi: the smallest k to try, decimal or hex with 0x. Negative works",
+    ),
+    hi: optionalCurveInteger("log only, with lo: the largest k to try, itself included"),
+    residue: optionalCurveInteger(
+      "log between lo and hi only, with modulus: try just the k with this remainder",
+    ),
+    modulus: optionalCurveInteger("log between lo and hi only, with residue: 1 or more"),
   },
   { additionalProperties: false },
 );
@@ -313,7 +322,7 @@ export const computeSchema = Type.Object(
 export const computeTool = defineTool({
   name: "curves_compute",
   title: "Compute on a Curve",
-  description: `Do arithmetic on a short Weierstrass curve y^2 = x^3 + ax + b over a prime field the caller gives: add, double, negate or multiply points, lift an x coordinate to the points above it, check a point, find the order of a point, count the points, list them, or find a discrete log. Integers go in as decimal or 0x hex strings and come out as decimal strings; the point at infinity comes out as "infinity". count and points take p up to ${MAX_COUNTED_PRIME}, or ${MAX_FILTERED_PRIME} when points filters by order. order and log take p up to ${MAX_ORDER_PRIME}, and log a base whose order has no prime factor above ${MAX_LOG_ORDER}. Public math only; secp256k1 with SEC1 points has curves_secp256k1_compute.`,
+  description: `Do arithmetic on a short Weierstrass curve y^2 = x^3 + ax + b over a prime field the caller gives: add, double, negate or multiply points, lift an x coordinate to the points above it, check a point, find the order of a point, count the points, list them, or find a discrete log. Integers go in as decimal or 0x hex strings and come out as decimal strings; the point at infinity comes out as "infinity". count and points take p up to ${MAX_COUNTED_PRIME}, or ${MAX_FILTERED_PRIME} when points filters by order. order and log take p up to ${MAX_ORDER_PRIME}, and log a base whose order has no prime factor above ${MAX_LOG_ORDER}. Between lo and hi, log takes any p and tries up to ${CURVE_LOG_TABLE ** 2} k, counted after residue and modulus thin them out. Public math only; secp256k1 with SEC1 points has curves_secp256k1_compute.`,
   snippet:
     "Use for toy curves over small prime fields, points of a given order and discrete logs, smooth orders included, and for lifting an x on a curve of any size.",
   guidelines: [
@@ -322,6 +331,7 @@ export const computeTool = defineTool({
     "lift takes x and lists the points with that x, smaller y first, none when x has no point; pick the y a compressed point's parity asks for",
     "count gives the group order with infinity; points lists infinity, then by x then y, and its total matches count; with order it lists just that order, infinity only for 1",
     "log takes point as the base and other as the target, and answers scalar null when there is no k",
+    "log with lo and hi answers the smallest k between them and skips the order, so it works on a 256-bit curve; add residue and modulus when k mod something is known",
   ],
   effect: "read",
   cli: {
