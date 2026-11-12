@@ -9,6 +9,8 @@ import {
   multiplyGenerator,
   multiplyPoint,
   negatePoint,
+  recoverPublicKey,
+  sign,
   p256,
   subtractPoints,
   verify,
@@ -18,9 +20,11 @@ import {
   p256GeneratorMultiples,
   p256PointMultiples,
   p256Rfc6979,
+  p256Rfc6979Nonces,
   p256Vectors,
 } from "./fixtures/p256.ts";
 import wycheproof from "./fixtures/wycheproof-p256.json" with { type: "json" };
+import { describeSigning } from "./sec1-signing.ts";
 import { medians } from "./timing.ts";
 
 const {
@@ -132,7 +136,7 @@ describe("P-256 point math", () => {
     }
   });
 
-  const tables = sec1Curve(p256, { name: "P-256", formulas: minusThreeAFormulas });
+  const tables = sec1Curve(p256, { name: "P-256", formulas: minusThreeAFormulas, hash: "sha256" });
   /* One case per row: 64 rows in one test left a busy runner little of the 5 s limit. */
   it.each(Array.from({ length: 64 }, (_, row) => row))(
     "reads row %i of the comb and of the verification table right",
@@ -262,4 +266,16 @@ describe("P-256 ECDSA", () => {
       Reflect.apply(verify, undefined, [signature, digest]);
     }).toThrow("Call it as verify(signature, { digest, publicKey })");
   });
+});
+
+describeSigning({
+  name: "P-256",
+  order: p256.n,
+  fallback: "sha256",
+  secret: p256Rfc6979.secret,
+  publicKey: p256Rfc6979.publicKey,
+  vectors: p256Rfc6979Nonces,
+  sign,
+  verify,
+  recoverPublicKey,
 });

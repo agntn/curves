@@ -10,6 +10,8 @@ import {
   multiplyGenerator,
   multiplyPoint,
   negatePoint,
+  recoverPublicKey,
+  sign,
   p384,
   subtractPoints,
   verify,
@@ -19,9 +21,11 @@ import {
   p384GeneratorMultiples,
   p384PointMultiples,
   p384Rfc6979,
+  p384Rfc6979Nonces,
   p384Vectors,
 } from "./fixtures/p384.ts";
 import wycheproof from "./fixtures/wycheproof-p384.json" with { type: "json" };
+import { describeSigning } from "./sec1-signing.ts";
 import { medians } from "./timing.ts";
 
 const {
@@ -108,7 +112,7 @@ describe("P-384 domain parameters", () => {
   });
 
   it("take 96 digits, and an n a byte shorter than p is refused", () => {
-    const options = { name: "P-384", formulas: minusThreeAFormulas };
+    const options = { name: "P-384", formulas: minusThreeAFormulas, hash: "sha384" } as const;
     expect(() => sec1Curve({ ...p384, n: p384.n >> 8n }, options)).toThrow(
       "needs n as long as p in bits",
     );
@@ -159,7 +163,11 @@ describe("P-384 point math", () => {
     "reads every entry of the comb and of the verification table right",
     { timeout: 30_000 },
     () => {
-      const tables = sec1Curve(p384, { name: "P-384", formulas: minusThreeAFormulas });
+      const tables = sec1Curve(p384, {
+        name: "P-384",
+        formulas: minusThreeAFormulas,
+        hash: "sha256",
+      });
       for (let row = 0n; row < 96n; row++) {
         const base = multiplyPoint(g, 16n ** row, uncompressed);
         let multiple = base;
@@ -288,4 +296,16 @@ describe("P-384 ECDSA", () => {
       Reflect.apply(verify, undefined, [signature, digest]);
     }).toThrow("Call it as verify(signature, { digest, publicKey })");
   });
+});
+
+describeSigning({
+  name: "P-384",
+  order: p384.n,
+  fallback: "sha384",
+  secret: p384Rfc6979.secret,
+  publicKey: p384Rfc6979.publicKey,
+  vectors: p384Rfc6979Nonces,
+  sign,
+  verify,
+  recoverPublicKey,
 });

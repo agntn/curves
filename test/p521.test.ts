@@ -10,6 +10,8 @@ import {
   multiplyGenerator,
   multiplyPoint,
   negatePoint,
+  recoverPublicKey,
+  sign,
   p521,
   subtractPoints,
   verify,
@@ -19,9 +21,11 @@ import {
   p521GeneratorMultiples,
   p521PointMultiples,
   p521Rfc6979,
+  p521Rfc6979Nonces,
   p521Vectors,
 } from "./fixtures/p521.ts";
 import wycheproof from "./fixtures/wycheproof-p521.json" with { type: "json" };
+import { describeSigning } from "./sec1-signing.ts";
 import { medians } from "./timing.ts";
 
 const {
@@ -115,7 +119,7 @@ describe("P-521 domain parameters", () => {
   });
 
   it("take 132 digits and 521 bits of a digest, and a curve whose n is shorter than p is refused", () => {
-    const options = { name: "P-521", formulas: minusThreeAFormulas };
+    const options = { name: "P-521", formulas: minusThreeAFormulas, hash: "sha512" } as const;
     const refusal = "needs n as long as p in bits";
     const taken = sec1Curve(p521, options);
     expect(taken.digits).toBe(132);
@@ -172,7 +176,11 @@ describe("P-521 point math", () => {
     "reads every entry of the comb and of the verification table right",
     { timeout: 60_000 },
     () => {
-      const tables = sec1Curve(p521, { name: "P-521", formulas: minusThreeAFormulas });
+      const tables = sec1Curve(p521, {
+        name: "P-521",
+        formulas: minusThreeAFormulas,
+        hash: "sha256",
+      });
       for (let row = 0n; row < 131n; row++) {
         const base = multiplyPoint(g, 16n ** row, uncompressed);
         let multiple = base;
@@ -311,4 +319,16 @@ describe("P-521 ECDSA", () => {
       Reflect.apply(verify, undefined, [signature, digest]);
     }).toThrow("Call it as verify(signature, { digest, publicKey })");
   });
+});
+
+describeSigning({
+  name: "P-521",
+  order: p521.n,
+  fallback: "sha512",
+  secret: p521Rfc6979.secret,
+  publicKey: p521Rfc6979.publicKey,
+  vectors: p521Rfc6979Nonces,
+  sign,
+  verify,
+  recoverPublicKey,
 });

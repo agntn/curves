@@ -21,6 +21,7 @@ export {
 } from "./core/secp256k1.ts";
 export type {
   LiftedPoints,
+  NonceHash,
   PointEncodingOptions,
   RecoverOptions,
   Scalar,

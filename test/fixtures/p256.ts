@@ -147,3 +147,81 @@ export const p256Rfc6979 = {
     },
   ],
 } as const;
+
+/**
+ * Every signature RFC 6979 appendix A.2.5 prints for the key of `p256Rfc6979`, k included: SHA-1
+ * and the four SHA-2 hashes, over "sample" and "test", with the HMAC on the same hash. s is as
+ * printed, so a high one comes back from `sign` as n - s.
+ */
+export const p256Rfc6979Nonces = [
+  {
+    hash: "sha1",
+    message: "sample",
+    k: "882905f1227fd620fbf2abf21244f0ba83d0dc3a9103dbbee43a1fb858109db4",
+    signature:
+      "61340c88c3aaebeb4f6d667f672ca9759a6ccaa9fa8811313039ee4a35471d326d7f147dac089441bb2e2fe8f7a3fa264b9c475098fdcf6e00d7c996e1b8b7eb",
+  },
+  {
+    hash: "sha224",
+    message: "sample",
+    k: "103f90ee9dc52e5e7fb5132b7033c63066d194321491862059967c715985d473",
+    signature:
+      "53b2fff5d1752b2c689df257c04c40a587fababb3f6fc2702f1343af7ca9aa3fb9afb64fdc03dc1a131c7d2386d11e349f070aa432a4acc918bea988bf75c74c",
+  },
+  {
+    hash: "sha256",
+    message: "sample",
+    k: "a6e3c57dd01abe90086538398355dd4c3b17aa873382b0f24d6129493d8aad60",
+    signature:
+      "efd48b2aacb6a8fd1140dd9cd45e81d69d2c877b56aaf991c34d0ea84eaf3716f7cb1c942d657c41d436c7a1b6e29f65f3e900dbb9aff4064dc4ab2f843acda8",
+  },
+  {
+    hash: "sha384",
+    message: "sample",
+    k: "09f634b188cefd98e7ec88b1aa9852d734d0bc272f7d2a47decc6ebeb375aad4",
+    signature:
+      "0eafea039b20e9b42309fb1d89e213057cbf973dc0cfc8f129edddc800ef77194861f0491e6998b9455193e34e7b0d284ddd7149a74b95b9261f13abde940954",
+  },
+  {
+    hash: "sha512",
+    message: "sample",
+    k: "5fa81c63109badb88c1f367b47da606da28cad69aa22c4fe6ad7df73a7173aa5",
+    signature:
+      "8496a60b5e9b47c825488827e0495b0e3fa109ec4568fd3f8d1097678eb97f002362ab1adbe2b8adf9cb9edab740ea6049c028114f2460f96554f61fae3302fe",
+  },
+  {
+    hash: "sha1",
+    message: "test",
+    k: "8c9520267c55d6b980df741e56b4adee114d84fbfa2e62137954164028632a2e",
+    signature:
+      "0cbcc86fd6abd1d99e703e1ec50069ee5c0b4ba4b9ac60e409e8ec5910d81a8901b9d7b73dfaa60d5651ec4591a0136f87653e0fd780c3b1bc872ffdeae479b1",
+  },
+  {
+    hash: "sha224",
+    message: "test",
+    k: "669f4426f2688b8be0db3a6bd1989bdaefff84b649eeb84f3dd26080f667faa7",
+    signature:
+      "c37edb6f0ae79d47c3c27e962fa269bb4f441770357e114ee511f662ec34a692c820053a05791e521fcaad6042d40aea1d6b1a540138558f47d0719800e18f2d",
+  },
+  {
+    hash: "sha256",
+    message: "test",
+    k: "d16b6ae827f17175e040871a1c7ec3500192c4c92677336ec2537acaee0008e0",
+    signature:
+      "f1abb023518351cd71d881567b1ea663ed3efcf6c5132b354f28d3b0b7d38367019f4113742a2b14bd25926b49c649155f267e60d3814b4c0cc84250e46f0083",
+  },
+  {
+    hash: "sha384",
+    message: "test",
+    k: "16aeffa357260b04b1dd199693960740066c1a8f3e8edd79070aa914d361b3b8",
+    signature:
+      "83910e8b48bb0c74244ebdf7f07a1c5413d61472bd941ef3920e623fbccebeb68ddbec54cf8cd5874883841d712142a56a8d0f218f5003cb0296b6b509619f2c",
+  },
+  {
+    hash: "sha512",
+    message: "test",
+    k: "6915d11632aca3c40d5d51c08daf9c555933819548784480e93499000d9f0b7f",
+    signature:
+      "461d93f31b6540894788fd206c07cfa0cc35f46fa3c91816fff1040ad1581a0439af9f15de0db8d97e72719c74820d304ce5226e32dedae67519e840d1194e55",
+  },
+] as const;

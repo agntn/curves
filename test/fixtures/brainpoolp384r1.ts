@@ -150,3 +150,73 @@ export const brainpoolP384r1Signature = {
     "0e8e114a1c351405560bf8d47b166bfe957087a8003b353433b6144f7ee7d6f79c8dd14ef229fa7a2f2782bf33708b91" +
     "83aa7ba485dc060df9922f9ccc5da29adb75d44671d18bad0636d2e09c5e2f95e892a79b9fd3b37e1f798b157b567a24",
 } as const;
+
+/**
+ * RFC 6979 signatures with the first key of `brainpoolP384r1Rfc7027` (RFC 7027 appendix A.2),
+ * over "sample" and "test" with SHA-1 and the four SHA-2 hashes. RFC 6979 prints none for
+ * Brainpool, so OpenSSL 3.6.5 signed them: `openssl pkeyutl -sign -pkeyopt digest:<hash>
+ * -pkeyopt nonce-type:1`, the setting that gave every A.2.5 vector of P-256 byte for byte. s is
+ * as OpenSSL wrote it, so a high one comes back from `sign` as n - s.
+ */
+export const brainpoolP384r1Rfc6979 = [
+  {
+    hash: "sha1",
+    message: "sample",
+    signature:
+      "76d4b46ab9637ac68762622bf2fe99dc522384f097adccdb364fe3ab70bbe1618c06ce9a4eb02df82c14f9706f7d3b9e0f41d707641206e2010e0c26c598082ad0038e7d003d31f1d05d8b675cb410d651a8a420718e4ba9c6c7d834076c8659",
+  },
+  {
+    hash: "sha224",
+    message: "sample",
+    signature:
+      "52d133b08cdfc6edcd6d283efc2f178f88276ba69271c0a5fc1154d7e6e3d9dfa8af8133196cde8432eb9900a9c3894e059941eead17b13f2aa122a2d1a9ae0b0eb61e59d52cb75bf1f019776e68b6bccdf16ad9e4e265670bf915ec31578e8d",
+  },
+  {
+    hash: "sha256",
+    message: "sample",
+    signature:
+      "5637d4eb3825df7c7eec18f4a86ad6d147679b09517752b84ae78596fb3307018776efba68443b742898dabcdee12a466034a6858ef0544a0a34cb40a1975fe95d56f7e2ca57eb0913cbaaf3c37892b0728bb00fca7aa4ed44e91a546017e435",
+  },
+  {
+    hash: "sha384",
+    message: "sample",
+    signature:
+      "2a0b927997ff034d1d5081be0f3f8c6eecac3dc9bb194774e69d5363cd924741e1802c3c0caea91ec144c869c993cfd622bc8dbdc26500cc666a7128a19aae17e79ec1853d8703dc0b6e703052e39cd4f3f3819bfef8094335ede131acfe3071",
+  },
+  {
+    hash: "sha512",
+    message: "sample",
+    signature:
+      "3f276c85d85a13897275cbe25d0b161307e07bd1127f2726d3ff49c8e68d15010cf1d33b69fe544d258fa5131c9efcc04a52235bc76f775e00ebe9d0f0a095250310edb6850c67d47470c5d9bcebcaed6bf03c9df08f31c6bd80c5cfb833ac63",
+  },
+  {
+    hash: "sha1",
+    message: "test",
+    signature:
+      "6d989fa3893eb3368f1410b3aebae5d5d78f7fea10e3966009be8d37949122e40cae747cba5a4009c79c2cef3bed5f9323cb7be971d7c23f5ef1379e30b667a4302883e2c4de428ef61b0070eb43e41b0e21127c697b04a07dfbdfd40adda7f8",
+  },
+  {
+    hash: "sha224",
+    message: "test",
+    signature:
+      "370fea998f4ededcfd3c621183fd444b886c8ca622e783213330939c08221cb3776ee61c06c742a5c6499914b9fb1da20b064517bd74b341218d93dc3b9ae12bafc7ee829f9936a6f6c834f09be538cc6889b764236bb1c6d3fd2b2efabc1c85",
+  },
+  {
+    hash: "sha256",
+    message: "test",
+    signature:
+      "520fe24cc44d21283de18dd3a1b1834e8a2a31fa5d7ebce114999546437f297b30abd2d69a351d15c5c542ddae13bf4a412cd4cb73605dd757ac6ab5b3f8d33341ac02c8205e0436c80538b19f1b91b51b846191b108f5ec6d6aa1265e6e3851",
+  },
+  {
+    hash: "sha384",
+    message: "test",
+    signature:
+      "4afa8e2474b26961d01205b98ce55f98b205f431f0ca3c7a6a650b189b7a1646516b655cd111077aac3bdbdd95b9a57b2b8686d96974fedc2f6646faf731519028a816f4a865cf241208b213190b04cc70ad06509a627c4d67945c2cfc16a7f3",
+  },
+  {
+    hash: "sha512",
+    message: "test",
+    signature:
+      "85b5414c00f750f30be8979cdf49bd26838c16ea552e64903e63b9668d8eb7ed8aa91f5ae201b2355cb6d8130029096680172206db909c3f15629e4871a03a6da2401ce3e6ec0314d3439689bdb921c15ab681a10c42d9b91f7bbef26530ec32",
+  },
+] as const;

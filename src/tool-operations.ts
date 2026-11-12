@@ -54,6 +54,7 @@ import {
   MAX_CONTEXT_LENGTH,
   MAX_MESSAGE_LENGTH,
   MESSAGE_ENCODINGS,
+  NONCE_HASHES,
   P256_OPERATIONS,
   P384_OPERATIONS,
   P521_OPERATIONS,
@@ -101,12 +102,8 @@ export type Secp256k1Details =
   | { operation: "sign"; signature: string; recovery: number; publicKey: string }
   | { operation: "verify"; valid: boolean };
 
-/** What the P-256 tool computes, by operation. */
-export type P256Details =
-  | { operation: Exclude<P256Operation, "lift" | "check" | "verify">; point: string }
-  | { operation: "lift"; even: string; odd: string }
-  | { operation: "check"; onCurve: boolean }
-  | { operation: "verify"; valid: boolean };
+/** What the P-256 tool computes: the same answers as secp256k1, signatures included. */
+export type P256Details = Secp256k1Details;
 
 /** What the P-384 tool computes: the same answers as P-256, with longer hex. */
 export type P384Details = P256Details;
@@ -452,32 +449,27 @@ const SECP256K1_ARGUMENTS: Readonly<Record<Secp256k1Operation, readonly string[]
   multiply: ["point", "scalar", "compressed"],
   lift: ["x", "compressed"],
   check: ["point"],
-  sign: ["secret", "digest", "compressed"],
+  sign: ["secret", "digest", "hash", "compressed"],
   verify: ["point", "digest", "signature", "lowS"],
   recover: ["digest", "signature", "recovery", "compressed"],
 };
 
-/** P-256 takes what secp256k1 takes for each operation the two share. */
-const P256_ARGUMENTS: Readonly<Record<P256Operation, readonly string[]>> = {
-  add: SECP256K1_ARGUMENTS.add,
-  subtract: SECP256K1_ARGUMENTS.subtract,
-  negate: SECP256K1_ARGUMENTS.negate,
-  multiply: SECP256K1_ARGUMENTS.multiply,
-  lift: SECP256K1_ARGUMENTS.lift,
-  check: SECP256K1_ARGUMENTS.check,
-  verify: SECP256K1_ARGUMENTS.verify,
-};
+/** P-256 and the other SEC 1 curves take what secp256k1 takes, operation by operation. */
+const P256_ARGUMENTS: Readonly<Record<P256Operation, readonly string[]>> = SECP256K1_ARGUMENTS;
 
-/** What the point and verify operations call, the same for every SEC 1 curve module. */
+/** What the point and ECDSA operations call, the same for every SEC 1 curve module. */
 interface Sec1Module {
   readonly INVALID_POINT: string;
   readonly addPoints: typeof secp256k1.addPoints;
   readonly subtractPoints: typeof secp256k1.subtractPoints;
   readonly negatePoint: typeof secp256k1.negatePoint;
   readonly multiplyPoint: typeof secp256k1.multiplyPoint;
+  readonly multiplyGenerator: typeof secp256k1.multiplyGenerator;
   readonly liftX: typeof secp256k1.liftX;
   readonly isOnCurve: typeof secp256k1.isOnCurve;
+  readonly sign: typeof secp256k1.sign;
   readonly verify: typeof secp256k1.verify;
+  readonly recoverPublicKey: typeof secp256k1.recoverPublicKey;
 }
 
 /** A SEC 1 curve tool's arguments, read for one operation. */
@@ -509,7 +501,16 @@ function recoveryId(value: unknown): number {
 }
 
 /**
- * The point and verify operations of one curve, with refusals that name the bad argument.
+ * Read the hash that made the digest, the curve's own when unset.
+ * @param value - Raw argument
+ * @returns {object} The hash for sign's options, or nothing to leave the default
+ */
+function nonceHash(value: unknown): { readonly hash?: (typeof NONCE_HASHES)[number] } {
+  return isUnset(value) ? {} : { hash: oneOf(value, "hash", NONCE_HASHES) };
+}
+
+/**
+ * The point and ECDSA operations of one curve, with refusals that name the bad argument.
  * @param curve - The curve's module
  * @param name - What the refusals call the curve
  * @returns {Record<P256Operation, (input: Sec1Input) => P256Details>} How each operation runs
@@ -564,6 +565,13 @@ function sec1Computations(
     }),
     lift: ({ text, encoding }) => ({ operation: "lift", ...curve.liftX(text("x"), encoding) }),
     check: ({ text }) => ({ operation: "check", onCurve: curve.isOnCurve(text("point")) }),
+    sign: ({ args, text, encoding }) => {
+      const secret = text("secret");
+      const options = { digest: text("digest"), ...nonceHash(args["hash"]) };
+      const { signature, recovery } = curve.sign(secret, options);
+      const publicKey = curve.multiplyGenerator(secret, encoding);
+      return { operation: "sign", signature, recovery, publicKey };
+    },
     verify: (input) => ({
       operation: "verify",
       valid: naming(input, ["point"], () =>
@@ -574,29 +582,19 @@ function sec1Computations(
         }),
       ),
     }),
+    recover: ({ args, text, encoding }) => ({
+      operation: "recover",
+      point: curve.recoverPublicKey(text("signature"), {
+        digest: text("digest"),
+        recovery: recoveryId(args["recovery"]),
+        ...encoding,
+      }),
+    }),
   };
 }
 
 /** How each secp256k1 operation turns the arguments into its result. */
-const SECP256K1_COMPUTATIONS: Readonly<
-  Record<Secp256k1Operation, (input: Sec1Input) => Secp256k1Details>
-> = {
-  ...sec1Computations(secp256k1, "secp256k1"),
-  sign: ({ text, encoding }) => {
-    const secret = text("secret");
-    const { signature, recovery } = secp256k1.sign(secret, { digest: text("digest") });
-    const publicKey = secp256k1.multiplyGenerator(secret, encoding);
-    return { operation: "sign", signature, recovery, publicKey };
-  },
-  recover: ({ args, text, encoding }) => ({
-    operation: "recover",
-    point: secp256k1.recoverPublicKey(text("signature"), {
-      digest: text("digest"),
-      recovery: recoveryId(args["recovery"]),
-      ...encoding,
-    }),
-  }),
-};
+const SECP256K1_COMPUTATIONS = sec1Computations(secp256k1, "secp256k1");
 
 /** How each P-256 operation turns the arguments into its result. */
 const P256_COMPUTATIONS = sec1Computations(p256, "P-256");
@@ -662,9 +660,9 @@ export function computeSecp256k1(
 }
 
 /**
- * Do math on public P-256 points, or verify an ECDSA signature over a digest.
+ * Do math on public P-256 points, or sign, verify and recover ECDSA over a digest.
  * @param args - Tool arguments, the operation and the ones it takes
- * @returns {ToolResult<P256Details>} A point, the lifted pair or the verdict
+ * @returns {ToolResult<P256Details>} A point, the lifted pair, a signature or the verdict
  */
 export function computeP256(args: Readonly<Record<string, unknown>>): ToolResult<P256Details> {
   return computeSec1(args, {
@@ -675,9 +673,9 @@ export function computeP256(args: Readonly<Record<string, unknown>>): ToolResult
 }
 
 /**
- * Do math on public P-384 points, or verify an ECDSA signature over a digest.
+ * Do math on public P-384 points, or sign, verify and recover ECDSA over a digest.
  * @param args - Tool arguments, the operation and the ones it takes
- * @returns {ToolResult<P384Details>} A point, the lifted pair or the verdict
+ * @returns {ToolResult<P384Details>} A point, the lifted pair, a signature or the verdict
  */
 export function computeP384(args: Readonly<Record<string, unknown>>): ToolResult<P384Details> {
   return computeSec1(args, {
@@ -688,9 +686,9 @@ export function computeP384(args: Readonly<Record<string, unknown>>): ToolResult
 }
 
 /**
- * Do math on public P-521 points, or verify an ECDSA signature over a digest.
+ * Do math on public P-521 points, or sign, verify and recover ECDSA over a digest.
  * @param args - Tool arguments, the operation and the ones it takes
- * @returns {ToolResult<P521Details>} A point, the lifted pair or the verdict
+ * @returns {ToolResult<P521Details>} A point, the lifted pair, a signature or the verdict
  */
 export function computeP521(args: Readonly<Record<string, unknown>>): ToolResult<P521Details> {
   return computeSec1(args, {
@@ -701,9 +699,9 @@ export function computeP521(args: Readonly<Record<string, unknown>>): ToolResult
 }
 
 /**
- * Do math on public brainpoolP256r1 points, or verify an ECDSA signature over a digest.
+ * Do math on public brainpoolP256r1 points, or sign, verify and recover ECDSA over a digest.
  * @param args - Tool arguments, the operation and the ones it takes
- * @returns {ToolResult<BrainpoolP256r1Details>} A point, the lifted pair or the verdict
+ * @returns {ToolResult<BrainpoolP256r1Details>} A point, a pair, a signature or a verdict
  */
 export function computeBrainpoolP256r1(
   args: Readonly<Record<string, unknown>>,
@@ -716,9 +714,9 @@ export function computeBrainpoolP256r1(
 }
 
 /**
- * Do math on public brainpoolP384r1 points, or verify an ECDSA signature over a digest.
+ * Do math on public brainpoolP384r1 points, or sign, verify and recover ECDSA over a digest.
  * @param args - Tool arguments, the operation and the ones it takes
- * @returns {ToolResult<BrainpoolP384r1Details>} A point, the lifted pair or the verdict
+ * @returns {ToolResult<BrainpoolP384r1Details>} A point, a pair, a signature or a verdict
  */
 export function computeBrainpoolP384r1(
   args: Readonly<Record<string, unknown>>,
@@ -731,9 +729,9 @@ export function computeBrainpoolP384r1(
 }
 
 /**
- * Do math on public brainpoolP512r1 points, or verify an ECDSA signature over a digest.
+ * Do math on public brainpoolP512r1 points, or sign, verify and recover ECDSA over a digest.
  * @param args - Tool arguments, the operation and the ones it takes
- * @returns {ToolResult<BrainpoolP512r1Details>} A point, the lifted pair or the verdict
+ * @returns {ToolResult<BrainpoolP512r1Details>} A point, a pair, a signature or a verdict
  */
 export function computeBrainpoolP512r1(
   args: Readonly<Record<string, unknown>>,

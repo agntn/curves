@@ -424,7 +424,8 @@ function nobleKey(index: number): string {
 
 /* The first k RFC 6979 draws for a key and SHA-256 of a message, on a group of the given order. */
 function firstNonce(order: bigint, secret: bigint, message: string): bigint {
-  return nonces(order, { secret, digest: sha256(Buffer.from(message)) }).next().value;
+  return nonces(order, { secret, digest: sha256(Buffer.from(message)), hash: "sha256" }).next()
+    .value;
 }
 
 describe("secp256k1 ECDSA signing", () => {

@@ -17,7 +17,10 @@ import { readHex, requireOptions } from "./arguments.ts";
 import type { AffinePoint } from "./arithmetic.ts";
 import { digitCount, digitsOf } from "./digits.ts";
 import { invert, mod, power } from "./field.ts";
+import { NONCE_HASHES, type NonceHash } from "./nonce-hashes.ts";
 import { nonces } from "./rfc6979.ts";
+
+export type { NonceHash } from "./nonce-hashes.ts";
 
 /** The domain parameters: the curve, its generator and the order of the generator. */
 export interface Sec1Domain {
@@ -48,11 +51,13 @@ export interface LiftedPoints {
 export interface SignOptions {
   /** The message digest as hex, 1 to 64 bytes, read as `verify` reads it. */
   readonly digest: string;
+  /** The hash that made the digest, which keys the RFC 6979 HMAC. Default: the curve's own. */
+  readonly hash?: NonceHash;
 }
 
 /** An ECDSA signature and the recovery id that brings its key back. */
 export interface Signature {
-  /** 128 hex digits, r then s, with s at most n / 2. */
+  /** r then s, each as many hex digits as a coordinate, with s at most n / 2. */
   readonly signature: string;
   /** From 0 to 3, the id `recoverPublicKey` takes. */
   readonly recovery: number;
@@ -286,6 +291,8 @@ export interface Sec1Curve {
   readonly rootExponent: bigint;
   /** The largest s a low-S signature may carry, as BIP 62 and BIP 146 count it. */
   readonly halfN: bigint;
+  /** The hash a nonce runs its HMAC on when the signer names none. */
+  readonly hash: NonceHash;
   readonly add: Formulas["add"];
   readonly double: Formulas["double"];
 }
@@ -296,6 +303,8 @@ export interface Sec1CurveOptions {
   readonly name: string;
   /** `zeroAFormulas`, `minusThreeAFormulas` or `anyAFormulas`, whichever matches a. */
   readonly formulas: (domain: Sec1Domain) => Formulas;
+  /** The hash ECDSA pairs with the curve, SHA-512 on P-521 and brainpoolP512r1. */
+  readonly hash: NonceHash;
 }
 
 /**
@@ -317,7 +326,7 @@ export function sec1Curve(domain: Sec1Domain, options: Sec1CurveOptions): Sec1Cu
   }
   const { a, add, double } = options.formulas(domain);
   if (mod(a, p) !== mod(domain.a, p)) throw new RangeError("These formulas are for another a");
-  const { name } = options;
+  const { name, hash } = options;
   const invalidPoint = `Invalid SEC1 ${name} public key`;
   const rootExponent = (p + 1n) / 4n;
   return {
@@ -337,6 +346,7 @@ export function sec1Curve(domain: Sec1Domain, options: Sec1CurveOptions): Sec1Cu
     spacing: digits / ROWS,
     rootExponent,
     halfN: n >> 1n,
+    hash,
     add,
     double,
   };
@@ -954,25 +964,61 @@ function lowSignature(curve: Sec1Curve, commitment: Affine, parts: SignaturePart
 }
 
 /**
+ * Read the hash a nonce runs on.
+ * @param curve - The curve, whose own hash fills in a missing one
+ * @param value - The caller's value
+ * @returns {NonceHash} One of the five RFC 6979 prints vectors for
+ * @throws {RangeError} When the value names no such hash
+ */
+function readHash(curve: Sec1Curve, value: unknown): NonceHash {
+  if (value === undefined) return curve.hash;
+  const known = NONCE_HASHES.find((name) => name === value);
+  if (known === undefined) throw new RangeError(`Hash must be one of ${NONCE_HASHES.join(", ")}`);
+  return known;
+}
+
+/** What one ECDSA signing step takes: the key, the digest as a number and the nonce. */
+export interface NonceSigning {
+  /** d, from 1 to n minus 1. */
+  readonly secret: bigint;
+  /** e, the digest cut to n's bits. */
+  readonly e: bigint;
+  /** k, from 1 to n minus 1. */
+  readonly k: bigint;
+}
+
+/**
+ * Steps 1 to 6 of SEC 1 v2 section 4.1.3 for one k, which the tests feed CAVP's own.
+ * @param curve - The curve
+ * @param step - d, e and k
+ * @returns {Signature | undefined} The signature with s at most n / 2, undefined when r or s is 0
+ */
+export function signWithNonce(curve: Sec1Curve, step: NonceSigning): Signature | undefined {
+  const { n } = curve;
+  const { secret, e, k } = step;
+  const commitment = publicPoint(curve, k);
+  const r = commitment.x % n;
+  const s = (power(k, n - 2n, n) * (e + r * secret)) % n;
+  return r === 0n || s === 0n ? undefined : lowSignature(curve, commitment, { r, s });
+}
+
+/**
  * ECDSA by SEC 1 v2 section 4.1.3, k from RFC 6979, low s.
  * @param curve - The curve
  * @param secret - The private key, from 1 to the curve order minus 1
- * @param options - The digest
+ * @param options - The digest and the hash that made it
  * @returns {Signature} The signature as r then s, and its recovery id
  */
 export function sign(curve: Sec1Curve, secret: Scalar, options: SignOptions): Signature {
-  const { n } = curve;
   const d = decodeScalar(curve, secret, { name: "Secret", minimum: 1n });
   requireOptions(options, "sign(secret, { digest })");
   const e = readDigest(curve, options.digest);
   const digest = readHex(options.digest, undefined, DIGEST_REFUSAL);
-  const candidates = nonces(n, { secret: d, digest });
+  const hash = readHash(curve, options.hash);
+  const candidates = nonces(curve.n, { secret: d, digest, hash });
   for (;;) {
-    const k = candidates.next().value;
-    const commitment = publicPoint(curve, k);
-    const r = commitment.x % n;
-    const s = (power(k, n - 2n, n) * (e + r * d)) % n;
-    if (r !== 0n && s !== 0n) return lowSignature(curve, commitment, { r, s });
+    const signed = signWithNonce(curve, { secret: d, e, k: candidates.next().value });
+    if (signed !== undefined) return signed;
   }
 }
 
