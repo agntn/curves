@@ -143,8 +143,9 @@ async function signsThrough(signer: SignedVector): Promise<void> {
   );
 
   const drawn = (await call({ operation: "nonce", secret, digest, hash })) as { nonce: string };
-  expect(drawn).toEqual({ operation: "nonce", nonce: signer.vector.k ?? drawn.nonce });
-  expect(drawn.nonce).toHaveLength(half);
+  expect(Object.keys(drawn)).toEqual(["operation", "nonce"]);
+  const printed = signer.vector.k ?? `[0-9a-f]{${half}}`;
+  expect(drawn.nonce).toMatch(new RegExp(`^(?:${printed})$`));
   const commitment = { operation: "multiply", point: signer.generator, scalar: drawn.nonce };
   expect(((await call(commitment)) as { point: string }).point.slice(2)).toBe(
     signature.slice(0, half),
