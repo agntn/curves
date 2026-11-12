@@ -130,7 +130,9 @@ describe("Curve field", () => {
 
   it("refuses an inverse that does not exist instead of returning a wrong one", () => {
     expect(invert(4n, 17n)).toBe(13n);
-    expect(() => invert(6n, 15n)).toThrow("p is not prime");
+    expect(() => invert(6n, 15n)).toThrow(
+      "No inverse exists mod 15: the value shares the factor 3",
+    );
   });
 });
 

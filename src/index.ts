@@ -17,4 +17,5 @@ export {
   MAX_LOG_ORDER,
   MAX_ORDER_PRIME,
 } from "./core/limits.ts";
-export { isPrime } from "./core/field.ts";
+export { invert, isPrime, jacobi, mod, power, squareRoot, squareRootMod } from "./field.ts";
+export type { PowerOptions } from "./field.ts";
