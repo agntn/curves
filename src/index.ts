@@ -17,5 +17,20 @@ export {
   MAX_LOG_ORDER,
   MAX_ORDER_PRIME,
 } from "./core/limits.ts";
-export { invert, isPrime, jacobi, mod, power, squareRoot, squareRootMod } from "./field.ts";
-export type { PowerOptions } from "./field.ts";
+export {
+  crt,
+  invert,
+  isPrime,
+  jacobi,
+  linearCongruence,
+  mod,
+  power,
+  squareRoot,
+  squareRootMod,
+} from "./field.ts";
+export type {
+  Congruence,
+  LinearCongruenceOptions,
+  LinearCongruenceSolution,
+  PowerOptions,
+} from "./field.ts";

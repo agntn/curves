@@ -50,6 +50,52 @@ export function invert(value: bigint, p: bigint): bigint {
 }
 
 /**
+ * The greatest common divisor, by Euclid.
+ * @param a - Any integer
+ * @param b - Any integer
+ * @returns {bigint} Never negative, 0 only for gcd(0, 0)
+ */
+export function gcd(a: bigint, b: bigint): bigint {
+  let [x, y] = [a < 0n ? -a : a, b < 0n ? -b : b];
+  while (y !== 0n) [x, y] = [y, x % y];
+  return x;
+}
+
+/** One residue class: every x with x = residue mod modulus. */
+export interface Congruence {
+  readonly residue: bigint;
+  readonly modulus: bigint;
+}
+
+/**
+ * Solve a * x = b mod m as one class mod m / gcd(a, m).
+ * @param a - Any integer
+ * @param b - Any integer
+ * @param m - The modulus, 1 or more
+ * @returns {Congruence | undefined} That class, or undefined with no solution
+ */
+export function solveLinear(a: bigint, b: bigint, m: bigint): Congruence | undefined {
+  const divisor = gcd(a, m);
+  if (b % divisor !== 0n) return undefined;
+  const modulus = m / divisor;
+  if (modulus === 1n) return { residue: 0n, modulus };
+  return { residue: mod((b / divisor) * invert(a / divisor, modulus), modulus), modulus };
+}
+
+/**
+ * Merge two congruences into one mod their lcm.
+ * @param left - The first class
+ * @param right - The second class
+ * @returns {Congruence | undefined} The shared class, or undefined when they disagree
+ */
+export function mergeCongruences(left: Congruence, right: Congruence): Congruence | undefined {
+  const step = solveLinear(left.modulus, right.residue - left.residue, right.modulus);
+  if (step === undefined) return undefined;
+  const modulus = left.modulus * step.modulus;
+  return { residue: mod(left.residue + left.modulus * step.residue, modulus), modulus };
+}
+
+/**
  * The integer square root, rounded down.
  * @param value - Zero or more
  * @returns {bigint} The largest root whose square does not pass the value
