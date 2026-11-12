@@ -119,15 +119,24 @@ function readPoint(
 }
 
 /**
- * Size the table, refusing a search the limit cannot hold.
- * @param count - How many scalars to try, 1 or more
+ * Read the most points a search may tabulate.
  * @param limit - `tableLimit` as the caller passed it
- * @returns {number} The square root of the count, rounded up
+ * @returns {number} The limit, `MAX_INTERVAL_TABLE` when there is none
  */
-function tableSize(count: bigint, limit: number | undefined = MAX_INTERVAL_TABLE): number {
+function readLimit(limit: number | undefined = MAX_INTERVAL_TABLE): number {
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_INTERVAL_TABLE) {
     throw new RangeError(`tableLimit must be an integer from 1 to ${MAX_INTERVAL_TABLE}`);
   }
+  return limit;
+}
+
+/**
+ * Size the table, refusing a search the limit cannot hold.
+ * @param count - How many scalars to try, 1 or more
+ * @param limit - Most points to tabulate
+ * @returns {number} The square root of the count, rounded up
+ */
+function tableSize(count: bigint, limit: number): number {
   const root = squareRoot(count - 1n) + 1n;
   if (root > BigInt(limit)) {
     throw new RangeError(
@@ -280,8 +289,9 @@ export function discreteLogInInterval(
   const base = readPoint(checkedOne, options.base, "The base");
   const target = readPoint(checkedOne, options.target, "The target");
   const { first, stride, count } = readScope(options);
+  const limit = readLimit(options.tableLimit);
   if (count === 0n) return undefined;
-  const size = tableSize(count, options.tableLimit);
+  const size = tableSize(count, limit);
   const step = multiply(checkedOne, base, stride);
   const rest = add(checkedOne, target, multiply(checkedOne, base, -first));
   const index = stepsTo(checkedOne, { step, rest, size, count });

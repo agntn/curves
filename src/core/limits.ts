@@ -17,3 +17,6 @@ export const MAX_LOG_ORDER = 1n << 36n;
 
 /** Most points a log inside an interval tabulates. The search covers that many scalars, squared. */
 export const MAX_INTERVAL_TABLE = 1 << 20;
+
+/** Most points the curve tool tabulates for such a log. The site's Worker has little memory. */
+export const MAX_TOOL_INTERVAL_TABLE = 1 << 18;

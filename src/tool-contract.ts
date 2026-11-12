@@ -5,6 +5,7 @@ export {
   MAX_FILTERED_PRIME,
   MAX_LOG_ORDER,
   MAX_ORDER_PRIME,
+  MAX_TOOL_INTERVAL_TABLE,
 } from "./core/limits.ts";
 export { CURVE_HASHES, NONCE_HASHES } from "./core/nonce-hashes.ts";
 
@@ -109,9 +110,6 @@ export const MAX_CURVE_POINTS_SHOWN = 1000;
 
 /** Points a `points` call lists when it names no limit. */
 export const DEFAULT_CURVE_POINTS_SHOWN = 100;
-
-/** Most points `log` tabulates between lo and hi. The site's Worker has little memory to spare. */
-export const CURVE_LOG_TABLE = 1 << 18;
 
 /** An integer as decimal or 0x hex, with an optional minus sign. */
 export const CURVE_INTEGER_PATTERN = "-?(?:0[xX][0-9A-Fa-f]+|[0-9]+)";

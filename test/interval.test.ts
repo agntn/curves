@@ -169,10 +169,13 @@ describe("discreteLogInInterval", () => {
     expect(
       discreteLogInInterval(secp, { ...window, residue: 5n, modulus: 2n ** 20n, tableLimit: 1024 }),
     ).toBeUndefined();
+    const empty = { ...window, hi: 4n, residue: 5n, modulus: 10n };
     for (const tableLimit of [0, 1.5, -1, Number.NaN, MAX_INTERVAL_TABLE + 1, "8"]) {
-      expect(() =>
-        discreteLogInInterval(secp, { ...window, tableLimit } as unknown as IntervalLogOptions),
-      ).toThrow(new RangeError("tableLimit must be an integer from 1 to 1048576"));
+      for (const options of [window, empty]) {
+        expect(() =>
+          discreteLogInInterval(secp, { ...options, tableLimit } as unknown as IntervalLogOptions),
+        ).toThrow(new RangeError("tableLimit must be an integer from 1 to 1048576"));
+      }
     }
   });
 
