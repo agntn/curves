@@ -1,7 +1,10 @@
 import { existsSync } from "node:fs";
+import { sha1 } from "@agntn/hashes/sha1";
+import { sha224, sha256, sha384, sha512 } from "@agntn/hashes/sha2";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createMcpServer } from "../src/mcp.ts";
+import type { NonceHash } from "../src/p256.ts";
 import { serverInfo } from "../src/server-info.ts";
 import {
   computeBip340,
@@ -23,12 +26,27 @@ import {
 import { highS, nobleEdges, nobleSignatures } from "./fixtures/ecdsa.ts";
 import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 import { rfc8032Signatures as ed448Signatures } from "./fixtures/ed448.ts";
-import { p256Rfc6979, p256Vectors } from "./fixtures/p256.ts";
-import { p384Rfc6979, p384Vectors } from "./fixtures/p384.ts";
-import { p521Rfc6979, p521Vectors } from "./fixtures/p521.ts";
-import { brainpoolP256r1Signature, brainpoolP256r1Vectors } from "./fixtures/brainpoolp256r1.ts";
-import { brainpoolP384r1Signature, brainpoolP384r1Vectors } from "./fixtures/brainpoolp384r1.ts";
-import { brainpoolP512r1Signature, brainpoolP512r1Vectors } from "./fixtures/brainpoolp512r1.ts";
+import { p256Rfc6979, p256Rfc6979Nonces, p256Vectors } from "./fixtures/p256.ts";
+import { p384Rfc6979, p384Rfc6979Nonces, p384Vectors } from "./fixtures/p384.ts";
+import { p521Rfc6979, p521Rfc6979Nonces, p521Vectors } from "./fixtures/p521.ts";
+import {
+  brainpoolP256r1Rfc6979,
+  brainpoolP256r1Rfc7027,
+  brainpoolP256r1Signature,
+  brainpoolP256r1Vectors,
+} from "./fixtures/brainpoolp256r1.ts";
+import {
+  brainpoolP384r1Rfc6979,
+  brainpoolP384r1Rfc7027,
+  brainpoolP384r1Signature,
+  brainpoolP384r1Vectors,
+} from "./fixtures/brainpoolp384r1.ts";
+import {
+  brainpoolP512r1Rfc6979,
+  brainpoolP512r1Rfc7027,
+  brainpoolP512r1Signature,
+  brainpoolP512r1Vectors,
+} from "./fixtures/brainpoolp512r1.ts";
 import { devAccounts, keyringPairs, scureVectors, subkeySeeds } from "./fixtures/sr25519.ts";
 import { secp256k1Vectors } from "./fixtures/vectors.ts";
 
@@ -75,6 +93,51 @@ function answer(response: unknown): unknown {
 function failure(response: unknown): string {
   expect((response as { isError?: boolean }).isError).toBe(true);
   return text(response);
+}
+
+/* A SEC 1 tool, a key and one signature an outside signer made with it. */
+interface SignedVector {
+  readonly tool: string;
+  readonly order: bigint;
+  readonly secret: string;
+  readonly publicKey: string;
+  readonly vector: {
+    readonly hash: NonceHash;
+    readonly message: string;
+    readonly signature: string;
+  };
+}
+
+const DIGESTS = { sha1, sha224, sha256, sha384, sha512 } as const;
+
+/* Signs the vector's message through the tool with its hash named, then recovers the key. */
+async function signsThrough(signer: SignedVector): Promise<void> {
+  const client = await connectTestClient();
+  const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+    answer(await client.callTool({ name: signer.tool, arguments: args }));
+  const refused = async (args: Readonly<Record<string, unknown>>): Promise<string> =>
+    failure(await client.callTool({ name: signer.tool, arguments: args }));
+  const { order, secret, publicKey } = signer;
+  const { hash, message, signature } = signer.vector;
+  const digest = Buffer.from(DIGESTS[hash](Buffer.from(message))).toString("hex");
+  const half = signature.length / 2;
+  const s = BigInt(`0x${signature.slice(half)}`);
+  const low = `${signature.slice(0, half)}${(s > order >> 1n ? order - s : s).toString(16).padStart(half, "0")}`;
+
+  const signedHere = await call({ operation: "sign", secret, digest, hash, compressed: false });
+  const { recovery } = signedHere as { recovery: number };
+  expect(signedHere).toEqual({ operation: "sign", signature: low, recovery, publicKey });
+  expect(
+    await call({ operation: "recover", digest, signature: low, recovery, compressed: false }),
+  ).toEqual({ operation: "recover", point: publicKey });
+  const byDefault = await call({ operation: "sign", secret, digest, compressed: false });
+  expect((byDefault as { signature: string }).signature).not.toBe(low);
+  expect(await refused({ operation: "sign", secret, digest, hash: "md5" })).toContain(
+    "Invalid arguments at /hash",
+  );
+  expect(await refused({ operation: "sign", secret, digest, point: publicKey })).toContain(
+    "sign does not take point",
+  );
 }
 
 const paar = { a: "2", b: "2", p: "17" };
@@ -344,9 +407,13 @@ describe("curves MCP server", () => {
     expect(await refused({ operation: "negate", point: p256Vectors.g })).toContain(
       "Invalid arguments at /point",
     );
-    expect(await refused({ operation: "sign", point: publicKey })).toContain(
-      "Invalid arguments at /operation",
-    );
+    await signsThrough({
+      tool: "curves_p384_compute",
+      order: BigInt(`0x${p384Vectors.orderMinusOne}`) + 1n,
+      secret: p384Rfc6979.secret,
+      publicKey: p384Rfc6979.publicKey,
+      vector: p384Rfc6979Nonces[0],
+    });
   });
 
   it("computes on P-521 at 66 bytes a number and verifies RFC 6979's SHA-512 signature", async () => {
@@ -386,9 +453,13 @@ describe("curves MCP server", () => {
     expect(await refused({ operation: "negate", point: p384Vectors.g })).toContain(
       "Invalid arguments at /point",
     );
-    expect(await refused({ operation: "sign", point: publicKey })).toContain(
-      "Invalid arguments at /operation",
-    );
+    await signsThrough({
+      tool: "curves_p521_compute",
+      order: BigInt(`0x${p521Vectors.orderMinusOne}`) + 1n,
+      secret: p521Rfc6979.secret,
+      publicKey: p521Rfc6979.publicKey,
+      vector: p521Rfc6979Nonces[0],
+    });
   });
 
   it("computes on brainpoolP256r1 and tells its points from P-256's at the same width", async () => {
@@ -423,9 +494,13 @@ describe("curves MCP server", () => {
     expect(await refused({ operation: "negate", point: p384Vectors.g })).toContain(
       "Invalid arguments at /point",
     );
-    expect(await refused({ operation: "sign", point: publicKey })).toContain(
-      "Invalid arguments at /operation",
-    );
+    await signsThrough({
+      tool: "curves_brainpoolp256r1_compute",
+      order: BigInt(`0x${brainpoolP256r1Vectors.orderMinusOne}`) + 1n,
+      secret: brainpoolP256r1Rfc7027.secretA,
+      publicKey: brainpoolP256r1Rfc7027.publicKeyA,
+      vector: brainpoolP256r1Rfc6979[0],
+    });
   });
 
   it("computes on brainpoolP512r1 and turns P-384 and P-521 points away at the schema", async () => {
@@ -464,9 +539,13 @@ describe("curves MCP server", () => {
         "Invalid arguments at /point",
       );
     }
-    expect(await refused({ operation: "sign", point: publicKey })).toContain(
-      "Invalid arguments at /operation",
-    );
+    await signsThrough({
+      tool: "curves_brainpoolp512r1_compute",
+      order: BigInt(`0x${brainpoolP512r1Vectors.orderMinusOne}`) + 1n,
+      secret: brainpoolP512r1Rfc7027.secretA,
+      publicKey: brainpoolP512r1Rfc7027.publicKeyA,
+      vector: brainpoolP512r1Rfc6979[0],
+    });
   });
 
   it("computes on brainpoolP384r1 and tells its points from P-384's at the same width", async () => {
@@ -501,9 +580,13 @@ describe("curves MCP server", () => {
     expect(await refused({ operation: "negate", point: brainpoolP256r1Vectors.g })).toContain(
       "Invalid arguments at /point",
     );
-    expect(await refused({ operation: "sign", point: publicKey })).toContain(
-      "Invalid arguments at /operation",
-    );
+    await signsThrough({
+      tool: "curves_brainpoolp384r1_compute",
+      order: BigInt(`0x${brainpoolP384r1Vectors.orderMinusOne}`) + 1n,
+      secret: brainpoolP384r1Rfc7027.secretA,
+      publicKey: brainpoolP384r1Rfc7027.publicKeyA,
+      vector: brainpoolP384r1Rfc6979[0],
+    });
   });
 
   it("computes on P-256 and verifies the ECDSA signatures RFC 6979 prints", async () => {
@@ -541,9 +624,13 @@ describe("curves MCP server", () => {
     expect(
       await refused({ operation: "lift", x: publicKey.slice(2, 66), point: publicKey }),
     ).toContain("lift does not take point");
-    expect(await refused({ operation: "sign", point: publicKey })).toContain(
-      "Invalid arguments at /operation",
-    );
+    await signsThrough({
+      tool: "curves_p256_compute",
+      order: BigInt(`0x${p256Vectors.orderMinusOne}`) + 1n,
+      secret: p256Rfc6979.secret,
+      publicKey: p256Rfc6979.publicKey,
+      vector: p256Rfc6979Nonces[0],
+    });
   });
 
   it("signs a digest with ECDSA on secp256k1, with the recovery id recover takes", async () => {
@@ -933,9 +1020,20 @@ describe("curve executors", () => {
     expect(() => computeP256({ operation: "multiply", point: p256Vectors.g })).toThrow(
       "multiply needs scalar",
     );
-    expect(() => computeP256({ operation: "sign", secret: "01", digest: "00" })).toThrow(
-      "operation must be one of add, subtract, negate, multiply, lift, check, verify",
+    expect(() =>
+      computeP256({ operation: "sign", secret: "01", digest: "00", hash: "md5" }),
+    ).toThrow("hash must be one of sha1, sha224, sha256, sha384, sha512");
+    expect(() => computeP384({ operation: "sign", secret: "01", digest: "00", hash: 384 })).toThrow(
+      "hash must be one of sha1, sha224, sha256, sha384, sha512",
     );
+    expect(
+      computeP521({ operation: "sign", secret: "01", digest: "00", hash: "" }).details,
+    ).toEqual(
+      computeP521({ operation: "sign", secret: "01", digest: "00", hash: "sha512" }).details,
+    );
+    expect(() =>
+      computeP256({ operation: "recover", digest: "00", signature: "00", recovery: 0 }),
+    ).toThrow("Signature must be 128 hex digits");
     expect(() =>
       computeP384({ operation: "verify", point: p384Vectors.g, digest: "00", signature: "00" }),
     ).toThrow("Signature must be 192 hex digits");

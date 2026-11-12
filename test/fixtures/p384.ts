@@ -165,3 +165,81 @@ export const p384Rfc6979 = {
     },
   ],
 } as const;
+
+/**
+ * Every signature RFC 6979 appendix A.2.6 prints for the key of `p384Rfc6979`, k included: SHA-1
+ * and the four SHA-2 hashes, over "sample" and "test", with the HMAC on the same hash. s is as
+ * printed, so a high one comes back from `sign` as n - s.
+ */
+export const p384Rfc6979Nonces = [
+  {
+    hash: "sha1",
+    message: "sample",
+    k: "4471ef7518bb2c7c20f62eae1c387ad0c5e8e470995db4acf694466e6ab096630f29e5938d25106c3c340045a2db01a7",
+    signature:
+      "ec748d839243d6fbef4fc5c4859a7dffd7f3abddf72014540c16d73309834fa37b9ba002899f6fda3a4a9386790d4eb2a3bcfa947beef4732bf247ac17f71676cb31a847b9ff0cbc9c9ed4c1a5b3facf26f49ca031d4857570ccb5ca4424a443",
+  },
+  {
+    hash: "sha224",
+    message: "sample",
+    k: "a4e4d2f0e729eb786b31fc20ad5d849e304450e0ae8e3e341134a5c1afa03cab8083ee4e3c45b06a5899ea56c51b5879",
+    signature:
+      "42356e76b55a6d9b4631c865445dbe54e056d3b3431766d0509244793c3f9366450f76ee3de43f5a125333a6be0601229da0c81787064021e78df658f2fbb0b042bf304665db721f077a4298b095e4834c082c03d83028efbf93a3c23940ca8d",
+  },
+  {
+    hash: "sha256",
+    message: "sample",
+    k: "180ae9f9aec5438a44bc159a1fcb277c7be54fa20e7cf404b490650a8acc414e375572342863c899f9f2edf9747a9b60",
+    signature:
+      "21b13d1e013c7fa1392d03c5f99af8b30c570c6f98d4ea8e354b63a21d3daa33bde1e888e63355d92fa2b3c36d8fb2cdf3aa443fb107745bf4bd77cb3891674632068a10ca67e3d45db2266fa7d1feebefdc63eccd1ac42ec0cb8668a4fa0ab0",
+  },
+  {
+    hash: "sha384",
+    message: "sample",
+    k: "94ed910d1a099dad3254e9242ae85abde4ba15168eaf0ca87a555fd56d10fbca2907e3e83ba95368623b8c4686915cf9",
+    signature:
+      "94edbb92a5ecb8aad4736e56c691916b3f88140666ce9fa73d64c4ea95ad133c81a648152e44acf96e36dd1e80fabe4699ef4aeb15f178cea1fe40db2603138f130e740a19624526203b6351d0a3a94fa329c145786e679e7b82c71a38628ac8",
+  },
+  {
+    hash: "sha512",
+    message: "sample",
+    k: "92fc3c7183a883e24216d1141f1a8976c5b0dd797dfa597e3d7b32198bd35331a4e966532593a52980d0e3aaa5e10ec3",
+    signature:
+      "ed0959d5880ab2d869ae7f6c2915c6d60f96507f9cb3e047c0046861da4a799cfe30f35cc900056d7c99cd7882433709512c8cceee3890a84058ce1e22dbc2198f42323ce8aca9135329f03c068e5112dc7cc3ef3446defceb01a45c2667fdd5",
+  },
+  {
+    hash: "sha1",
+    message: "test",
+    k: "66cc2c8f4d303fc962e5ff6a27bd79f84ec812ddae58cf5243b64a4ad8094d47ec3727f3a3c186c15054492e30698497",
+    signature:
+      "4bc35d3a50ef4e30576f58cd96ce6bf638025ee624004a1f7789a8b8e43d0678acd9d29876daf46638645f7f404b11c7d5a6326c494ed3ff614703878961c0fde7b2c278f9a65fd8c4b7186201a2991695ba1c84541327e966fa7b50f7382282",
+  },
+  {
+    hash: "sha224",
+    message: "test",
+    k: "18fa39db95aa5f561f30fa3591dc59c0fa3653a80daffa0b48d1a4c6dfcbff6e3d33be4dc5eb8886a8ecd093f2935726",
+    signature:
+      "e8c9d0b6ea72a0e7837fea1d14a1a9557f29faa45d3e7ee888fc5bf954b5e62464a9a817c47ff78b8c11066b24080e7207041d4a7a0379ac7232ff72e6f77b6ddb8f09b16cce0ec3286b2bd43fa8c6141c53ea5abef0d8231077a04540a96b66",
+  },
+  {
+    hash: "sha256",
+    message: "test",
+    k: "0cfac37587532347dc3389fdc98286bba8c73807285b184c83e62e26c401c0faa48dd070ba79921a3457abff2d630ad7",
+    signature:
+      "6d6defac9ab64dabafe36c6bf510352a4cc27001263638e5b16d9bb51d451559f918eedaf2293be5b475cc8f0188636b2d46f3becbcc523d5f1a1256bf0c9b024d879ba9e838144c8ba6baeb4b53b47d51ab373f9845c0514eefb14024787265",
+  },
+  {
+    hash: "sha384",
+    message: "test",
+    k: "015ee46a5bf88773ed9123a5ab0807962d193719503c527b031b4c2d225092ada71f4a459bc0da98adb95837db8312ea",
+    signature:
+      "8203b63d3c853e8d77227fb377bcf7b7b772e97892a80f36ab775d509d7a5feb0542a7f0812998da8f1dd3ca3cf023dbddd0760448d42d8a43af45af836fce4de8be06b485e9b61b827c2f13173923e06a739f040649a667bf3b828246baa5a5",
+  },
+  {
+    hash: "sha512",
+    message: "test",
+    k: "3780c4f67cb15518b6acae34c9f83568d2e12e47deab6c50a4e4ee5319d1e8ce0e2cc8a136036dc4b9c00e6888f66b6c",
+    signature:
+      "a0d5d090c9980faf3c2ce57b7ae951d31977dd11c775d314af55f76c676447d06fb6495cd21b4b6e340fc236584fb277976984e59b4c77b0e8e4460dca3d9f20e07b9bb1f63beefaf576f6b2e8b224634a2092cd3792e0159ad9cee37659c736",
+  },
+] as const;

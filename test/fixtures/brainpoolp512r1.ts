@@ -150,3 +150,73 @@ export const brainpoolP512r1Signature = {
     "0bd2593447cc6c02caf99d60418dd42e9a194c910e6755ed0c7059acac656b04ccfe1e8348462ee43066823aee2fed7ca012e9890dfb69866d7ae88b6506f9c7" +
     "44b42304e693796618d090dbcb2a2551c3cb78534611e61fd9d1a5c0938b5b8ec6ed53d2d28999eabbd8e7792d167fcf582492403a6a0f7cc94c73a28fb76b71",
 } as const;
+
+/**
+ * RFC 6979 signatures with the first key of `brainpoolP512r1Rfc7027` (RFC 7027 appendix A.3),
+ * over "sample" and "test" with SHA-1 and the four SHA-2 hashes. RFC 6979 prints none for
+ * Brainpool, so OpenSSL 3.6.5 signed them: `openssl pkeyutl -sign -pkeyopt digest:<hash>
+ * -pkeyopt nonce-type:1`, the setting that gave every A.2.5 vector of P-256 byte for byte. s is
+ * as OpenSSL wrote it, so a high one comes back from `sign` as n - s.
+ */
+export const brainpoolP512r1Rfc6979 = [
+  {
+    hash: "sha1",
+    message: "sample",
+    signature:
+      "60d1dee14c058dd0783c2aa899131385c8b6b3aea6c3c8afbab95376a5d035caa057b8c1c7d134db5451db66809333c773d2bd723b7bd01eb71cf7e7225bc7799be4f2af08081ca329e49d8736a0f902a40e49c1aed05cac47597fbec67dcb1574789e576a79a86ae07725994a86114ba2bf71c0d7e21f3961054fc69a5e60a1",
+  },
+  {
+    hash: "sha224",
+    message: "sample",
+    signature:
+      "aa11299019b148fcf9cf9558e176ea4b15ae31824305f7510f224746c25dde6a10a4167e39dc012706c917c9924dd9e2042aae7012cbbb293b13f7c572b06d223963975c5a65a47df35e19ed54e48fc77eab819e696272a5ba5a992c4f32ce85db42b1313ad8471c214fba439f1932c5113184598e04dceef862f104da37528c",
+  },
+  {
+    hash: "sha256",
+    message: "sample",
+    signature:
+      "5362166fe787566e54cd91e2d7ab793e309ab7f53809cf1ae04c4b4ecfd4fd0a1e9a9dcb87204ae16da48d5a254bb1b62f8f79e9b233e36bdeb5cf10301415385d397fc4f1453fcd21f0b45c772adb3cfd3572f4e4a1956f927066c394d172f138c77bdcdfea31c44d498ff9874a1315aaf3b10ca4239d7c2368f21b9e6cc329",
+  },
+  {
+    hash: "sha384",
+    message: "sample",
+    signature:
+      "1856be5910e2f0f0465f4d7b24d074522e89e5182fac30261002a1e19f6d3475e4c817e1eff0d82425b8b8b4deff830f497269ae29d137633f8f2d158dbb1c4d92728f1e41e7220d6113d7c83441fb2c775080329c99a263dd2793086f78c3bc504372a9519bb56f300c88275baf17e5863e1c0bffdef2667656a646a392691c",
+  },
+  {
+    hash: "sha512",
+    message: "sample",
+    signature:
+      "5a62cd28cd5aa4cd20a8aa2973e593006eca66d956354ab09ab1da0efbb72e0035586a4174a17fb01b50003ebc64b6719f7695e14777dbc630c8b72f67fe1532a5a80b85ad0a792960106c1fe420c57e6ef456a80493c51d3ce7768fe2717ea632202f160bc714dfd3fe1823d77b40bf21d16b2ac9288f8728e05503d40f8ab5",
+  },
+  {
+    hash: "sha1",
+    message: "test",
+    signature:
+      "a5419fd13c59b12fa666c7be995763ce98b3a10144521766dac0caf8499ecfc33d21cb3863cb82bdebf7c98c4da32a53dc1ffbe5e6c4dd720b131ed426b95630950faae173b79149deec232422b0fa3e64f7f725565c9f78670321779c1f46157eeaf76097d46e3fa063c2730db28a6cef8b00b80286372dce0034e61ad4111c",
+  },
+  {
+    hash: "sha224",
+    message: "test",
+    signature:
+      "058b0d404af9c2089c4c63f558b355cbe8615e93102aaaa6cfeda5037ec56f2f2a9b46b062962d043f4efe104bec5b8991c604443ff27988300bd01714fb174b5ba43592ea81971224c4da6bbdc64c6a240f54719e753246313285a05668380ae68c4cbb53ae8a8c4732bd06cd295c0c8f094a15087fead2872ff8151c006c19",
+  },
+  {
+    hash: "sha256",
+    message: "test",
+    signature:
+      "33b5186f1ac52b8b4dc19dd8ff1879a6eb69b2e5318e1b672a0e13b2785cd25f76d5d9e5ab7c889f1a507efbd9332e477447f004c6dab854401f63b6cdc51b4c7a05ce513f6f61d157196b52c6e912f338f182267ab0aa3230333a2e189f5745b8e8eee6814d73a2d86a2f57bc868a3a1970766d262a61db73b0949a22cf4a64",
+  },
+  {
+    hash: "sha384",
+    message: "test",
+    signature:
+      "9101d541fb03dc7eab8384884f9b1f662da91a21d440e653f956af3e6d5a6574a5b46d46018090c9a53025794bbf315b00f796db7da52569a432cdd23a1318df02c9fccbe5221fdc84275e0e79ea1158bc6304ae9eded2ab469d93e2666a7ef376da0d704885bd61262af25930756ea5cf6d83f1707750f447d538d2b31fc570",
+  },
+  {
+    hash: "sha512",
+    message: "test",
+    signature:
+      "8a9f96cc09901cf1773024645c08c4d180c40e68ff82dfb289477116d30b02ff1219143b435b06cd084421db21e5b5a9fca5463899630b67fdf0ac1abaa8ee4a93e5fa023edb25d3a36acda0f156e9f3e71ca83c61e76981c432e24846c1a16795d4ef807a0b1ae48c29e8aa37a25fba124da41cdbb873c6fd1411858f259c79",
+  },
+] as const;

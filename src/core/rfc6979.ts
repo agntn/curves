@@ -1,12 +1,15 @@
 /**
- * Deterministic ECDSA nonces, RFC 6979 section 3.2: HMAC-SHA-256 seeded with the secret and the
- * digest, so a broken random number generator has nothing to leak the key through. The order is a
- * parameter, so the RFC's own K-163 and P-256 examples test the code secp256k1 signs with.
+ * Deterministic ECDSA nonces, RFC 6979 section 3.2: an HMAC seeded with the secret and the digest,
+ * so a broken random number generator has nothing to leak the key through. The HMAC runs on the
+ * hash that made the digest, SHA-1 or SHA-2. The order is a parameter, so the RFC's own K-163,
+ * P-256, P-384 and P-521 examples test the code every SEC 1 curve signs with.
  */
 
 import { hmac } from "@agntn/hashes/hmac";
-import { Sha256Hasher } from "@agntn/hashes/sha2";
+import { Sha1Hasher } from "@agntn/hashes/sha1";
+import { Sha224Hasher, Sha256Hasher, Sha384Hasher, Sha512Hasher } from "@agntn/hashes/sha2";
 import { bytesToHex, concatBytes, numberToBytesBE } from "./bytes.ts";
+import type { NonceHash } from "./nonce-hashes.ts";
 
 /** What {@link nonces} seeds the generator with. */
 export interface NonceSeed {
@@ -14,16 +17,30 @@ export interface NonceSeed {
   readonly secret: bigint;
   /** The message digest h1 as bytes, before bits2int. */
   readonly digest: Uint8Array;
+  /** The hash that made h1, and so the one under the HMAC. */
+  readonly hash: NonceHash;
 }
 
+/** One HMAC under the current K, over the joined parts. */
+type Mac = (key: Uint8Array, ...parts: ReadonlyArray<ArrayLike<number>>) => Uint8Array;
+
+/** A fresh hasher for each name, built only when a signature asks for it. */
+const HASHERS = {
+  sha1: () => new Sha1Hasher(),
+  sha224: () => new Sha224Hasher(),
+  sha256: () => new Sha256Hasher(),
+  sha384: () => new Sha384Hasher(),
+  sha512: () => new Sha512Hasher(),
+} as const satisfies Record<NonceHash, unknown>;
+
 /**
- * HMAC-SHA-256 of the joined parts.
- * @param key - The current K
- * @param parts - What V and the seed contribute, in order
- * @returns {Uint8Array} 32 bytes
+ * HMAC with one hash, of the parts joined.
+ * @param hash - The hash under the HMAC
+ * @returns {Mac} The HMAC, with an output as long as the hash's
  */
-function mac(key: Uint8Array, ...parts: ReadonlyArray<ArrayLike<number>>): Uint8Array {
-  return hmac(() => new Sha256Hasher(), key, concatBytes(...parts));
+function macOf(hash: NonceHash): Mac {
+  const create = HASHERS[hash];
+  return (key, ...parts) => hmac(create, key, concatBytes(...parts));
 }
 
 /**
@@ -42,16 +59,18 @@ function bitsToNumber(bytes: ArrayLike<number>, bits: number): bigint {
 /**
  * Steps b to h of section 3.2. A signer whose r or s comes out zero takes the next k, per h.3.
  * @param order - q, the order of the group
- * @param seed - The secret and the digest
+ * @param seed - The secret, the digest and its hash
  * @yields {bigint} k, from 1 to q minus 1
  */
 export function* nonces(order: bigint, seed: NonceSeed): Generator<bigint, never> {
+  const mac = macOf(seed.hash);
   const bits = order.toString(2).length;
   const length = Math.ceil(bits / 8);
   const secret = numberToBytesBE(seed.secret, length);
   const digest = numberToBytesBE(bitsToNumber(seed.digest, bits) % order, length);
-  let k = mac(new Uint8Array(32), new Uint8Array(32).fill(1), [0], secret, digest);
-  let v = mac(k, new Uint8Array(32).fill(1));
+  const width = HASHERS[seed.hash]().outputLength;
+  let k = mac(new Uint8Array(width), new Uint8Array(width).fill(1), [0], secret, digest);
+  let v = mac(k, new Uint8Array(width).fill(1));
   k = mac(k, v, [1], secret, digest);
   v = mac(k, v);
   for (;;) {

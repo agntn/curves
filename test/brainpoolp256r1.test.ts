@@ -10,6 +10,8 @@ import {
   multiplyGenerator,
   multiplyPoint,
   negatePoint,
+  recoverPublicKey,
+  sign,
   subtractPoints,
   verify,
 } from "../src/brainpoolp256r1.ts";
@@ -26,11 +28,13 @@ import {
 import {
   brainpoolP256r1GeneratorMultiples,
   brainpoolP256r1PointMultiples,
+  brainpoolP256r1Rfc6979,
   brainpoolP256r1Rfc7027,
   brainpoolP256r1Signature,
   brainpoolP256r1Vectors,
 } from "./fixtures/brainpoolp256r1.ts";
 import wycheproof from "./fixtures/wycheproof-brainpoolp256r1.json" with { type: "json" };
+import { describeSigning } from "./sec1-signing.ts";
 import { medians } from "./timing.ts";
 
 const {
@@ -113,9 +117,9 @@ describe("brainpoolP256r1 domain parameters", () => {
     const { a, p } = brainpoolP256r1;
     expect([0n, p - 3n]).not.toContain(a);
     for (const formulas of [zeroAFormulas, minusThreeAFormulas]) {
-      expect(() => sec1Curve(brainpoolP256r1, { name: "brainpoolP256r1", formulas })).toThrow(
-        "These formulas are for another a",
-      );
+      expect(() =>
+        sec1Curve(brainpoolP256r1, { name: "brainpoolP256r1", formulas, hash: "sha256" }),
+      ).toThrow("These formulas are for another a");
     }
   });
 });
@@ -126,8 +130,8 @@ describe("The SEC 1 formulas for any a", () => {
       [secp256k1, "secp256k1", zeroAFormulas],
       [p256, "P-256", minusThreeAFormulas],
     ] as const) {
-      const special = sec1Curve(domain, { name, formulas });
-      const general = sec1Curve(domain, { name, formulas: anyAFormulas });
+      const special = sec1Curve(domain, { name, formulas, hash: "sha256" });
+      const general = sec1Curve(domain, { name, formulas: anyAFormulas, hash: "sha256" });
       const point = sec1.multiplyGenerator(special, 0x5eedn, uncompressed);
       for (const scalar of [1n, 2n, 3n, 0x1234567890abcdefn, domain.n - 1n]) {
         expect(sec1.multiplyGenerator(general, scalar, uncompressed)).toBe(
@@ -183,7 +187,11 @@ describe("brainpoolP256r1 point math", () => {
     }
   });
 
-  const tables = sec1Curve(brainpoolP256r1, { name: "brainpoolP256r1", formulas: anyAFormulas });
+  const tables = sec1Curve(brainpoolP256r1, {
+    name: "brainpoolP256r1",
+    formulas: anyAFormulas,
+    hash: "sha256",
+  });
   /* One case per row: 64 rows in one test left a busy runner little of the 5 s limit. */
   it.each(Array.from({ length: 64 }, (_, row) => row))(
     "reads row %i of the comb and of the verification table right",
@@ -306,4 +314,16 @@ describe("brainpoolP256r1 ECDSA", () => {
       Reflect.apply(verify, undefined, [signature, digest]);
     }).toThrow("Call it as verify(signature, { digest, publicKey })");
   });
+});
+
+describeSigning({
+  name: "brainpoolP256r1",
+  order: brainpoolP256r1.n,
+  fallback: "sha256",
+  secret: brainpoolP256r1Rfc7027.secretA,
+  publicKey: brainpoolP256r1Rfc7027.publicKeyA,
+  vectors: brainpoolP256r1Rfc6979,
+  sign,
+  verify,
+  recoverPublicKey,
 });

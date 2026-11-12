@@ -28,12 +28,12 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 - 🔑 **secp256k1 with SEC1 points.** Add, subtract, multiply, lift an x, convert between 33 and 65 bytes.
 - 🔍 **ECDSA signing, verification and recovery.** RFC 6979 picks the nonce, so a key and a digest always sign the same way. Low s and a recovery id come with it. The block 170 signature that paid Hal Finney 10 BTC? Checks out. Recovery hands back Satoshi's key.
 - ✍️ **BIP340 signatures.** Taproot and Nostr, signed and checked against 32-byte x-only keys. It lives in `@agntn/curves/bip340`. Fresh aux_rand by default, or yours. One BIP vector signs pi's hex digits with a key made of e's. Same bytes here.
-- 🟢 **P-256 with SEC1 points.** Also called secp256r1 and prime256v1, it's the curve of passkeys, ES256 tokens and TLS. `@agntn/curves/p256` does point math and verifies ECDSA over a digest you hashed. All 262 Wycheproof vectors for P-256 with SHA-256 pass. A familiar name isn't proof. That's 262 witnesses.
-- 🔵 **P-384 with SEC1 points.** Also called secp384r1. ES384 tokens, TLS certificates and CNSA suites run on it. `@agntn/curves/p384` handles point math and verifies ECDSA over a digest you hashed. All 280 Wycheproof P-384 SHA-384 vectors pass. That's more convincing than a curve name.
-- 🟤 **P-521 with SEC1 points.** Also called secp521r1. ES512 tokens, OpenPGP keys and TLS certificates use it. `@agntn/curves/p521` handles point math and verifies ECDSA over a digest you hashed. All 318 Wycheproof P-521 SHA-512 vectors pass. That's 318 reasons to look past the name.
-- 🌱 **brainpoolP256r1 with SEC1 points.** Brainpool took the scenic route with its parameters. `@agntn/curves/brainpoolp256r1` handles point math and ECDSA verification over a digest you hashed. All 261 Wycheproof SHA-256 vectors pass. No signing here.
-- 🌳 **brainpoolP512r1 with SEC1 points.** The one Brainpool curve with no twin by length, so its points give it away. `@agntn/curves/brainpoolp512r1` handles point math and ECDSA verification over a digest. SHA-512 fits n to the bit, and all 337 Wycheproof vectors pass. No signing.
-- 🍃 **brainpoolP384r1 with SEC1 points.** Same point lengths as P-384, different curve. Your length check won't notice. `@agntn/curves/brainpoolp384r1` handles point math and ECDSA verification over a digest. All 292 Wycheproof SHA-384 vectors pass in P1363 form. No signing.
+- 🟢 **P-256 with SEC1 points.** Also called secp256r1 and prime256v1, it's the curve of passkeys, ES256 tokens and TLS. `@agntn/curves/p256` handles point math and signs and verifies ECDSA over a digest you hashed, then recovers the key. All 262 Wycheproof vectors for P-256 with SHA-256 pass. Familiarity is nice, evidence is better.
+- 🔵 **P-384 with SEC1 points.** Also called secp384r1. ES384 tokens, TLS certificates and CNSA suites run on it. `@agntn/curves/p384` handles point math and signs and verifies ECDSA over a digest you hashed, then recovers the key. All 280 Wycheproof P-384 SHA-384 vectors pass. That's more convincing than a curve name.
+- 🟤 **P-521 with SEC1 points.** Also called secp521r1. ES512 tokens, OpenPGP keys and TLS certificates use it. `@agntn/curves/p521` handles point math and signs and verifies ECDSA over a digest you hashed, then recovers the key. All 318 Wycheproof P-521 SHA-512 vectors pass. That's 318 reasons to look past the name.
+- 🌱 **brainpoolP256r1 with SEC1 points.** Brainpool took the scenic route with its parameters. `@agntn/curves/brainpoolp256r1` handles point math and signs and verifies ECDSA over a digest you hashed, then recovers the key. All 261 Wycheproof SHA-256 vectors pass. The route is scenic, the checks are direct.
+- 🌳 **brainpoolP512r1 with SEC1 points.** The one Brainpool curve with no twin by length, so its points give it away. `@agntn/curves/brainpoolp512r1` handles point math and signs and verifies ECDSA over a digest, then recovers the key. SHA-512 fits n to the bit, and all 337 Wycheproof vectors pass. No twin, no guessing.
+- 🍃 **brainpoolP384r1 with SEC1 points.** Same point lengths as P-384, different curve. `@agntn/curves/brainpoolp384r1` handles point math and signs and verifies ECDSA over a digest, then recovers the key. All 292 Wycheproof SHA-384 vectors pass in P1363 form. Your length check still won't know the difference.
 - 🟣 **sr25519 for Polkadot.** Keys from a seed, signatures, `//hard` and `/soft` children. `//Alice` comes out right.
 - 🟠 **ed25519 for Monero.** Add, multiply, reduce a scalar like `sc_reduce32`. A point of order 8 decodes fine, and `isTorsionFree` still says no.
 - 🔏 **Ed25519 signatures.** Sign and verify in `@agntn/curves/ed25519`. One secret, one message, one signature. RFC 8032's own, to the byte. ZIP 215 by default, strict on request.
@@ -83,12 +83,12 @@ The scalar is the inverse of 2 mod n. Look at all those zeros in x. Funny, right
 | `curves compute <operation>`         | add, double, negate, multiply, lift, check, order, count, points, log |
 | `curves secp256k1 <operation>`       | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
 | `curves bip340 <operation>`          | keypair, sign, verify                                                 |
-| `curves p256 <operation>`            | add, subtract, negate, multiply, lift, check, verify                  |
-| `curves p384 <operation>`            | add, subtract, negate, multiply, lift, check, verify                  |
-| `curves p521 <operation>`            | add, subtract, negate, multiply, lift, check, verify                  |
-| `curves brainpoolp256r1 <operation>` | add, subtract, negate, multiply, lift, check, verify                  |
-| `curves brainpoolp384r1 <operation>` | add, subtract, negate, multiply, lift, check, verify                  |
-| `curves brainpoolp512r1 <operation>` | add, subtract, negate, multiply, lift, check, verify                  |
+| `curves p256 <operation>`            | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
+| `curves p384 <operation>`            | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
+| `curves p521 <operation>`            | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
+| `curves brainpoolp256r1 <operation>` | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
+| `curves brainpoolp384r1 <operation>` | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
+| `curves brainpoolp512r1 <operation>` | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
 | `curves sr25519 <operation>`         | keypair, sign, verify, derive                                         |
 | `curves ed25519 <operation>`         | keypair, sign, verify                                                 |
 | `curves ed448 <operation>`           | verify                                                                |

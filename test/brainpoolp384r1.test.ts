@@ -10,6 +10,8 @@ import {
   multiplyGenerator,
   multiplyPoint,
   negatePoint,
+  recoverPublicKey,
+  sign,
   subtractPoints,
   verify,
 } from "../src/brainpoolp384r1.ts";
@@ -23,11 +25,13 @@ import {
 import {
   brainpoolP384r1GeneratorMultiples,
   brainpoolP384r1PointMultiples,
+  brainpoolP384r1Rfc6979,
   brainpoolP384r1Rfc7027,
   brainpoolP384r1Signature,
   brainpoolP384r1Vectors,
 } from "./fixtures/brainpoolp384r1.ts";
 import wycheproof from "./fixtures/wycheproof-brainpoolp384r1.json" with { type: "json" };
+import { describeSigning } from "./sec1-signing.ts";
 import { medians } from "./timing.ts";
 
 const {
@@ -110,12 +114,16 @@ describe("brainpoolP384r1 domain parameters", () => {
     const { a, p } = brainpoolP384r1;
     expect([0n, p - 3n]).not.toContain(a);
     expect(
-      sec1Curve(brainpoolP384r1, { name: "brainpoolP384r1", formulas: anyAFormulas }).digits,
+      sec1Curve(brainpoolP384r1, {
+        name: "brainpoolP384r1",
+        formulas: anyAFormulas,
+        hash: "sha256",
+      }).digits,
     ).toBe(96);
     for (const formulas of [zeroAFormulas, minusThreeAFormulas]) {
-      expect(() => sec1Curve(brainpoolP384r1, { name: "brainpoolP384r1", formulas })).toThrow(
-        "These formulas are for another a",
-      );
+      expect(() =>
+        sec1Curve(brainpoolP384r1, { name: "brainpoolP384r1", formulas, hash: "sha256" }),
+      ).toThrow("These formulas are for another a");
     }
   });
 });
@@ -169,6 +177,7 @@ describe("brainpoolP384r1 point math", () => {
       const tables = sec1Curve(brainpoolP384r1, {
         name: "brainpoolP384r1",
         formulas: anyAFormulas,
+        hash: "sha256",
       });
       for (let row = 0n; row < 96n; row++) {
         const base = multiplyPoint(g, 16n ** row, uncompressed);
@@ -290,4 +299,16 @@ describe("brainpoolP384r1 ECDSA", () => {
       Reflect.apply(verify, undefined, [signature, digest]);
     }).toThrow("Call it as verify(signature, { digest, publicKey })");
   });
+});
+
+describeSigning({
+  name: "brainpoolP384r1",
+  order: brainpoolP384r1.n,
+  fallback: "sha384",
+  secret: brainpoolP384r1Rfc7027.secretA,
+  publicKey: brainpoolP384r1Rfc7027.publicKeyA,
+  vectors: brainpoolP384r1Rfc6979,
+  sign,
+  verify,
+  recoverPublicKey,
 });

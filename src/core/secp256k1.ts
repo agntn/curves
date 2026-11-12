@@ -6,6 +6,7 @@
  */
 
 import type { AffinePoint } from "./arithmetic.ts";
+import { CURVE_HASHES } from "./nonce-hashes.ts";
 import * as sec1 from "./sec1.ts";
 import {
   zeroAFormulas,
@@ -21,6 +22,7 @@ import {
 
 export type {
   LiftedPoints,
+  NonceHash,
   PointEncodingOptions,
   RecoverOptions,
   Scalar,
@@ -45,7 +47,11 @@ export const secp256k1 = Object.freeze({
 /** The one refusal for text that isn't a SEC1 point of the curve. */
 export const INVALID_POINT = "Invalid SEC1 secp256k1 public key";
 
-const curve = /* @__PURE__ */ sec1Curve(secp256k1, { name: "secp256k1", formulas: zeroAFormulas });
+const curve = /* @__PURE__ */ sec1Curve(secp256k1, {
+  name: "secp256k1",
+  formulas: zeroAFormulas,
+  hash: CURVE_HASHES.secp256k1,
+});
 
 /**
  * The y with the asked parity above x, if any point has this x.
@@ -212,9 +218,9 @@ export function combine(a: bigint, b: bigint, point: AffinePoint): AffinePoint |
  * ECDSA by SEC 1 v2 section 4.1.3, k from RFC 6979, low s. kG takes the same steps for any k, the
  * math mod n doesn't promise that.
  * @param secret - The private key, from 1 to the curve order minus 1
- * @param options - The digest
+ * @param options - The digest and the hash that made it, SHA-256 unless named
  * @returns {Signature} The signature as r then s, and its recovery id
- * @throws {RangeError} When the secret or the digest is no hex or out of range
+ * @throws {RangeError} When the secret, the digest or the hash is malformed or out of range
  * @throws {TypeError} When options is not an object
  */
 export function sign(secret: Scalar, options: SignOptions): Signature {

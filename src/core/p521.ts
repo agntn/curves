@@ -1,21 +1,34 @@
 /**
  * NIST P-521, secp521r1 in SEC 2 v2, section 2.6.1: y^2 = x^3 - 3x + b over the prime field of
  * p = 2^521 - 1, cofactor 1. The curve of ES512 tokens and of OpenPGP keys that skip the middle
- * size. Points and ECDSA verification run on the same SEC 1 code in `sec1.ts` as P-256 and P-384,
+ * size. Points and ECDSA run on the same SEC 1 code in `sec1.ts` as P-256 and P-384,
  * with the same a = -3 formulas, at 66 bytes a number whose top byte keeps a single bit.
  */
 
+import { CURVE_HASHES } from "./nonce-hashes.ts";
 import * as sec1 from "./sec1.ts";
 import {
   minusThreeAFormulas,
   sec1Curve,
   type LiftedPoints,
   type PointEncodingOptions,
+  type RecoverOptions,
   type Scalar,
+  type Signature,
+  type SignOptions,
   type VerifyOptions,
 } from "./sec1.ts";
 
-export type { LiftedPoints, PointEncodingOptions, Scalar, VerifyOptions } from "./sec1.ts";
+export type {
+  LiftedPoints,
+  NonceHash,
+  PointEncodingOptions,
+  RecoverOptions,
+  Scalar,
+  Signature,
+  SignOptions,
+  VerifyOptions,
+} from "./sec1.ts";
 
 /** The domain parameters: the curve, its generator and the order of the generator. */
 export const p521 = Object.freeze({
@@ -33,7 +46,11 @@ export const p521 = Object.freeze({
 /** The one refusal for text that isn't a SEC1 point of the curve. */
 export const INVALID_POINT = "Invalid SEC1 P-521 public key";
 
-const curve = /* @__PURE__ */ sec1Curve(p521, { name: "P-521", formulas: minusThreeAFormulas });
+const curve = /* @__PURE__ */ sec1Curve(p521, {
+  name: "P-521",
+  formulas: minusThreeAFormulas,
+  hash: CURVE_HASHES.p521,
+});
 
 /**
  * Add two points.
@@ -127,6 +144,19 @@ export function convertPoint(point: string, options: PointEncodingOptions = {}):
 }
 
 /**
+ * ECDSA by SEC 1 v2 section 4.1.3, k from RFC 6979, low s. kG takes the same steps for any k, the
+ * math mod n doesn't promise that.
+ * @param secret - The private key, from 1 to the curve order minus 1
+ * @param options - The digest and the hash that made it, SHA-512 unless named
+ * @returns {Signature} The signature as r then s, and its recovery id
+ * @throws {RangeError} When the secret, the digest or the hash is malformed or out of range
+ * @throws {TypeError} When options is not an object
+ */
+export function sign(secret: Scalar, options: SignOptions): Signature {
+  return sec1.sign(curve, secret, options);
+}
+
+/**
  * Verify an ECDSA signature over a digest, SEC 1 v2 section 4.1.4. ES512 hashes with SHA-512
  * first, and its 512 bits fit under the 521 of n whole, so no digest here gets cut. A DER
  * signature needs unpacking into r and s.
@@ -138,4 +168,15 @@ export function convertPoint(point: string, options: PointEncodingOptions = {}):
  */
 export function verify(signature: string, options: VerifyOptions): boolean {
   return sec1.verify(curve, signature, options);
+}
+
+/**
+ * Recover the key behind an ECDSA signature, SEC 1 v2 section 4.1.6. Compare it with yours.
+ * @param signature - 264 hex digits, r then s
+ * @param options - The digest, the recovery id and the output encoding, compressed by default
+ * @returns {string} The public key as SEC1 hex, one the signature verifies under whatever it is
+ * @throws {RangeError} When an argument is malformed, r or s is out of range, or R does not exist
+ */
+export function recoverPublicKey(signature: string, options: RecoverOptions): string {
+  return sec1.recoverPublicKey(curve, signature, options);
 }

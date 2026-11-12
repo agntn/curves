@@ -71,7 +71,7 @@ describe("@agntn/curves", () => {
     ]);
   });
 
-  it("keeps P-256 in its own entry, points and verification only", () => {
+  it("keeps P-256 in its own entry, points and ECDSA", () => {
     expect(Object.keys(p256).toSorted()).toEqual([
       "INVALID_POINT",
       "addPoints",
@@ -82,6 +82,8 @@ describe("@agntn/curves", () => {
       "multiplyPoint",
       "negatePoint",
       "p256",
+      "recoverPublicKey",
+      "sign",
       "subtractPoints",
       "verify",
     ]);

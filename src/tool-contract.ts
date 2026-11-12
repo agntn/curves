@@ -6,6 +6,7 @@ export {
   MAX_LOG_ORDER,
   MAX_ORDER_PRIME,
 } from "./core/limits.ts";
+export { CURVE_HASHES, NONCE_HASHES } from "./core/nonce-hashes.ts";
 
 /** What `curves_compute` does on a curve the caller defines. */
 export const CURVE_OPERATIONS = [
@@ -38,18 +39,10 @@ export const SECP256K1_OPERATIONS = [
 
 export type Secp256k1Operation = (typeof SECP256K1_OPERATIONS)[number];
 
-/** What `curves_p256_compute` does with public points and ECDSA signatures. */
-export const P256_OPERATIONS = [
-  "add",
-  "subtract",
-  "negate",
-  "multiply",
-  "lift",
-  "check",
-  "verify",
-] as const;
+/** What `curves_p256_compute` does: the same as secp256k1, points and ECDSA alike. */
+export const P256_OPERATIONS = SECP256K1_OPERATIONS;
 
-export type P256Operation = (typeof P256_OPERATIONS)[number];
+export type P256Operation = Secp256k1Operation;
 
 /** What `curves_p384_compute` does: the same as P-256, at 48 bytes a number. */
 export const P384_OPERATIONS = P256_OPERATIONS;

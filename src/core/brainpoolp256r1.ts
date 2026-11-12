@@ -1,21 +1,34 @@
 /**
  * brainpoolP256r1 in RFC 5639, section 3.4: y^2 = x^3 + ax + b over the prime field of p, cofactor
  * 1, with a and b derived from a seed instead of picked for speed. OpenPGP (RFC 9580) and TLS
- * (RFC 7027) both list it. Points and ECDSA verification run on the SEC 1 code in `sec1.ts`, with
+ * (RFC 7027) both list it. Points and ECDSA run on the SEC 1 code in `sec1.ts`, with
  * the formulas for any a, since this a is neither 0 nor -3.
  */
 
+import { CURVE_HASHES } from "./nonce-hashes.ts";
 import * as sec1 from "./sec1.ts";
 import {
   anyAFormulas,
   sec1Curve,
   type LiftedPoints,
   type PointEncodingOptions,
+  type RecoverOptions,
   type Scalar,
+  type Signature,
+  type SignOptions,
   type VerifyOptions,
 } from "./sec1.ts";
 
-export type { LiftedPoints, PointEncodingOptions, Scalar, VerifyOptions } from "./sec1.ts";
+export type {
+  LiftedPoints,
+  NonceHash,
+  PointEncodingOptions,
+  RecoverOptions,
+  Scalar,
+  Signature,
+  SignOptions,
+  VerifyOptions,
+} from "./sec1.ts";
 
 /** The domain parameters: the curve, its generator and the order of the generator. */
 export const brainpoolP256r1 = Object.freeze({
@@ -36,6 +49,7 @@ export const INVALID_POINT = "Invalid SEC1 brainpoolP256r1 public key";
 const curve = /* @__PURE__ */ sec1Curve(brainpoolP256r1, {
   name: "brainpoolP256r1",
   formulas: anyAFormulas,
+  hash: CURVE_HASHES.brainpoolP256r1,
 });
 
 /**
@@ -130,6 +144,19 @@ export function convertPoint(point: string, options: PointEncodingOptions = {}):
 }
 
 /**
+ * ECDSA by SEC 1 v2 section 4.1.3, k from RFC 6979, low s. kG takes the same steps for any k, the
+ * math mod n doesn't promise that.
+ * @param secret - The private key, from 1 to the curve order minus 1
+ * @param options - The digest and the hash that made it, SHA-256 unless named
+ * @returns {Signature} The signature as r then s, and its recovery id
+ * @throws {RangeError} When the secret, the digest or the hash is malformed or out of range
+ * @throws {TypeError} When options is not an object
+ */
+export function sign(secret: Scalar, options: SignOptions): Signature {
+  return sec1.sign(curve, secret, options);
+}
+
+/**
  * Verify an ECDSA signature over a digest, SEC 1 v2 section 4.1.4. Hash the message first; a DER
  * signature, or the two MPIs of an OpenPGP one, needs unpacking into r and s.
  * @param signature - 128 hex digits, r then s
@@ -140,4 +167,15 @@ export function convertPoint(point: string, options: PointEncodingOptions = {}):
  */
 export function verify(signature: string, options: VerifyOptions): boolean {
   return sec1.verify(curve, signature, options);
+}
+
+/**
+ * Recover the key behind an ECDSA signature, SEC 1 v2 section 4.1.6. Compare it with yours.
+ * @param signature - 128 hex digits, r then s
+ * @param options - The digest, the recovery id and the output encoding, compressed by default
+ * @returns {string} The public key as SEC1 hex, one the signature verifies under whatever it is
+ * @throws {RangeError} When an argument is malformed, r or s is out of range, or R does not exist
+ */
+export function recoverPublicKey(signature: string, options: RecoverOptions): string {
+  return sec1.recoverPublicKey(curve, signature, options);
 }
