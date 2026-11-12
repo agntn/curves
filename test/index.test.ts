@@ -23,6 +23,7 @@ describe("@agntn/curves", () => {
     expect(Object.keys(root).toSorted()).toEqual([
       "MAX_COUNTED_PRIME",
       "MAX_FILTERED_PRIME",
+      "MAX_INTERVAL_TABLE",
       "MAX_LOG_ORDER",
       "MAX_ORDER_PRIME",
       "addPoints",
@@ -30,6 +31,7 @@ describe("@agntn/curves", () => {
       "crt",
       "defineCurve",
       "discreteLog",
+      "discreteLogInInterval",
       "doublePoint",
       "invert",
       "isOnCurve",

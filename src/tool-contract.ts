@@ -5,6 +5,7 @@ export {
   MAX_FILTERED_PRIME,
   MAX_LOG_ORDER,
   MAX_ORDER_PRIME,
+  MAX_TOOL_INTERVAL_TABLE,
 } from "./core/limits.ts";
 export { CURVE_HASHES, NONCE_HASHES } from "./core/nonce-hashes.ts";
 

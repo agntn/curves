@@ -58,6 +58,12 @@ export const curveVectors = {
       x: 0xf9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9n,
       y: 0x388f7b0f632de8140fe337e62a37f3566500a99934c2231b6cb9fd7584b8e672n,
     },
+    /** 2^200 + 123456789 times G, from @noble/curves 2.4.0. */
+    far: {
+      scalar: 2n ** 200n + 123456789n,
+      x: 0xe69e6a8d9fa8858444d9ed18b9c5135e525b5aa2eeefc849f5eeb90a31ed3148n,
+      y: 0x9e89f14c80843e210534ea3235dad261fb2d7cf6822cc4b5e966daf0105b01b7n,
+    },
   },
   /** NIST P-224 from FIPS 186-4 D.1.2.2, whose p - 1 holds 2^96, a hard case for a root. */
   p224: {

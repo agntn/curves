@@ -11,9 +11,12 @@ export {
 export type { AffinePoint, CurvePoint, WeierstrassCurve } from "./core/arithmetic.ts";
 export { countPoints, discreteLog, listPoints, pointOrder } from "./core/group.ts";
 export type { ListPointsOptions } from "./core/group.ts";
+export { discreteLogInInterval } from "./core/interval.ts";
+export type { IntervalLogOptions } from "./core/interval.ts";
 export {
   MAX_COUNTED_PRIME,
   MAX_FILTERED_PRIME,
+  MAX_INTERVAL_TABLE,
   MAX_LOG_ORDER,
   MAX_ORDER_PRIME,
 } from "./core/limits.ts";

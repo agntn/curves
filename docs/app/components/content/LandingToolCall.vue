@@ -17,7 +17,7 @@ const params = computed(() => ({
 }));
 const result = computed(() => runTool("curves_compute", params.value));
 const text = computed(() => result.value.content[0]!.text);
-const details = computed(() => result.value.details as Extract<CurveDetails, { operation: "log" }>);
+const details = computed(() => result.value.details as Extract<CurveDetails, { operation: "log"; order: string }>);
 const title = computed(() => `curves_compute(${JSON.stringify(params.value)})`);
 
 /** What the tool text tells a model, as rows: the curve, the order it searched in, the answer. */

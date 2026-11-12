@@ -66,6 +66,10 @@ const scalar = ref("13");
 const order = ref("");
 const curveX = ref("5");
 const limit = ref("");
+const lo = ref("");
+const hi = ref("");
+const residue = ref("");
+const modulus = ref("");
 const secpPoint = ref(G);
 const secpOther = ref(TWO_G);
 const secpScalar = ref("3");
@@ -344,7 +348,7 @@ const toolArgs = computed(() => {
       const value = (field === "point" ? point : other).value.trim();
       if (value !== "") args[field] = pointValue(value);
     } else {
-      const value = { scalar, order, x: curveX }[field as "scalar" | "order" | "x"].value.trim();
+      const value = { scalar, order, x: curveX, lo, hi, residue, modulus }[field as "scalar" | "order" | "x" | "lo" | "hi" | "residue" | "modulus"].value.trim();
       if (value !== "") args[field] = value;
     }
   }
@@ -526,7 +530,8 @@ const view = computed(() => {
   } else if ("scalar" in details) {
     icon = "i-lucide-target";
     heading = details.scalar === null ? "No k" : `k = ${details.scalar}`;
-    rows.push({ label: "order", value: details.order }, { label: "scalar", value: details.scalar ?? "null", accent: true });
+    const tried = "order" in details ? { label: "order", value: details.order } : { label: "tried", value: `${details.lo} to ${details.hi}${details.modulus === undefined ? "" : `, k mod ${details.modulus} = ${details.residue}`}` };
+    rows.push(tried, { label: "scalar", value: details.scalar ?? "null", accent: true });
   } else if ("order" in details) {
     icon = "i-lucide-orbit";
     heading = `Order ${details.order}`;
@@ -837,7 +842,7 @@ const SR_SAMPLES = [
 const { copied, copy } = useCopied();
 
 /** The query keys a link may carry, each with the field it sets. */
-const FIELDS = { a, b, p, point, other, scalar, order, limit, x: curveX } as const;
+const FIELDS = { a, b, p, point, other, scalar, order, limit, x: curveX, lo, hi, residue, modulus } as const;
 const SR_FIELDS = { ...SR_KEYS, message } as const;
 
 /**
@@ -1014,6 +1019,22 @@ const shareLink = computed(() => {
               <div v-if="current.takes.includes('x')">
                 <dt><label for="playground-curve-x">x</label></dt>
                 <dd><UInput id="playground-curve-x" v-model="curveX" variant="none" placeholder="0 to p - 1" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('lo')">
+                <dt><label for="playground-lo">lo</label></dt>
+                <dd><UInput id="playground-lo" v-model="lo" variant="none" placeholder="first k, blank searches whole order" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('hi')">
+                <dt><label for="playground-hi">hi</label></dt>
+                <dd><UInput id="playground-hi" v-model="hi" variant="none" placeholder="last k to try" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('residue')">
+                <dt><label for="playground-residue">residue</label></dt>
+                <dd><UInput id="playground-residue" v-model="residue" variant="none" placeholder="optional remainder of k" class="w-full" spellcheck="false" /></dd>
+              </div>
+              <div v-if="current.takes.includes('modulus')">
+                <dt><label for="playground-modulus">modulus</label></dt>
+                <dd><UInput id="playground-modulus" v-model="modulus" variant="none" placeholder="only with a residue" class="w-full" spellcheck="false" /></dd>
               </div>
               <div v-if="current.takes.includes('limit')">
                 <dt><label for="playground-limit">limit</label></dt>

@@ -343,7 +343,8 @@ describe("curves CLI", () => {
   });
 
   it("refuses an option the command doesn't take in one line", () => {
-    const takes = "takes --a, --b, --p, --point, --other, --scalar, --x, --order, --limit, --json";
+    const takes =
+      "takes --a, --b, --p, --point, --other, --scalar, --x, --order, --limit, --lo, --hi, --residue, --modulus, --json";
 
     expect(run("-_8")).toMatchObject({
       code: 1,

@@ -103,6 +103,17 @@ const CALLS: ReadonlyArray<[string, Record<string, unknown>]> = [
     "curves_compute",
     { ...paar, operation: "log", point: { x: "5", y: "1" }, other: { x: "16", y: "4" } },
   ],
+  [
+    "curves_compute",
+    {
+      ...paar,
+      operation: "log",
+      point: { x: "5", y: "1" },
+      other: { x: "16", y: "4" },
+      lo: "14",
+      hi: "40",
+    },
+  ],
   ["curves_compute", { ...paar, operation: "double", point: { x: "5", y: "2" } }],
   ["curves_compute", { ...paar, operation: "count", scalre: "3" }],
   ["curves_secp256k1_compute", { operation: "lift", x: g.slice(2) }],
