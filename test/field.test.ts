@@ -278,8 +278,9 @@ describe("linearCongruence", () => {
     for (let modulus = 1n; modulus <= 30n; modulus += 1n) {
       for (let a = -modulus; a <= modulus; a += 1n) {
         for (let b = -modulus; b <= modulus; b += 1n) {
-          const [first, second] = linearSolutions(a, b, modulus);
-          const count = BigInt(linearSolutions(a, b, modulus).length);
+          const solutions = linearSolutions(a, b, modulus);
+          const [first, second] = solutions;
+          const count = BigInt(solutions.length);
           const expected =
             first === undefined
               ? undefined
