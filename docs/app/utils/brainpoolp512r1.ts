@@ -7,4 +7,10 @@ export const WYCHEPROOF_BRAINPOOL_512 = {
     "43f800fbeaf9238c58af795bcdad04bc49cd850c394d3382953356b023210281757b30e19218a37cbd612086fbc158caa8b4e1acb2ec00837e5d941f342fb3cc",
   signature:
     "0bd2593447cc6c02caf99d60418dd42e9a194c910e6755ed0c7059acac656b04ccfe1e8348462ee43066823aee2fed7ca012e9890dfb69866d7ae88b6506f9c744b42304e693796618d090dbcb2a2551c3cb78534611e61fd9d1a5c0938b5b8ec6ed53d2d28999eabbd8e7792d167fcf582492403a6a0f7cc94c73a28fb76b71",
+  /** The recovery id that finds this key. */
+  recovery: 0,
 } as const;
+
+/** RFC 7027 appendix A.3: the secret of its first key pair. */
+export const RFC_7027_SECRET_512 =
+  "16302ff0dbbb5a8d733dab7141c1b45acbc8715939677f6a56850a38bd87bd59b09e80279609ff333eb9d4c061231fb26f92eeb04982a5f1d1764cad57665422";

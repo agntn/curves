@@ -1,9 +1,12 @@
-/** RFC 6979 appendix A.2.6: a P-384 key and its SHA-384 signature over "sample". */
+/** RFC 6979 appendix A.2.6: a P-384 key pair and its SHA-384 signature over "sample". */
 export const RFC_6979_P384 = {
+  secret: "6b9d3dad2e1b8c1c05b19875b6659f4de23c3b667bf297ba9aa47740787137d896d5724e4c70a825f872c9ea60d2edf5",
   publicKey:
     "04ec3a4e415b4e19a4568618029f427fa5da9a8bc4ae92e02e06aae5286b300c64def8f0ea9055866064a254515480bc138015d9b72d7d57244ea8ef9ac0c621896708a59367f9dfb9f54ca84b3f1c9db1288b231c3ae0d4fe7344fd2533264720",
   /** SHA-384 of the six bytes of "sample". */
   digest: "9a9083505bc92276aec4be312696ef7bf3bf603f4bbd381196a029f340585312313bca4a9b5b890efee42c77b1ee25fe",
   signature:
     "94edbb92a5ecb8aad4736e56c691916b3f88140666ce9fa73d64c4ea95ad133c81a648152e44acf96e36dd1e80fabe4699ef4aeb15f178cea1fe40db2603138f130e740a19624526203b6351d0a3a94fa329c145786e679e7b82c71a38628ac8",
+  /** The recovery id that finds this key. */
+  recovery: 1,
 } as const;
