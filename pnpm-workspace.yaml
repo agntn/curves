@@ -62,7 +62,7 @@ catalogs:
     agents: 0.26.0
     better-sqlite3: 12.11.1
     docus: 5.15.0
-    nuxt: 4.6.3
+    nuxt: 4.6.4
     ufo: 1.6.4
     zod: 4.6.7
   dev:
@@ -76,11 +76,11 @@ catalogs:
     "@nuxt/content": 3.16.2
     "@oh-my-pi/pi-coding-agent": 18.4.12
     "@types/node": 26.2.0
-    ai: 7.0.157
+    ai: 7.0.166
     obuild: 0.4.45
     shiki: 4.5.0
     typescript: 7.0.2
-    vue: 3.5.44
+    vue: 3.5.45
     vue-tsc: 3.3.14
     wrangler: 4.128.0
   # vue-tsc and the Nuxt type generation need the TypeScript API, which 7 no longer ships.
