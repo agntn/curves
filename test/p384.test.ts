@@ -12,6 +12,7 @@ import {
   negatePoint,
   recoverPublicKey,
   sign,
+  signingNonce,
   p384,
   subtractPoints,
   verify,
@@ -306,6 +307,8 @@ describeSigning({
   publicKey: p384Rfc6979.publicKey,
   vectors: p384Rfc6979Nonces,
   sign,
+  signingNonce,
+  multiplyGenerator: (scalar) => multiplyGenerator(scalar),
   verify,
   recoverPublicKey,
 });

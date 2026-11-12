@@ -96,10 +96,14 @@ export type CurveDetails =
 
 /** What the secp256k1 tool computes, by operation. */
 export type Secp256k1Details =
-  | { operation: Exclude<Secp256k1Operation, "lift" | "check" | "sign" | "verify">; point: string }
+  | {
+      operation: Exclude<Secp256k1Operation, "lift" | "check" | "sign" | "nonce" | "verify">;
+      point: string;
+    }
   | { operation: "lift"; even: string; odd: string }
   | { operation: "check"; onCurve: boolean }
   | { operation: "sign"; signature: string; recovery: number; publicKey: string }
+  | { operation: "nonce"; nonce: string }
   | { operation: "verify"; valid: boolean };
 
 /** What the P-256 tool computes: the same answers as secp256k1, signatures included. */
@@ -450,6 +454,7 @@ const SECP256K1_ARGUMENTS: Readonly<Record<Secp256k1Operation, readonly string[]
   lift: ["x", "compressed"],
   check: ["point"],
   sign: ["secret", "digest", "hash", "compressed"],
+  nonce: ["secret", "digest", "hash"],
   verify: ["point", "digest", "signature", "lowS"],
   recover: ["digest", "signature", "recovery", "compressed"],
 };
@@ -468,6 +473,7 @@ interface Sec1Module {
   readonly liftX: typeof secp256k1.liftX;
   readonly isOnCurve: typeof secp256k1.isOnCurve;
   readonly sign: typeof secp256k1.sign;
+  readonly signingNonce: typeof secp256k1.signingNonce;
   readonly verify: typeof secp256k1.verify;
   readonly recoverPublicKey: typeof secp256k1.recoverPublicKey;
 }
@@ -571,6 +577,10 @@ function sec1Computations(
       const { signature, recovery } = curve.sign(secret, options);
       const publicKey = curve.multiplyGenerator(secret, encoding);
       return { operation: "sign", signature, recovery, publicKey };
+    },
+    nonce: ({ args, text }) => {
+      const options = { digest: text("digest"), ...nonceHash(args["hash"]) };
+      return { operation: "nonce", nonce: curve.signingNonce(text("secret"), options) };
     },
     verify: (input) => ({
       operation: "verify",

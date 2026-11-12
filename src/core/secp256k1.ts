@@ -228,6 +228,18 @@ export function sign(secret: Scalar, options: SignOptions): Signature {
 }
 
 /**
+ * The k `sign` draws for this digest, as secret as the key.
+ * @param secret - The private key, from 1 to the curve order minus 1
+ * @param options - What `sign` takes
+ * @returns {string} k as 64 hex digits
+ * @throws {RangeError} When the secret, the digest or the hash is malformed or out of range
+ * @throws {TypeError} When options is not an object
+ */
+export function signingNonce(secret: Scalar, options: SignOptions): string {
+  return sec1.signingNonce(curve, secret, options);
+}
+
+/**
  * Verify an ECDSA signature over a digest, SEC 1 v2 section 4.1.4.
  * @param signature - 128 hex digits, r then s
  * @param options - The digest, the public key and the low-S rule

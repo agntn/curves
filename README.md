@@ -27,6 +27,7 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 - ➗ **Modular arithmetic from the package root.** Reduce, invert, find roots and solve congruences with BigInt. A composite modulus gets a refusal where a root search could otherwise loop forever. That's better than waiting for a square that may never show up.
 - 🔑 **secp256k1 with SEC1 points.** Add, subtract, multiply, lift an x, convert between 33 and 65 bytes.
 - 🔍 **ECDSA signing, verification and recovery.** RFC 6979 picks the nonce, so a key and a digest always sign the same way. Low s and a recovery id come with it. The block 170 signature that paid Hal Finney 10 BTC? Checks out. Recovery hands back Satoshi's key.
+- 🎲 **Read the signing nonce.** Get the RFC 6979 nonce on all seven SEC 1 curves. RFC 6979 prints k for the NIST curves, and every one matches. Guard it closely: it's a second secret.
 - ✍️ **BIP340 signatures.** Taproot and Nostr, signed and checked against 32-byte x-only keys. It lives in `@agntn/curves/bip340`. Fresh aux_rand by default, or yours. One BIP vector signs pi's hex digits with a key made of e's. Same bytes here.
 - 🟢 **P-256 with SEC1 points.** Also called secp256r1 and prime256v1, it's the curve of passkeys, ES256 tokens and TLS. `@agntn/curves/p256` handles point math and signs and verifies ECDSA over a digest you hashed, then recovers the key. All 262 Wycheproof vectors for P-256 with SHA-256 pass. Familiarity is nice, evidence is better.
 - 🔵 **P-384 with SEC1 points.** Also called secp384r1. ES384 tokens, TLS certificates and CNSA suites run on it. `@agntn/curves/p384` handles point math and signs and verifies ECDSA over a digest you hashed, then recovers the key. All 280 Wycheproof P-384 SHA-384 vectors pass. That's more convincing than a curve name.
@@ -78,21 +79,21 @@ The scalar is the inverse of 2 mod n. Look at all those zeros in x. Funny, right
 
 ### Commands
 
-| Command                              | Does                                                                  |
-| ------------------------------------ | --------------------------------------------------------------------- |
-| `curves compute <operation>`         | add, double, negate, multiply, lift, check, order, count, points, log |
-| `curves secp256k1 <operation>`       | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
-| `curves bip340 <operation>`          | keypair, sign, verify                                                 |
-| `curves p256 <operation>`            | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
-| `curves p384 <operation>`            | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
-| `curves p521 <operation>`            | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
-| `curves brainpoolp256r1 <operation>` | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
-| `curves brainpoolp384r1 <operation>` | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
-| `curves brainpoolp512r1 <operation>` | add, subtract, negate, multiply, lift, check, sign, verify, recover   |
-| `curves sr25519 <operation>`         | keypair, sign, verify, derive                                         |
-| `curves ed25519 <operation>`         | keypair, sign, verify                                                 |
-| `curves ed448 <operation>`           | verify                                                                |
-| `curves mcp`                         | MCP server over stdio                                                 |
+| Command                              | Does                                                                       |
+| ------------------------------------ | -------------------------------------------------------------------------- |
+| `curves compute <operation>`         | add, double, negate, multiply, lift, check, order, count, points, log      |
+| `curves secp256k1 <operation>`       | add, subtract, negate, multiply, lift, check, sign, nonce, verify, recover |
+| `curves bip340 <operation>`          | keypair, sign, verify                                                      |
+| `curves p256 <operation>`            | add, subtract, negate, multiply, lift, check, sign, nonce, verify, recover |
+| `curves p384 <operation>`            | add, subtract, negate, multiply, lift, check, sign, nonce, verify, recover |
+| `curves p521 <operation>`            | add, subtract, negate, multiply, lift, check, sign, nonce, verify, recover |
+| `curves brainpoolp256r1 <operation>` | add, subtract, negate, multiply, lift, check, sign, nonce, verify, recover |
+| `curves brainpoolp384r1 <operation>` | add, subtract, negate, multiply, lift, check, sign, nonce, verify, recover |
+| `curves brainpoolp512r1 <operation>` | add, subtract, negate, multiply, lift, check, sign, nonce, verify, recover |
+| `curves sr25519 <operation>`         | keypair, sign, verify, derive                                              |
+| `curves ed25519 <operation>`         | keypair, sign, verify                                                      |
+| `curves ed448 <operation>`           | verify                                                                     |
+| `curves mcp`                         | MCP server over stdio                                                      |
 
 Points go in as JSON for `compute`, the same `{"x":…,"y":…}` the tool takes. SEC1 hex goes to `secp256k1`, `p256`, `p384`, `p521`, `brainpoolp256r1`, `brainpoolp384r1` and `brainpoolp512r1`. `--a -3` works, it's reduced mod p. The output is the line a model reads, `--json` makes it pretty.
 

@@ -12,6 +12,7 @@ import {
   negatePoint,
   recoverPublicKey,
   sign,
+  signingNonce,
   subtractPoints,
   verify,
 } from "../src/brainpoolp256r1.ts";
@@ -324,6 +325,8 @@ describeSigning({
   publicKey: brainpoolP256r1Rfc7027.publicKeyA,
   vectors: brainpoolP256r1Rfc6979,
   sign,
+  signingNonce,
+  multiplyGenerator: (scalar) => multiplyGenerator(scalar),
   verify,
   recoverPublicKey,
 });

@@ -12,6 +12,7 @@ export {
   p521,
   recoverPublicKey,
   sign,
+  signingNonce,
   subtractPoints,
   verify,
 } from "./core/p521.ts";

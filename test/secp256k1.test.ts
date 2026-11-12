@@ -15,14 +15,23 @@ import {
   recoverPublicKey,
   secp256k1,
   sign,
+  signingNonce,
   subtractPoints,
   subtractScalars,
   verify,
   type RecoverOptions,
 } from "../src/secp256k1.ts";
 import { nonces } from "../src/core/rfc6979.ts";
+import { sec1Curve, signWithNonce, signWithNonces, zeroAFormulas } from "../src/core/sec1.ts";
 import { combine } from "../src/core/secp256k1.ts";
-import { block170, highS, nobleEdges, nobleSignatures, overflow } from "./fixtures/ecdsa.ts";
+import {
+  block170,
+  highS,
+  nobleEdges,
+  nobleSignatures,
+  overflow,
+  pythonEcdsaNonces,
+} from "./fixtures/ecdsa.ts";
 import {
   curveVectors,
   generatorMultiples,
@@ -453,6 +462,77 @@ describe("secp256k1 ECDSA signing", () => {
     expect(firstNonce(p256, x, "test")).toBe(
       0xd16b6ae827f17175e040871a1c7ec3500192c4c92677336ec2537acaee0008e0n,
     );
+  });
+
+  it("hands back the k python-ecdsa draws, as 64 hex digits", () => {
+    expect(pythonEcdsaNonces).toHaveLength(4);
+    for (const { secret, message, k } of pythonEcdsaNonces) {
+      const digest = Buffer.from(sha256(Buffer.from(message))).toString("hex");
+      expect(signingNonce(secret, { digest }), message).toBe(k);
+      expect(signingNonce(BigInt(`0x${secret}`), { digest, hash: "sha256" })).toBe(k);
+      expect(signingNonce(secret, { digest, hash: "sha512" })).not.toBe(k);
+    }
+  });
+
+  it("hands back the k behind noble's r, and the s it made before low S, never n minus k", () => {
+    const signedBySecret = [
+      ...nobleSignatures.map((entry, index) => ({ ...entry, secret: nobleKey(index) })),
+      ...nobleEdges,
+    ];
+    let flipped = 0;
+    for (const { secret, digest, signature } of signedBySecret) {
+      const k = signingNonce(secret, { digest });
+      const r = BigInt(`0x${multiplyGenerator(k).slice(2)}`) % order;
+      expect(r.toString(16).padStart(64, "0"), digest).toBe(signature.slice(0, 64));
+      const e = BigInt(`0x${digest.slice(0, 64)}`) % order;
+      const s = (BigInt(`0x${invertScalar(k)}`) * (e + r * BigInt(`0x${secret}`))) % order;
+      const low = s > order >> 1n ? order - s : s;
+      expect(low.toString(16).padStart(64, "0"), digest).toBe(signature.slice(64));
+      if (low !== s) flipped++;
+    }
+    expect(flipped).toBeGreaterThan(0);
+  });
+
+  it("moves on when a k leaves s at zero, and keeps the k that signed", () => {
+    const curve = sec1Curve(secp256k1, {
+      name: "secp256k1",
+      formulas: zeroAFormulas,
+      hash: "sha256",
+    });
+    const secret = 7n;
+    const r = BigInt(`0x${threeG.slice(2)}`);
+    const e = order - ((r * secret) % order);
+    expect(signWithNonce(curve, { secret, e, k: 3n })).toBeUndefined();
+    const { signed: made, k } = signWithNonces(curve, { secret, e }, [3n, 3n, 5n, 11n]);
+    expect(k).toBe(5n);
+    expect(made.signature.slice(0, 64)).toBe(multiplyGenerator("05").slice(2));
+    expect(made).toEqual(signWithNonce(curve, { secret, e, k: 5n }));
+    expect(() => signWithNonces(curve, { secret, e }, [3n])).toThrow(
+      "No nonce left signs this digest",
+    );
+  });
+
+  it("refuses for a nonce what sign refuses, and names its own call", () => {
+    const { digest } = signed;
+    const secret = nobleKey(0);
+    for (const malformed of ["", "0", 0n, order.toString(16), order, "0x01", "zz", null, 7]) {
+      expect(() => {
+        Reflect.apply(signingNonce, undefined, [malformed, { digest }]);
+      }).toThrow("Secret must be hex without 0x or a bigint, from 1 to the curve order minus 1");
+    }
+    for (const malformed of ["", "0", "0x00", "00".repeat(65), null]) {
+      expect(() => {
+        Reflect.apply(signingNonce, undefined, [secret, { digest: malformed }]);
+      }).toThrow("Digest must be hex without 0x, 1 to 64 bytes");
+    }
+    expect(() => {
+      Reflect.apply(signingNonce, undefined, [secret, { digest, hash: "md5" }]);
+    }).toThrow("Hash must be one of sha1, sha224, sha256, sha384, sha512");
+    for (const options of [undefined, null, digest]) {
+      expect(() => {
+        Reflect.apply(signingNonce, undefined, [secret, options]);
+      }).toThrow("Call it as signingNonce(secret, { digest })");
+    }
   });
 
   it("gives low-S signatures that verify and recover to the signer, at the digit edges too", () => {

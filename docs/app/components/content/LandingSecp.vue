@@ -28,7 +28,9 @@ function rowsOf({ params, details }: SecpSample) {
                 { label: "signature", value: shortPoint(details.signature), full: details.signature, accent: true },
                 { label: "recovery", value: String(details.recovery), full: String(details.recovery) },
               ]
-            : [{ label: "point", value: shortPoint(details.point), full: details.point, accent: true }];
+            : details.operation === "nonce"
+              ? [{ label: "nonce", value: shortPoint(details.nonce), full: details.nonce, accent: true }]
+              : [{ label: "point", value: shortPoint(details.point), full: details.point, accent: true }];
   return [...input, ...output];
 }
 

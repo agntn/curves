@@ -132,7 +132,7 @@ function sec1Point(description: string, bytes: keyof typeof SEC1_WIDTHS = 32): T
 }
 
 /**
- * The hash argument of a SEC 1 curve tool's sign.
+ * The hash argument of a SEC 1 curve tool's sign and nonce.
  * @param fallback - The curve's own hash, what sign uses without one
  * @returns {TOptional<TString>} The optional argument
  */
@@ -140,7 +140,7 @@ function nonceHash(fallback: (typeof NONCE_HASHES)[number]): TOptional<TString> 
   return Type.Optional(
     Type.String({
       enum: [...NONCE_HASHES],
-      description: `sign only: the hash that made digest, which keys the RFC 6979 nonce. Default: ${fallback}`,
+      description: `sign and nonce only: the hash that made digest, which keys the RFC 6979 nonce. Default: ${fallback}`,
     }),
   );
 }
@@ -178,6 +178,7 @@ const SEC1_GUIDELINES = [
   "lift takes x and returns the even and the odd point",
   "check takes point and answers onCurve true or false",
   "sign takes secret and digest and returns signature, recovery and publicKey; hash names the hash behind digest when it isn't the curve's own",
+  "nonce takes secret and digest and returns the k sign draws for them, with hash as sign reads it",
   "recover takes digest, signature and recovery and returns the point; with the id unknown, try 0 to 3 and compare with the key you expect",
 ] as const;
 
@@ -209,10 +210,10 @@ function sec1ComputeSchema(curve: Sec1Curve): Sec1ComputeSchema {
       operation: Type.String({
         enum: [...curve.operations],
         description:
-          "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, sign takes secret and digest, verify takes point as the public key with digest and signature, recover takes digest, signature and recovery and gives the public key",
+          "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, sign takes secret and digest, nonce takes the same and gives the k sign draws, verify takes point as the public key with digest and signature, recover takes digest, signature and recovery and gives the public key",
       }),
       point: sec1Point(
-        "Every operation but lift, sign and recover, required there; the public key for verify",
+        "Every operation but lift, sign, nonce and recover, required there; the public key for verify",
         curve.bytes,
       ),
       other: sec1Point(
@@ -232,7 +233,7 @@ function sec1ComputeSchema(curve: Sec1Curve): Sec1ComputeSchema {
           maxLength: digits,
           pattern: `^[0-9A-Fa-f]{0,${digits}}$`,
           description:
-            "sign only, required there: the private key, 1 to n - 1 as hex without 0x. It enters the transcript, so pass a disposable key or a test vector",
+            "sign and nonce only, required there: the private key, 1 to n - 1 as hex without 0x. It enters the transcript, so pass a disposable key or a test vector",
         }),
       ),
       x: Type.Optional(
@@ -253,7 +254,7 @@ function sec1ComputeSchema(curve: Sec1Curve): Sec1ComputeSchema {
         Type.String({
           maxLength: 128,
           pattern: `^(?:${DIGEST_PATTERN})?$`,
-          description: `sign, verify and recover only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. ${curve.digest}`,
+          description: `sign, nonce, verify and recover only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. ${curve.digest}`,
         }),
       ),
       hash: nonceHash(curve.hash),
@@ -267,7 +268,7 @@ function sec1ComputeSchema(curve: Sec1Curve): Sec1ComputeSchema {
       compressed: Type.Optional(
         Type.Boolean({
           description:
-            "Output SEC1 encoding, for every operation but check and verify; sign uses it for the public key. Default: true",
+            "Output SEC1 encoding, for every operation but check, nonce and verify; sign uses it for the public key. Default: true",
         }),
       ),
     },
@@ -337,10 +338,10 @@ export const secp256k1ComputeSchema = Type.Object(
     operation: Type.String({
       enum: [...SECP256K1_OPERATIONS],
       description:
-        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, sign takes secret and digest, verify takes point as the public key with digest and signature, recover takes digest, signature and recovery and gives the public key",
+        "add and subtract take point and other, negate takes point, multiply takes point and scalar, lift takes x, check takes point and answers whether it lies on the curve, sign takes secret and digest, nonce takes the same and gives the k sign draws, verify takes point as the public key with digest and signature, recover takes digest, signature and recovery and gives the public key",
     }),
     point: sec1Point(
-      "Every operation but lift, sign and recover, required there; the public key for verify",
+      "Every operation but lift, sign, nonce and recover, required there; the public key for verify",
     ),
     other: sec1Point(
       "add and subtract only, required there: the point added to point or subtracted from it",
@@ -358,7 +359,7 @@ export const secp256k1ComputeSchema = Type.Object(
         maxLength: 64,
         pattern: "^[0-9A-Fa-f]{0,64}$",
         description:
-          "sign only, required there: the private key, 1 to n - 1 as hex without 0x. It enters the transcript, so pass a disposable key or a test vector",
+          "sign and nonce only, required there: the private key, 1 to n - 1 as hex without 0x. It enters the transcript, so pass a disposable key or a test vector",
       }),
     ),
     x: Type.Optional(
@@ -382,7 +383,7 @@ export const secp256k1ComputeSchema = Type.Object(
         maxLength: 128,
         pattern: `^(?:${DIGEST_PATTERN})?$`,
         description:
-          "sign, verify and recover only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. Hash the message first; past 32 bytes only the leftmost 256 bits count",
+          "sign, nonce, verify and recover only, required there: the hash of the message, 1 to 64 bytes as hex without 0x. Hash the message first; past 32 bytes only the leftmost 256 bits count",
       }),
     ),
     hash: nonceHash(CURVE_HASHES.secp256k1),
@@ -396,7 +397,7 @@ export const secp256k1ComputeSchema = Type.Object(
     compressed: Type.Optional(
       Type.Boolean({
         description:
-          "Output SEC1 encoding, for every operation but check and verify; sign uses it for the public key. Default: true",
+          "Output SEC1 encoding, for every operation but check, nonce and verify; sign uses it for the public key. Default: true",
       }),
     ),
   },
@@ -407,7 +408,7 @@ export const secp256k1ComputeTool = defineTool({
   name: "curves_secp256k1_compute",
   title: "Compute on secp256k1",
   description:
-    "Do curve math on public secp256k1 points: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, so one key and one digest always give the same signature, the low-S form Bitcoin and Ethereum want. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
+    "Do curve math on public secp256k1 points: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, so one key and one digest always give the same signature, the low-S form Bitcoin and Ethereum want. The nonce operation hands back that k, which gives the key away next to the signature. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
   snippet:
     "Use for split key vanity addresses, offsets between known public keys, x-only keys, and ECDSA signatures: make one, check one, or find the key behind one.",
   guidelines: [
@@ -416,6 +417,7 @@ export const secp256k1ComputeTool = defineTool({
     "lift takes x and returns the even and the odd point; the even one is the BIP340 key",
     "check takes point and answers onCurve true or false",
     "sign takes secret and digest and returns signature, recovery and publicKey; recovery is what recover takes, Ethereum's v is 27 plus it; hash names a digest's hash other than SHA-256",
+    "nonce takes secret and digest and returns the k sign draws for them, with hash as sign reads it",
     "verify takes point, digest and signature and answers valid true or false; lowS refuses a high s",
     "recover takes digest, signature and recovery and returns the point; with the id unknown, try 0 to 3 and compare with the key you expect",
   ],
@@ -515,7 +517,7 @@ export const p256ComputeTool = defineTool({
   name: "curves_p256_compute",
   title: "Compute on P-256",
   description:
-    "Do curve math on public points of NIST P-256, also called secp256r1 and prime256v1: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one, the kind ES256 tokens, WebAuthn passkeys and TLS certificates carry. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, which every SEC 1 verifier takes, so one key and one digest always give the same signature. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
+    "Do curve math on public points of NIST P-256, also called secp256r1 and prime256v1: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one, the kind ES256 tokens, WebAuthn passkeys and TLS certificates carry. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, which every SEC 1 verifier takes, so one key and one digest always give the same signature. The nonce operation hands back that k, which gives the key away next to the signature. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
   snippet:
     "Use for P-256 public keys and the ECDSA signatures of ES256 tokens, passkeys and certificates: make one, check one, or find the key behind one, once you have the digest.",
   guidelines: [
@@ -546,7 +548,7 @@ export const p384ComputeTool = defineTool({
   name: "curves_p384_compute",
   title: "Compute on P-384",
   description:
-    "Do curve math on public points of NIST P-384, also called secp384r1: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one, the kind ES384 tokens and TLS certificates carry. Coordinates and scalars are 48 bytes, so points are 49 or 97 bytes of SEC1 hex. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, which every SEC 1 verifier takes, so one key and one digest always give the same signature. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
+    "Do curve math on public points of NIST P-384, also called secp384r1: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one, the kind ES384 tokens and TLS certificates carry. Coordinates and scalars are 48 bytes, so points are 49 or 97 bytes of SEC1 hex. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, which every SEC 1 verifier takes, so one key and one digest always give the same signature. The nonce operation hands back that k, which gives the key away next to the signature. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
   snippet:
     "Use for P-384 public keys and the ECDSA signatures of ES384 tokens and certificates: make one, check one, or find the key behind one, once you have the digest.",
   guidelines: [
@@ -579,7 +581,7 @@ export const p521ComputeTool = defineTool({
   name: "curves_p521_compute",
   title: "Compute on P-521",
   description:
-    "Do curve math on public points of NIST P-521, also called secp521r1: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one, the kind ES512 tokens, OpenPGP keys and TLS certificates carry. Coordinates and scalars are 66 bytes with a single bit in the top one, so points are 67 or 133 bytes of SEC1 hex. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, which every SEC 1 verifier takes, so one key and one digest always give the same signature. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
+    "Do curve math on public points of NIST P-521, also called secp521r1: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one, the kind ES512 tokens, OpenPGP keys and TLS certificates carry. Coordinates and scalars are 66 bytes with a single bit in the top one, so points are 67 or 133 bytes of SEC1 hex. Points go in and come out as SEC1 hex. A sum that lands on the point at infinity is refused. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, which every SEC 1 verifier takes, so one key and one digest always give the same signature. The nonce operation hands back that k, which gives the key away next to the signature. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
   snippet:
     "Use for P-521 public keys and the ECDSA signatures of ES512 tokens, OpenPGP keys and certificates: make one, check one, or find the key behind one, once you have the digest.",
   guidelines: [
@@ -610,7 +612,7 @@ export const brainpoolP256r1ComputeTool = defineTool({
   name: "curves_brainpoolp256r1_compute",
   title: "Compute on brainpoolP256r1",
   description:
-    "Do curve math on public points of brainpoolP256r1 from RFC 5639: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one, the kind OpenPGP keys and TLS certificates on Brainpool carry. Points go in and come out as SEC1 hex, 33 or 65 bytes as on P-256, so the length alone can't tell the two curves apart, and a compressed P-256 key may well lift here too. A sum that lands on the point at infinity is refused. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, which every SEC 1 verifier takes, so one key and one digest always give the same signature. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
+    "Do curve math on public points of brainpoolP256r1 from RFC 5639: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one, the kind OpenPGP keys and TLS certificates on Brainpool carry. Points go in and come out as SEC1 hex, 33 or 65 bytes as on P-256, so the length alone can't tell the two curves apart, and a compressed P-256 key may well lift here too. A sum that lands on the point at infinity is refused. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, which every SEC 1 verifier takes, so one key and one digest always give the same signature. The nonce operation hands back that k, which gives the key away next to the signature. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
   snippet:
     "Use for brainpoolP256r1 public keys and the ECDSA signatures of OpenPGP keys and certificates on it: make one, check one, or find the key behind one, once you have the digest.",
   guidelines: [
@@ -642,7 +644,7 @@ export const brainpoolP384r1ComputeTool = defineTool({
   name: "curves_brainpoolp384r1_compute",
   title: "Compute on brainpoolP384r1",
   description:
-    "Do curve math on public points of brainpoolP384r1 from RFC 5639: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one, the kind OpenPGP keys and TLS certificates on Brainpool carry. Points go in and come out as SEC1 hex, 49 or 97 bytes as on P-384, so the length alone can't tell the two curves apart, and a compressed P-384 key may well lift here too. A sum that lands on the point at infinity is refused. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, which every SEC 1 verifier takes, so one key and one digest always give the same signature. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
+    "Do curve math on public points of brainpoolP384r1 from RFC 5639: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one, the kind OpenPGP keys and TLS certificates on Brainpool carry. Points go in and come out as SEC1 hex, 49 or 97 bytes as on P-384, so the length alone can't tell the two curves apart, and a compressed P-384 key may well lift here too. A sum that lands on the point at infinity is refused. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, which every SEC 1 verifier takes, so one key and one digest always give the same signature. The nonce operation hands back that k, which gives the key away next to the signature. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
   snippet:
     "Use for brainpoolP384r1 public keys and the ECDSA signatures of OpenPGP keys and certificates on it: make one, check one, or find the key behind one, once you have the digest.",
   guidelines: [
@@ -674,7 +676,7 @@ export const brainpoolP512r1ComputeTool = defineTool({
   name: "curves_brainpoolp512r1_compute",
   title: "Compute on brainpoolP512r1",
   description:
-    "Do curve math on public points of brainpoolP512r1 from RFC 5639: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one, the kind OpenPGP keys and TLS certificates on Brainpool carry. Points go in and come out as SEC1 hex, 65 or 129 bytes, a width no other curve here uses, so a P-384 or P-521 key gets refused on length alone. A sum that lands on the point at infinity is refused. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, which every SEC 1 verifier takes, so one key and one digest always give the same signature. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
+    "Do curve math on public points of brainpoolP512r1 from RFC 5639: add or subtract two points, negate one, multiply one by a scalar, lift an x coordinate to both points, or check that a point lies on the curve. Sign a digest with ECDSA, verify a signature, or recover the public key behind one, the kind OpenPGP keys and TLS certificates on Brainpool carry. Points go in and come out as SEC1 hex, 65 or 129 bytes, a width no other curve here uses, so a P-384 or P-521 key gets refused on length alone. A sum that lands on the point at infinity is refused. Signing takes its nonce from RFC 6979 and keeps s at most n / 2, which every SEC 1 verifier takes, so one key and one digest always give the same signature. The nonce operation hands back that k, which gives the key away next to the signature. Scalars and secrets enter the transcript, and multiplying G by a private key gives its public key, so pass only public tweaks, disposable keys or test vectors.",
   snippet:
     "Use for brainpoolP512r1 public keys and the ECDSA signatures of OpenPGP keys and certificates on it: make one, check one, or find the key behind one, once you have the digest.",
   guidelines: [

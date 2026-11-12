@@ -33,6 +33,7 @@ export const SECP256K1_OPERATIONS = [
   "lift",
   "check",
   "sign",
+  "nonce",
   "verify",
   "recover",
 ] as const;

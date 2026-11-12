@@ -65,6 +65,7 @@ describe("@agntn/curves", () => {
       "recoverPublicKey",
       "secp256k1",
       "sign",
+      "signingNonce",
       "subtractPoints",
       "subtractScalars",
       "verify",
@@ -84,6 +85,7 @@ describe("@agntn/curves", () => {
       "p256",
       "recoverPublicKey",
       "sign",
+      "signingNonce",
       "subtractPoints",
       "verify",
     ]);

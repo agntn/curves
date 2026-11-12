@@ -157,6 +157,18 @@ export function sign(secret: Scalar, options: SignOptions): Signature {
 }
 
 /**
+ * The k `sign` draws for this digest, as secret as the key.
+ * @param secret - The private key, from 1 to the curve order minus 1
+ * @param options - What `sign` takes
+ * @returns {string} k as 132 hex digits
+ * @throws {RangeError} When the secret, the digest or the hash is malformed or out of range
+ * @throws {TypeError} When options is not an object
+ */
+export function signingNonce(secret: Scalar, options: SignOptions): string {
+  return sec1.signingNonce(curve, secret, options);
+}
+
+/**
  * Verify an ECDSA signature over a digest, SEC 1 v2 section 4.1.4. ES512 hashes with SHA-512
  * first, and its 512 bits fit under the 521 of n whole, so no digest here gets cut. A DER
  * signature needs unpacking into r and s.
