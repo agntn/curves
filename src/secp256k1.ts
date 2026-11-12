@@ -15,6 +15,7 @@ export {
   recoverPublicKey,
   secp256k1,
   sign,
+  signingNonce,
   subtractPoints,
   subtractScalars,
   verify,

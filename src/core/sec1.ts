@@ -1002,6 +1002,47 @@ export function signWithNonce(curve: Sec1Curve, step: NonceSigning): Signature |
   return r === 0n || s === 0n ? undefined : lowSignature(curve, commitment, { r, s });
 }
 
+/** A signature and the k behind it. */
+export interface Signing {
+  readonly signed: Signature;
+  /** k as drawn, never n minus k. */
+  readonly k: bigint;
+}
+
+/**
+ * Sign with the first k that leaves r and s nonzero, RFC 6979 step h.3.
+ * @param curve - The curve
+ * @param key - d and e
+ * @param candidates - One k after another, each from 1 to n minus 1
+ * @returns {Signing} The signature and the k that made it
+ * @throws {RangeError} When no candidate signs
+ */
+export function signWithNonces(
+  curve: Sec1Curve,
+  key: Omit<NonceSigning, "k">,
+  candidates: Iterable<bigint>,
+): Signing {
+  for (const k of candidates) {
+    const signed = signWithNonce(curve, { secret: key.secret, e: key.e, k });
+    if (signed !== undefined) return { signed, k };
+  }
+  throw new RangeError("No nonce left signs this digest");
+}
+
+/**
+ * Sign a digest with the nonces RFC 6979 draws for it.
+ * @param curve - The curve
+ * @param d - The private key, from 1 to n minus 1
+ * @param options - The digest and the hash that made it
+ * @returns {Signing} The signature and its k
+ */
+function signDigest(curve: Sec1Curve, d: bigint, options: SignOptions): Signing {
+  const e = readDigest(curve, options.digest);
+  const digest = readHex(options.digest, undefined, DIGEST_REFUSAL);
+  const hash = readHash(curve, options.hash);
+  return signWithNonces(curve, { secret: d, e }, nonces(curve.n, { secret: d, digest, hash }));
+}
+
 /**
  * ECDSA by SEC 1 v2 section 4.1.3, k from RFC 6979, low s.
  * @param curve - The curve
@@ -1012,14 +1053,20 @@ export function signWithNonce(curve: Sec1Curve, step: NonceSigning): Signature |
 export function sign(curve: Sec1Curve, secret: Scalar, options: SignOptions): Signature {
   const d = decodeScalar(curve, secret, { name: "Secret", minimum: 1n });
   requireOptions(options, "sign(secret, { digest })");
-  const e = readDigest(curve, options.digest);
-  const digest = readHex(options.digest, undefined, DIGEST_REFUSAL);
-  const hash = readHash(curve, options.hash);
-  const candidates = nonces(curve.n, { secret: d, digest, hash });
-  for (;;) {
-    const signed = signWithNonce(curve, { secret: d, e, k: candidates.next().value });
-    if (signed !== undefined) return signed;
-  }
+  return signDigest(curve, d, options).signed;
+}
+
+/**
+ * The k `sign` draws for a digest, as secret as the key.
+ * @param curve - The curve
+ * @param secret - The private key, from 1 to the curve order minus 1
+ * @param options - What `sign` takes
+ * @returns {string} k as many hex digits as a scalar
+ */
+export function signingNonce(curve: Sec1Curve, secret: Scalar, options: SignOptions): string {
+  const d = decodeScalar(curve, secret, { name: "Secret", minimum: 1n });
+  requireOptions(options, "signingNonce(secret, { digest })");
+  return encodeScalar(curve, signDigest(curve, d, options).k);
 }
 
 /**

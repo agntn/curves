@@ -97,6 +97,7 @@ const OPERATIONS: readonly Operation[] = [
   { key: "secp256k1:lift", tool: "curves_secp256k1_compute", op: "lift", takes: ["x", "compressed"], about: "Both points above an x. The even one is what a BIP340 key stands for." },
   { key: "secp256k1:check", tool: "curves_secp256k1_compute", op: "check", takes: ["point"], about: "Whether a SEC1 point lies on secp256k1." },
   { key: "secp256k1:sign", tool: "curves_secp256k1_compute", op: "sign", takes: ["secret", "digest", "compressed"], about: "Sign a digest with ECDSA. RFC 6979 picks k from the key and the digest, so the bytes never change. Low s, recovery id included." },
+  { key: "secp256k1:nonce", tool: "curves_secp256k1_compute", op: "nonce", takes: ["secret", "digest"], about: "Read the secp256k1 signing nonce. It belongs in test vectors, not public logs. Anyone with it and the signature can walk away with the key." },
   { key: "secp256k1:verify", tool: "curves_secp256k1_compute", op: "verify", takes: ["point", "digest", "signature", "lowS"], about: "Check whether a key signed a digest. G didn't. The block 170 chip loads Satoshi's key, which did." },
   { key: "secp256k1:recover", tool: "curves_secp256k1_compute", op: "recover", takes: ["digest", "signature", "recovery", "compressed"], about: "Recover a verifying key from a digest, signature and id. For block 170, ids 0 and 1 both verify, but only 1 is Satoshi's." },
   { key: "bip340:keypair", tool: "curves_bip340_compute", op: "keypair", takes: ["secret"], about: "A 32-byte secret in, the x-only key out. y doesn't make the trip, it's whichever one is even." },
@@ -624,6 +625,10 @@ const view = computed(() => {
     icon = details.onCurve ? "i-lucide-circle-check" : "i-lucide-circle-x";
     heading = details.onCurve ? "On the curve" : "Not on the curve";
     rows.push({ label: "onCurve", value: String(details.onCurve), accent: true });
+  } else if ("nonce" in details) {
+    icon = "i-lucide-dices";
+    heading = shortHex(details.nonce);
+    rows.push(hexRow("nonce", details.nonce, true), { label: "bytes", value: String(details.nonce.length / 2) });
   } else if ("even" in details) {
     icon = "i-lucide-key-round";
     heading = shortHex(details.even);
@@ -673,6 +678,8 @@ const SECP_SAMPLES: readonly { label: string; op?: string; load: () => unknown }
   },
   { label: "secret 1", op: "sign", load: () => (secpSecret.value = "1") },
   { label: "secret n - 1", op: "sign", load: () => (secpSecret.value = TOP_SECRET) },
+  { label: "secret 1", op: "nonce", load: () => (secpSecret.value = "1") },
+  { label: "secret n - 1", op: "nonce", load: () => (secpSecret.value = TOP_SECRET) },
 ];
 
 /** The secp256k1 chips on screen. The secret ones show up where there's a secret to fill. */

@@ -21,7 +21,7 @@ import {
   nobleEdges as schnorrEdges,
   nobleSignatures as schnorrSignatures,
 } from "./fixtures/bip340.ts";
-import { highS, nobleEdges, nobleSignatures } from "./fixtures/ecdsa.ts";
+import { highS, nobleEdges, nobleSignatures, pythonEcdsaNonces } from "./fixtures/ecdsa.ts";
 import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 import { rfc8032Signatures as ed448Signatures } from "./fixtures/ed448.ts";
 import { p256Rfc6979 } from "./fixtures/p256.ts";
@@ -128,6 +128,20 @@ describe("curves CLI", () => {
     expect(run("secp256k1", "recover", ...signedDigest, "--recovery", "2")).toMatchObject({
       code: 1,
       stderr: "No point of secp256k1 has x = r + n, so recovery 2 fails\n",
+    });
+  });
+
+  it("prints the RFC 6979 nonce of a signature from flags, the k python-ecdsa draws", () => {
+    const [drawn] = pythonEcdsaNonces;
+    if (drawn === undefined) throw new Error("The python-ecdsa fixture lost its first nonce");
+    const digest = "a0dc65ffca799873cbea0ac274015b9526505daaaed385155425f7337704883e";
+    const flags = ["--secret", drawn.secret, "--digest", digest];
+    const stdout = `{"operation":"nonce","nonce":"${drawn.k}"}\n`;
+    expect(run("secp256k1", "nonce", ...flags)).toMatchObject({ code: 0, stderr: "", stdout });
+    expect(run("secp256k1", "nonce", ...flags, "--hash", "sha256")).toMatchObject({ stdout });
+    expect(run("secp256k1", "nonce", ...flags, "--no-compressed")).toMatchObject({
+      code: 1,
+      stderr: "nonce does not take compressed\n",
     });
   });
 

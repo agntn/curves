@@ -12,6 +12,7 @@ export {
   negatePoint,
   recoverPublicKey,
   sign,
+  signingNonce,
   subtractPoints,
   verify,
 } from "./core/brainpoolp256r1.ts";

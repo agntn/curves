@@ -12,6 +12,7 @@ export {
   p384,
   recoverPublicKey,
   sign,
+  signingNonce,
   subtractPoints,
   verify,
 } from "./core/p384.ts";

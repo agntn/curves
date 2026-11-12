@@ -23,7 +23,7 @@ import {
   nobleEdges as schnorrEdges,
   nobleSignatures as schnorrSignatures,
 } from "./fixtures/bip340.ts";
-import { highS, nobleEdges, nobleSignatures } from "./fixtures/ecdsa.ts";
+import { highS, nobleEdges, nobleSignatures, pythonEcdsaNonces } from "./fixtures/ecdsa.ts";
 import { rfc8032Keys, rfc8032Signatures, speccheck } from "./fixtures/ed25519.ts";
 import { rfc8032Signatures as ed448Signatures } from "./fixtures/ed448.ts";
 import { p256Rfc6979, p256Rfc6979Nonces, p256Vectors } from "./fixtures/p256.ts";
@@ -101,9 +101,12 @@ interface SignedVector {
   readonly order: bigint;
   readonly secret: string;
   readonly publicKey: string;
+  /* G, compressed. */
+  readonly generator: string;
   readonly vector: {
     readonly hash: NonceHash;
     readonly message: string;
+    readonly k?: string;
     readonly signature: string;
   };
 }
@@ -137,6 +140,19 @@ async function signsThrough(signer: SignedVector): Promise<void> {
   );
   expect(await refused({ operation: "sign", secret, digest, point: publicKey })).toContain(
     "sign does not take point",
+  );
+
+  const drawn = (await call({ operation: "nonce", secret, digest, hash })) as { nonce: string };
+  expect(Object.keys(drawn)).toEqual(["operation", "nonce"]);
+  const printed = signer.vector.k ?? `[0-9a-f]{${half}}`;
+  expect(drawn.nonce).toMatch(new RegExp(`^(?:${printed})$`));
+  const commitment = { operation: "multiply", point: signer.generator, scalar: drawn.nonce };
+  expect(((await call(commitment)) as { point: string }).point.slice(2)).toBe(
+    signature.slice(0, half),
+  );
+  expect(await call({ operation: "nonce", secret, digest })).not.toEqual(drawn);
+  expect(await refused({ operation: "nonce", secret, digest, compressed: false })).toContain(
+    "nonce does not take compressed",
   );
 }
 
@@ -410,6 +426,7 @@ describe("curves MCP server", () => {
     await signsThrough({
       tool: "curves_p384_compute",
       order: BigInt(`0x${p384Vectors.orderMinusOne}`) + 1n,
+      generator: p384Vectors.g,
       secret: p384Rfc6979.secret,
       publicKey: p384Rfc6979.publicKey,
       vector: p384Rfc6979Nonces[0],
@@ -456,6 +473,7 @@ describe("curves MCP server", () => {
     await signsThrough({
       tool: "curves_p521_compute",
       order: BigInt(`0x${p521Vectors.orderMinusOne}`) + 1n,
+      generator: p521Vectors.g,
       secret: p521Rfc6979.secret,
       publicKey: p521Rfc6979.publicKey,
       vector: p521Rfc6979Nonces[0],
@@ -497,6 +515,7 @@ describe("curves MCP server", () => {
     await signsThrough({
       tool: "curves_brainpoolp256r1_compute",
       order: BigInt(`0x${brainpoolP256r1Vectors.orderMinusOne}`) + 1n,
+      generator: brainpoolP256r1Vectors.g,
       secret: brainpoolP256r1Rfc7027.secretA,
       publicKey: brainpoolP256r1Rfc7027.publicKeyA,
       vector: brainpoolP256r1Rfc6979[0],
@@ -542,6 +561,7 @@ describe("curves MCP server", () => {
     await signsThrough({
       tool: "curves_brainpoolp512r1_compute",
       order: BigInt(`0x${brainpoolP512r1Vectors.orderMinusOne}`) + 1n,
+      generator: brainpoolP512r1Vectors.g,
       secret: brainpoolP512r1Rfc7027.secretA,
       publicKey: brainpoolP512r1Rfc7027.publicKeyA,
       vector: brainpoolP512r1Rfc6979[0],
@@ -583,6 +603,7 @@ describe("curves MCP server", () => {
     await signsThrough({
       tool: "curves_brainpoolp384r1_compute",
       order: BigInt(`0x${brainpoolP384r1Vectors.orderMinusOne}`) + 1n,
+      generator: brainpoolP384r1Vectors.g,
       secret: brainpoolP384r1Rfc7027.secretA,
       publicKey: brainpoolP384r1Rfc7027.publicKeyA,
       vector: brainpoolP384r1Rfc6979[0],
@@ -627,6 +648,7 @@ describe("curves MCP server", () => {
     await signsThrough({
       tool: "curves_p256_compute",
       order: BigInt(`0x${p256Vectors.orderMinusOne}`) + 1n,
+      generator: p256Vectors.g,
       secret: p256Rfc6979.secret,
       publicKey: p256Rfc6979.publicKey,
       vector: p256Rfc6979Nonces[0],
@@ -658,6 +680,30 @@ describe("curves MCP server", () => {
       "sign does not take point",
     );
     expect(await refused({ operation: "sign", secret: "0", digest })).toContain(
+      "Secret must be hex without 0x or a bigint, from 1 to the curve order minus 1",
+    );
+  });
+
+  it("hands back the RFC 6979 nonce of a secp256k1 signature, the k python-ecdsa draws", async () => {
+    const client = await connectTestClient();
+    const call = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+      answer(await client.callTool({ name: "curves_secp256k1_compute", arguments: args }));
+    const refused = async (args: Readonly<Record<string, unknown>>): Promise<string> =>
+      failure(await client.callTool({ name: "curves_secp256k1_compute", arguments: args }));
+    for (const { secret, message, k } of pythonEcdsaNonces) {
+      const digest = Buffer.from(sha256(Buffer.from(message))).toString("hex");
+      const drawn = { operation: "nonce", nonce: k };
+      expect(await call({ operation: "nonce", secret, digest }), message).toEqual(drawn);
+      expect(await call({ operation: "nonce", secret, digest, hash: "sha256" })).toEqual(drawn);
+      expect(await call({ operation: "nonce", secret, digest, hash: "sha1" })).not.toEqual(drawn);
+    }
+    const digest = "01";
+    expect(await refused({ operation: "nonce", digest })).toContain("nonce needs secret");
+    expect(await refused({ operation: "nonce", secret: "1" })).toContain("nonce needs digest");
+    expect(await refused({ operation: "nonce", secret: "1", digest, point: g })).toContain(
+      "nonce does not take point",
+    );
+    expect(await refused({ operation: "nonce", secret: "0", digest })).toContain(
       "Secret must be hex without 0x or a bigint, from 1 to the curve order minus 1",
     );
   });
@@ -1007,6 +1053,17 @@ describe("curve executors", () => {
     );
     expect(() => computeSecp256k1({ operation: "sign", secret: "", digest: "00" })).toThrow(
       "sign needs secret",
+    );
+    expect(() => computeSecp256k1({ operation: "nonce", secret: "01", digest: "" })).toThrow(
+      "nonce needs digest",
+    );
+    expect(() =>
+      computeSecp256k1({ operation: "nonce", secret: "01", digest: "00", compressed: true }),
+    ).toThrow("nonce does not take compressed");
+    expect(
+      computeP521({ operation: "nonce", secret: "01", digest: "00", hash: "" }).details,
+    ).toEqual(
+      computeP521({ operation: "nonce", secret: "01", digest: "00", hash: "sha512" }).details,
     );
     expect(() => computeSecp256k1({ operation: "check", point: g, compressed: false })).toThrow(
       "check does not take compressed",

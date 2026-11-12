@@ -122,3 +122,37 @@ export const nobleEdges: readonly SignedBySecret[] = [
     publicKey: "0379be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
   },
 ];
+
+/** A key, a message hashed with SHA-256 and the k RFC 6979 draws for them. */
+export interface DrawnNonce {
+  readonly secret: string;
+  readonly message: string;
+  readonly k: string;
+}
+
+/**
+ * RFC 6979 prints no secp256k1 example, so these k come from the tests of python-ecdsa 0.19.2,
+ * `test_SECP256k1_3` to `test_SECP256k1_6` in `test_pyecdsa.py`.
+ */
+export const pythonEcdsaNonces: readonly DrawnNonce[] = [
+  {
+    secret: "1",
+    message: "Satoshi Nakamoto",
+    k: "8f8a276c19f4149656b280621e358cce24f5f52542772691ee69063b74f15d15",
+  },
+  {
+    secret: "1",
+    message: "All those moments will be lost in time, like tears in rain. Time to die...",
+    k: "38aa22d72376b4dbc472e06c3ba403ee0a394da63fc58d88686c611aba98d6b3",
+  },
+  {
+    secret: "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
+    message: "Satoshi Nakamoto",
+    k: "33a19b60e25fb6f4435af53a3d42d493644827367e6453928554f43e49aa6f90",
+  },
+  {
+    secret: "f8b8af8ce3c7cca5e300d33939540c10d45ce001b8f252bfbc57ba0342904181",
+    message: "Alan Turing",
+    k: "525a82b70e67874398067543fd84c83d30c175fdc45fdeee082fe13b1d7cfdf1",
+  },
+];

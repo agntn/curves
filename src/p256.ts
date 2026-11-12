@@ -12,6 +12,7 @@ export {
   p256,
   recoverPublicKey,
   sign,
+  signingNonce,
   subtractPoints,
   verify,
 } from "./core/p256.ts";
