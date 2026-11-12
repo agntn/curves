@@ -23,7 +23,7 @@ Plain Node runs `src/` as it is, so relative imports end in `.ts` and `erasableS
 - Multiplying by a secret on edwards25519, secp256k1, P-256, P-384, P-521, brainpoolP256r1, brainpoolP384r1 and brainpoolP512r1 takes the same steps for every scalar. `test/edwards25519.test.ts`, `test/secp256k1.test.ts`, `test/p256.test.ts`, `test/p384.test.ts`, `test/p521.test.ts`, `test/brainpoolp256r1.test.ts`, `test/brainpoolp384r1.test.ts` and `test/brainpoolp512r1.test.ts` time it. Keep it that way.
 - secp256k1, P-256, P-384, P-521, brainpoolP256r1, brainpoolP384r1 and brainpoolP512r1 verification read G from a faster table, since their scalars are public. Never hand that path a secret. Generic curves don't run in constant time. Nothing's audited, so keep that warning up front in the README. Right answers aren't an audit.
 - Ed448 only verifies. Its multiply walks the bits, so keep secrets away from it too.
-- A new operation gets a spec vector. If another implementation exists, freeze its output in `test/fixtures/` with its name and version, as with `@noble/curves` 2.4.0 and `@scure/sr25519` 2.4.0. noble has no Brainpool. OpenSSL stands in, for Ed448 as well.
+- A new operation gets a spec vector. If another implementation exists, freeze its output in `test/fixtures/` with its name and version, as with `@noble/curves` 2.4.0 and `@scure/sr25519` 2.4.0. noble has no Brainpool. OpenSSL stands in, for Ed448 as well. The linear algebra checks against PARI/GP 2.19.0.
 - Every refusal is an `Error` with a message written for the caller. The CLI prints one line, and the MCP server sanitizes the message.
 - Search limits live in `src/core/limits.ts`. It has no imports, so tool schemas can name the limits without loading the arithmetic.
 

@@ -9,6 +9,7 @@ const NAV_ICONS: Record<string, string> = {
   "/math": "i-lucide-sigma",
   "/math/curves": "i-lucide-spline",
   "/math/groups": "i-lucide-target",
+  "/math/matrices": "i-lucide-grid-3x3",
   "/math/secp256k1": "i-lucide-key-round",
   "/math/sr25519": "i-lucide-fingerprint",
   "/math/ed25519": "i-lucide-shield-half",

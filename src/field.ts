@@ -36,7 +36,7 @@ export interface LinearCongruenceSolution extends Congruence {
  * @param value - What the caller passed
  * @param name - The argument, for the message
  */
-function checkBigint(value: unknown, name: string): asserts value is bigint {
+export function checkBigint(value: unknown, name: string): asserts value is bigint {
   if (typeof value !== "bigint") throw new TypeError(`${name} must be a bigint`);
 }
 
@@ -55,7 +55,7 @@ function checkModulus(modulus: unknown): asserts modulus is bigint {
  * @param name - The function, for the message
  * @returns {bigint} The checked modulus
  */
-function readModulus(options: Readonly<{ modulus: bigint }>, name: string): bigint {
+export function readModulus(options: Readonly<{ modulus: bigint }>, name: string): bigint {
   if (typeof options !== "object" || options === null) {
     throw new TypeError(`${name} takes the modulus as { modulus }`);
   }

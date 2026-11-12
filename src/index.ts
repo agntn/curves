@@ -37,3 +37,5 @@ export type {
   LinearCongruenceSolution,
   PowerOptions,
 } from "./field.ts";
+export { determinant, matrixRank, nullspace, solveLinearSystem } from "./matrix.ts";
+export type { Matrix, MatrixOptions, RefutedSystem, SolvedSystem } from "./matrix.ts";
