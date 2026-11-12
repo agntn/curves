@@ -30,10 +30,17 @@ export default defineConfig({
     ...oxlint,
     rules: {
       ...oxlint.rules,
-      /** Messages are Uint8Array, which has no readonly form in the TS lib. Nothing writes them. */
+      /** Neither Uint8Array nor Iterable has a readonly form in the TS lib. */
       "typescript/prefer-readonly-parameter-types": [
         severity,
-        { ...options, allow: [...(options?.allow ?? []), { from: "lib", name: "Uint8Array" }] },
+        {
+          ...options,
+          allow: [
+            ...(options?.allow ?? []),
+            { from: "lib", name: "Uint8Array" },
+            { from: "lib", name: "Iterable" },
+          ],
+        },
       ],
     },
     ignorePatterns: ["docs"],

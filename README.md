@@ -24,7 +24,7 @@ The guide and a playground that runs in your tab: [curves.agntn.dev](https://cur
 - 🔢 **Counting and listing.** Every point of a small curve, or just the ones of one order.
 - 📏 **Point orders.** Baby step giant step over the Hasse interval, fields up to 2⁴⁸.
 - 🕵️ **Discrete logs.** The smallest k, one prime of the order at a time. A 40-bit order made of small primes? About 20 ms. Only a prime above 2³⁶ stops it. No k? You get `undefined`, not a guess.
-- ➗ **Modular arithmetic from the package root.** Reduce, invert and find roots with BigInt. A composite modulus gets a refusal where a root search could otherwise loop forever. That's better than waiting for a square that may never show up.
+- ➗ **Modular arithmetic from the package root.** Reduce, invert, find roots and solve congruences with BigInt. A composite modulus gets a refusal where a root search could otherwise loop forever. That's better than waiting for a square that may never show up.
 - 🔑 **secp256k1 with SEC1 points.** Add, subtract, multiply, lift an x, convert between 33 and 65 bytes.
 - 🔍 **ECDSA signing, verification and recovery.** RFC 6979 picks the nonce, so a key and a digest always sign the same way. Low s and a recovery id come with it. The block 170 signature that paid Hal Finney 10 BTC? Checks out. Recovery hands back Satoshi's key.
 - ✍️ **BIP340 signatures.** Taproot and Nostr, signed and checked against 32-byte x-only keys. It lives in `@agntn/curves/bip340`. Fresh aux_rand by default, or yours. One BIP vector signs pi's hex digits with a key made of e's. Same bytes here.
